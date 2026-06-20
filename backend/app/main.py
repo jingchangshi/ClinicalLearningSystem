@@ -8,7 +8,7 @@ from app.seed_data import init_db
 
 init_db()
 
-app = FastAPI(title="诊途：临床推理与自适应学习系统")
+app = FastAPI(title="ClinPath：AI辅助临床教学与自适应学习路径系统")
 
 default_origins = [
     "http://localhost:3000",
