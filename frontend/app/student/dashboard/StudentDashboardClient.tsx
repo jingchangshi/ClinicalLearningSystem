@@ -16,16 +16,22 @@ export function StudentDashboardClient() {
   const [studentId, setStudentId] = useState(1);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [busyCaseId, setBusyCaseId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    listStudents().then((items) => {
-      setStudents(items);
-      if (items[0]) setStudentId(items[0].id);
-    });
+    listStudents()
+      .then((items) => {
+        setStudents(items);
+        if (items[0]) setStudentId(items[0].id);
+      })
+      .catch((reason) => setError(reason instanceof Error ? reason.message : "学生列表加载失败"));
   }, []);
 
   useEffect(() => {
-    getStudentDashboard(studentId).then(setDashboard);
+    setError(null);
+    getStudentDashboard(studentId)
+      .then(setDashboard)
+      .catch((reason) => setError(reason instanceof Error ? reason.message : "学生首页加载失败"));
   }, [studentId]);
 
   async function enterCase(caseId: number) {
@@ -36,6 +42,14 @@ export function StudentDashboardClient() {
     } finally {
       setBusyCaseId(null);
     }
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-lg border border-red-200 bg-red-50 p-5 text-alert">
+        学生数据加载失败：{error}
+      </div>
+    );
   }
 
   if (!dashboard) {

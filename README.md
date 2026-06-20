@@ -31,6 +31,14 @@ uv run --with-requirements requirements.txt uvicorn app.main:app --reload
 OpenAPI：http://localhost:8000/docs
 ```
 
+Oracle VPS 公网演示建议使用 8100 作为内部后端端口：
+
+```
+cd backend
+FRONTEND_ORIGINS=http://129.153.118.58:8101 \
+uv run --with-requirements requirements.txt uvicorn app.main:app --host 0.0.0.0 --port 8100
+```
+
 3. 启动前端：
 
 ```
@@ -38,6 +46,15 @@ cd frontend
 npm install
 npm run dev
 前端地址：http://localhost:3000
+```
+
+Oracle VPS 公网演示建议只暴露 8101 给浏览器；前端会把 `/api/...` 同源代理到 VPS 内部的 `127.0.0.1:8100`：
+
+```
+cd frontend
+npm install
+INTERNAL_API_BASE_URL=http://127.0.0.1:8100 npm run build
+INTERNAL_API_BASE_URL=http://127.0.0.1:8100 npm run start -- --hostname 0.0.0.0 --port 8101
 ```
 
 4. 推荐使用路径：
@@ -124,6 +141,78 @@ npm run dev
 
 ```bash
 export NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+```
+
+生产部署到 Oracle VPS 时不要设置 `NEXT_PUBLIC_API_BASE_URL`，默认让浏览器请求同源 `/api`，由 Next.js 转发到 `INTERNAL_API_BASE_URL`。这样公网只需要访问 8101，后端 8100 可作为内部端口使用。
+
+## Oracle VPS 生产部署
+
+推荐端口：
+
+- 前端公网入口：`http://129.153.118.58:8101`
+- 后端内部地址：`http://127.0.0.1:8100`
+- 前端同源 API：`http://129.153.118.58:8101/api/...`
+
+一键启动脚本：
+
+```bash
+cd /home/jcshi/workspace/clinical_learning_system
+./scripts/start_backend_8100.sh
+```
+
+另开一个终端：
+
+```bash
+cd /home/jcshi/workspace/clinical_learning_system
+./scripts/start_frontend_8101.sh
+```
+
+用户级 systemd 保活：
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp deploy/systemd-user/*.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable clinical-backend.service clinical-frontend.service
+systemctl --user start clinical-backend.service clinical-frontend.service
+```
+
+查看状态和日志：
+
+```bash
+systemctl --user status clinical-backend.service clinical-frontend.service
+journalctl --user -u clinical-backend.service -f
+journalctl --user -u clinical-frontend.service -f
+```
+
+如果需要开机后用户未登录也自动恢复，需要管理员执行：
+
+```bash
+sudo loginctl enable-linger jcshi
+```
+
+Oracle Cloud 和实例防火墙需要至少放行 8101：
+
+```bash
+sudo iptables -I INPUT 1 -p tcp --dport 8101 -j ACCEPT
+sudo netfilter-persistent save
+```
+
+如果仍希望公网直接访问后端文档 `/docs`，再放行 8100：
+
+```bash
+sudo iptables -I INPUT 1 -p tcp --dport 8100 -j ACCEPT
+sudo netfilter-persistent save
+```
+
+验证命令：
+
+```bash
+ss -ltnp | grep -E ':8100|:8101'
+curl http://127.0.0.1:8100/api/health
+curl http://127.0.0.1:8101/api/students
+curl -I http://129.153.118.58:8101/
+curl http://129.153.118.58:8101/api/students
 ```
 
 ## 环境变量与真实 AI 接入

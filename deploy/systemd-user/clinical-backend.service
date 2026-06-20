@@ -1,0 +1,15 @@
+[Unit]
+Description=Clinical Learning System Backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/jcshi/workspace/clinical_learning_system/backend
+Environment=FRONTEND_ORIGINS=http://129.153.118.58:8101,http://localhost:8101,http://127.0.0.1:8101
+ExecStart=/home/jcshi/workspace/clinical_learning_system/scripts/start_backend_8100.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

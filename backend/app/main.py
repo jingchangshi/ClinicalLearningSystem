@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -8,9 +10,22 @@ init_db()
 
 app = FastAPI(title="诊途：临床推理与自适应学习系统")
 
+default_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8101",
+    "http://127.0.0.1:8101",
+    "http://129.153.118.58:8101",
+]
+frontend_origins = [
+    origin.strip()
+    for origin in os.getenv("FRONTEND_ORIGINS", ",".join(default_origins)).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=frontend_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -23,10 +38,12 @@ app.include_router(teacher.router)
 
 
 @app.get("/health")
+@app.head("/health")
 def health() -> dict:
     return {"status": "ok"}
 
 
 @app.get("/api/health")
+@app.head("/api/health")
 def api_health() -> dict:
     return {"status": "ok"}

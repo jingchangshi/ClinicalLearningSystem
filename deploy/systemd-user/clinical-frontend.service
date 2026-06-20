@@ -1,0 +1,15 @@
+[Unit]
+Description=Clinical Learning System Frontend
+After=network-online.target clinical-backend.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/jcshi/workspace/clinical_learning_system/frontend
+Environment=INTERNAL_API_BASE_URL=http://127.0.0.1:8100
+ExecStart=/home/jcshi/workspace/clinical_learning_system/scripts/start_frontend_8101.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
