@@ -13,6 +13,37 @@
 - 教师驾驶舱：展示班级整体表现、共性短板、教学重点、学生表格和最近训练记录。
 - 病例管理：教师端支持病例查看、新增、编辑和删除。
 
+## 如何使用
+
+1. 初始化/重置数据库：
+
+```
+cd backend
+uv run --with-requirements requirements.txt python -m app.seed_data --reset
+```
+
+2. 启动后端：
+
+```
+cd backend
+uv run --with-requirements requirements.txt uvicorn app.main:app --reload
+后端地址：http://localhost:8000
+OpenAPI：http://localhost:8000/docs
+```
+
+3. 启动前端：
+
+```
+cd frontend
+npm install
+npm run dev
+前端地址：http://localhost:3000
+```
+
+4. 推荐使用路径：
+    打开 / → 学生端 → 选择学生 → 点击推荐病例 → 完成 5 个阶段回答 → 每阶段获取追问 → 提交病例 → 查看结果页 → 查看学习路径 → 教师端查看班级表现。
+
+
 ## 技术栈
 
 - 前端：Next.js、React、Tailwind CSS、Recharts、lucide-react
