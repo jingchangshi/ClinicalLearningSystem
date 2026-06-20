@@ -1,7 +1,20 @@
 import json
 from typing import Any
 
-from app.models import Case, CompetencyProfile, Score, Student
+from app.models import (
+    Case,
+    ClinicalSkill,
+    CompetencyProfile,
+    GuidelineDocument,
+    GuidelineLearningSession,
+    KnowledgeProgress,
+    KnowledgeUnit,
+    Score,
+    SkillSession,
+    SPCase,
+    SPSession,
+    Student,
+)
 
 ABILITY_LABELS = {
     "medical_knowledge": "医学知识",
@@ -109,4 +122,176 @@ def serialize_score(score: Score) -> dict:
             {"dimension": ABILITY_LABELS[key], "score": getattr(score, key)}
             for key in CORE_ABILITIES
         ],
+    }
+
+
+def serialize_knowledge_unit(unit: KnowledgeUnit) -> dict:
+    return {
+        "id": unit.id,
+        "title": unit.title,
+        "category": unit.category,
+        "level": unit.level,
+        "learning_objectives": loads_json(unit.learning_objectives, []),
+        "content": unit.content,
+        "key_points": loads_json(unit.key_points, []),
+        "quiz_items": loads_json(unit.quiz_items, []),
+        "related_case_ids": loads_json(unit.related_case_ids, []),
+        "created_at": unit.created_at,
+    }
+
+
+def serialize_knowledge_summary(unit: KnowledgeUnit) -> dict:
+    return {
+        "id": unit.id,
+        "title": unit.title,
+        "category": unit.category,
+        "level": unit.level,
+        "learning_objectives": loads_json(unit.learning_objectives, []),
+        "key_points": loads_json(unit.key_points, []),
+        "related_case_ids": loads_json(unit.related_case_ids, []),
+    }
+
+
+def serialize_knowledge_progress(progress: KnowledgeProgress) -> dict:
+    return {
+        "id": progress.id,
+        "student_id": progress.student_id,
+        "knowledge_unit_id": progress.knowledge_unit_id,
+        "status": progress.status,
+        "quiz_score": progress.quiz_score,
+        "mastery_score": progress.mastery_score,
+        "updated_at": progress.updated_at,
+        "knowledge_unit": serialize_knowledge_summary(progress.knowledge_unit),
+    }
+
+
+def serialize_skill(skill: ClinicalSkill) -> dict:
+    return {
+        "id": skill.id,
+        "title": skill.title,
+        "category": skill.category,
+        "difficulty": skill.difficulty,
+        "indication": skill.indication,
+        "contraindication": skill.contraindication,
+        "steps": loads_json(skill.steps, []),
+        "common_errors": loads_json(skill.common_errors, []),
+        "scoring_rubric": loads_json(skill.scoring_rubric, {}),
+        "created_at": skill.created_at,
+    }
+
+
+def serialize_skill_summary(skill: ClinicalSkill) -> dict:
+    return {
+        "id": skill.id,
+        "title": skill.title,
+        "category": skill.category,
+        "difficulty": skill.difficulty,
+        "indication": skill.indication,
+        "common_errors": loads_json(skill.common_errors, []),
+    }
+
+
+def serialize_skill_session(session: SkillSession) -> dict:
+    return {
+        "id": session.id,
+        "student_id": session.student_id,
+        "skill_id": session.skill_id,
+        "status": session.status,
+        "submitted_steps": loads_json(session.submitted_steps or "[]", []),
+        "score": session.score,
+        "feedback": session.feedback,
+        "created_at": session.created_at,
+        "completed_at": session.completed_at,
+        "skill": serialize_skill_summary(session.skill),
+    }
+
+
+def serialize_guideline(guideline: GuidelineDocument) -> dict:
+    return {
+        "id": guideline.id,
+        "title": guideline.title,
+        "organization": guideline.organization,
+        "year": guideline.year,
+        "disease_category": guideline.disease_category,
+        "source_type": guideline.source_type,
+        "summary": guideline.summary,
+        "recommendations": loads_json(guideline.recommendations, []),
+        "pico_examples": loads_json(guideline.pico_examples, []),
+        "created_at": guideline.created_at,
+    }
+
+
+def serialize_guideline_summary(guideline: GuidelineDocument) -> dict:
+    return {
+        "id": guideline.id,
+        "title": guideline.title,
+        "organization": guideline.organization,
+        "year": guideline.year,
+        "disease_category": guideline.disease_category,
+        "source_type": guideline.source_type,
+        "summary": guideline.summary,
+    }
+
+
+def serialize_guideline_session(session: GuidelineLearningSession) -> dict:
+    return {
+        "id": session.id,
+        "student_id": session.student_id,
+        "guideline_id": session.guideline_id,
+        "clinical_question": session.clinical_question,
+        "pico": session.pico,
+        "answer": session.answer,
+        "score": session.score,
+        "feedback": session.feedback,
+        "created_at": session.created_at,
+        "guideline": serialize_guideline_summary(session.guideline),
+    }
+
+
+def serialize_sp_case(sp_case: SPCase) -> dict:
+    return {
+        "id": sp_case.id,
+        "title": sp_case.title,
+        "disease_category": sp_case.disease_category,
+        "difficulty": sp_case.difficulty,
+        "patient_profile": loads_json(sp_case.patient_profile, {}),
+        "opening_statement": sp_case.opening_statement,
+        "hidden_history": loads_json(sp_case.hidden_history, {}),
+        "emotional_style": sp_case.emotional_style,
+        "expected_tasks": loads_json(sp_case.expected_tasks, []),
+        "scoring_rubric": loads_json(sp_case.scoring_rubric, {}),
+        "created_at": sp_case.created_at,
+    }
+
+
+def serialize_sp_case_summary(sp_case: SPCase) -> dict:
+    return {
+        "id": sp_case.id,
+        "title": sp_case.title,
+        "disease_category": sp_case.disease_category,
+        "difficulty": sp_case.difficulty,
+        "patient_profile": loads_json(sp_case.patient_profile, {}),
+        "opening_statement": sp_case.opening_statement,
+        "emotional_style": sp_case.emotional_style,
+        "expected_tasks": loads_json(sp_case.expected_tasks, []),
+    }
+
+
+def serialize_sp_session(session: SPSession) -> dict:
+    return {
+        "id": session.id,
+        "student_id": session.student_id,
+        "sp_case_id": session.sp_case_id,
+        "status": session.status,
+        "transcript": loads_json(session.transcript, []),
+        "diagnosis_summary": session.diagnosis_summary,
+        "communication_score": session.communication_score,
+        "history_taking_score": session.history_taking_score,
+        "reasoning_score": session.reasoning_score,
+        "humanistic_care_score": session.humanistic_care_score,
+        "total_score": session.total_score,
+        "feedback": session.feedback,
+        "started_at": session.started_at,
+        "completed_at": session.completed_at,
+        "sp_case": serialize_sp_case_summary(session.sp_case),
     }

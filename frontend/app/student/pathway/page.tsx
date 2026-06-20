@@ -69,6 +69,55 @@ export default async function PathwayPage({
       </div>
 
       <section className="rounded-lg border border-slate-200 bg-white p-5">
+        <h2 className="font-semibold">混合式学习任务</h2>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {pathway.recommended_tasks.map((task) => (
+            <Link
+              key={`${task.type}-${task.id}`}
+              href={taskHref(task.type, task.id, studentId)}
+              className="rounded-md bg-slate-50 p-4 hover:bg-clinic-soft"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="rounded-md bg-white px-2 py-1 text-xs text-slate-600">
+                  {taskTypeLabel(task.type)}
+                </span>
+                <span className="text-xs text-slate-400">优先级 {task.priority}</span>
+              </div>
+              <div className="mt-3 font-medium">{task.title}</div>
+              <p className="mt-2 text-sm leading-6 text-slate-700">{task.reason}</p>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-semibold">推荐知识单元</h2>
+          <Link
+            href={`/student/knowledge?studentId=${studentId}`}
+            className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:border-clinic"
+          >
+            查看全部知识
+          </Link>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {pathway.knowledge_suggestions.map((item) => (
+            <Link
+              key={item.unit.id}
+              href={`/student/knowledge/${item.unit.id}?studentId=${studentId}`}
+              className="rounded-md bg-slate-50 p-4 hover:bg-clinic-soft"
+            >
+              <div className="font-medium">{item.unit.title}</div>
+              <div className="mt-1 text-sm text-slate-500">
+                {item.unit.category} · {item.unit.level}
+              </div>
+              <p className="mt-3 text-sm text-slate-700">{item.reason}</p>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-5">
         <h2 className="font-semibold">已完成病例</h2>
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           {pathway.completed_cases.length ? (
@@ -89,4 +138,27 @@ export default async function PathwayPage({
 
 function stageTitle(key: string, stages: { key: string; title: string }[]) {
   return stages.find((stage) => stage.key === key)?.title ?? key;
+}
+
+function taskTypeLabel(type: string) {
+  const labels: Record<string, string> = {
+    knowledge_unit: "基础知识",
+    clinical_skill: "临床技能",
+    case: "病例训练",
+    guideline: "循证指南",
+    sp_case: "SP问诊",
+  };
+  return labels[type] ?? type;
+}
+
+function taskHref(type: string, id: number, studentId: number) {
+  const suffix = `?studentId=${studentId}`;
+  const paths: Record<string, string> = {
+    knowledge_unit: `/student/knowledge/${id}`,
+    clinical_skill: `/student/skills/${id}`,
+    case: `/student/case/${id}`,
+    guideline: `/student/guidelines/${id}`,
+    sp_case: `/student/sp/${id}`,
+  };
+  return `${paths[type] ?? "/student/dashboard"}${suffix}`;
 }

@@ -1,7 +1,53 @@
 import os
+import json
 from typing import Any
 
 from openai import OpenAI
+
+
+def chat_text(system_prompt: str, user_prompt: str, fallback: str) -> str:
+    if not os.getenv("OPENAI_API_KEY"):
+        return fallback
+    try:
+        client = _client()
+        response = client.chat.completions.create(
+            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.3,
+        )
+        content = response.choices[0].message.content
+        return content.strip() if content and content.strip() else fallback
+    except Exception:
+        return fallback
+
+
+def chat_json(system_prompt: str, user_prompt: str, fallback: Any) -> Any:
+    if not os.getenv("OPENAI_API_KEY"):
+        return fallback
+    try:
+        client = _client()
+        response = client.chat.completions.create(
+            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
+            messages=[
+                {
+                    "role": "system",
+                    "content": f"{system_prompt}\n必须只输出合法 JSON，不要输出 markdown 或解释。",
+                },
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.2,
+            response_format={"type": "json_object"},
+        )
+        content = response.choices[0].message.content or ""
+        parsed = json.loads(content)
+        if isinstance(parsed, (dict, list)):
+            return parsed
+    except Exception:
+        return fallback
+    return fallback
 
 
 def generate_reasoning_question(case: dict, step: str, student_answer: str) -> str:
@@ -25,28 +71,15 @@ def generate_learning_recommendation(
 
 
 def _openai_reasoning_question(case: dict, step: str, student_answer: str) -> str:
-    client = OpenAI(
-        api_key=os.getenv("OPENAI_API_KEY"),
-        base_url=os.getenv("OPENAI_BASE_URL") or None,
+    fallback = _rule_reasoning_question(step, student_answer)
+    return chat_text(
+        "你是风湿免疫临床教学导师，请提出一个能促进临床推理的追问。",
+        (
+            f"病例：{case.get('title')}\n标准诊断：{case.get('standard_diagnosis')}\n"
+            f"当前步骤：{step}\n学生回答：{student_answer}"
+        ),
+        fallback,
     )
-    response = client.chat.completions.create(
-        model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
-        messages=[
-            {
-                "role": "system",
-                "content": "你是风湿免疫临床教学导师，请提出一个能促进临床推理的追问。",
-            },
-            {
-                "role": "user",
-                "content": (
-                    f"病例：{case.get('title')}\n标准诊断：{case.get('standard_diagnosis')}\n"
-                    f"当前步骤：{step}\n学生回答：{student_answer}"
-                ),
-            },
-        ],
-        temperature=0.3,
-    )
-    return response.choices[0].message.content or _rule_reasoning_question(step, student_answer)
 
 
 def _rule_reasoning_question(step: str, student_answer: str) -> str:
@@ -71,3 +104,10 @@ def _rule_reasoning_question(step: str, student_answer: str) -> str:
 
 def normalize_openai_payload(value: Any) -> Any:
     return value
+
+
+def _client() -> OpenAI:
+    return OpenAI(
+        api_key=os.getenv("OPENAI_API_KEY"),
+        base_url=os.getenv("OPENAI_BASE_URL") or None,
+    )

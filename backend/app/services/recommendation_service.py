@@ -49,6 +49,32 @@ def choose_recommendation(profile: dict, recent_scores: list[dict], cases: list[
     }
 
 
+def build_learning_pathway(student_profile: dict, recent_activity: dict) -> dict:
+    current_stage = determine_pathway_stage(student_profile)
+    weak_keys = weakest_abilities(student_profile, limit=4)
+    recommended_tasks: list[dict] = []
+
+    for key in weak_keys:
+        recommended_tasks.extend(_tasks_for_ability(key, student_profile, recent_activity))
+
+    if student_profile.get("communication", 100) < 70 or student_profile.get("humanistic_care", 100) < 70:
+        task = _first_task(
+            recent_activity.get("sp_cases", []),
+            "sp_case",
+            "沟通或人文关怀评分偏低，建议通过标准化病人训练问诊表达和共情回应。",
+            75,
+        )
+        if task:
+            recommended_tasks.append(task)
+
+    unique_tasks = _dedupe_tasks(recommended_tasks)
+    return {
+        "current_stage": current_stage,
+        "weak_abilities": weak_keys,
+        "recommended_tasks": unique_tasks,
+    }
+
+
 def _pick_case(scores: dict, cases: list[dict]) -> dict:
     title_preference = None
     if scores.get("differential_diagnosis", 100) < 60:
@@ -79,3 +105,157 @@ def _recommendation_reason(scores: dict, case: dict) -> str:
         "evidence_based_medicine": "循证医学意识需要提升",
     }
     return f"{labels[weakest]}，推荐继续训练“{case['title']}”。"
+
+
+def _tasks_for_ability(key: str, profile: dict, recent_activity: dict) -> list[dict]:
+    tasks = []
+    score = profile.get(key, 100)
+    if key == "medical_knowledge":
+        tasks.append(
+            _first_task(
+                recent_activity.get("knowledge_units", []),
+                "knowledge_unit",
+                f"医学知识得分 {score}，建议先补齐核心概念。",
+                95,
+            )
+        )
+        tasks.append(
+            _case_task(
+                recent_activity.get("cases", []),
+                ["基础", "SLE基础", "生成病例"],
+                f"医学知识薄弱，需要通过基础病例迁移应用。",
+                90,
+            )
+        )
+    elif key == "key_information":
+        tasks.append(
+            _first_task(
+                recent_activity.get("sp_cases", []),
+                "sp_case",
+                f"关键信息提取得分 {score}，建议通过 SP 问诊训练信息收集。",
+                95,
+            )
+        )
+        tasks.append(
+            _first_task(
+                recent_activity.get("clinical_skills", []),
+                "clinical_skill",
+                "通过查体或操作流程训练补充体征信息采集能力。",
+                90,
+            )
+        )
+        tasks.append(
+            _case_task(
+                recent_activity.get("cases", []),
+                ["基础", "SLE基础"],
+                "通过基础病例练习关键阳性和关键阴性提取。",
+                88,
+            )
+        )
+    elif key == "differential_diagnosis":
+        tasks.append(
+            _case_task(
+                recent_activity.get("cases", []),
+                ["感染", "成人Still", "鉴别", "进阶"],
+                f"鉴别诊断得分 {score}，建议训练复杂症状群病例。",
+                96,
+            )
+        )
+        tasks.append(
+            _first_task(
+                recent_activity.get("sp_cases", []),
+                "sp_case",
+                "通过 SP 问诊补充鉴别诊断所需病史线索。",
+                86,
+            )
+        )
+    elif key == "evidence_integration":
+        tasks.append(
+            _case_task(
+                recent_activity.get("cases", []),
+                ["血管炎", "感染", "进阶"],
+                f"证据整合得分 {score}，建议训练支持证据与反证权重。",
+                94,
+            )
+        )
+        tasks.append(
+            _first_task(
+                recent_activity.get("guidelines", []),
+                "guideline",
+                "结合指南 PICO 练习提升证据整合。",
+                84,
+            )
+        )
+    elif key == "clinical_decision":
+        tasks.append(
+            _first_task(
+                recent_activity.get("guidelines", []),
+                "guideline",
+                f"临床决策得分 {score}，建议先阅读治疗推荐和风险监测。",
+                94,
+            )
+        )
+        tasks.append(
+            _first_task(
+                recent_activity.get("clinical_skills", []),
+                "clinical_skill",
+                "通过技能站训练将适应证、禁忌证和安全监测纳入决策。",
+                90,
+            )
+        )
+        tasks.append(
+            _case_task(
+                recent_activity.get("cases", []),
+                ["血管炎", "皮肌炎", "高阶", "进阶"],
+                "通过高阶病例练习治疗决策、感染筛查和随访计划。",
+                88,
+            )
+        )
+    elif key == "evidence_based_medicine":
+        tasks.append(
+            _first_task(
+                recent_activity.get("guidelines", []),
+                "guideline",
+                f"循证医学得分 {score}，建议完成指南 PICO 学习任务。",
+                96,
+            )
+        )
+    return [task for task in tasks if task]
+
+
+def _first_task(items: list[dict], task_type: str, reason: str, priority: int) -> dict | None:
+    if not items:
+        return None
+    item = items[0]
+    return _make_task(task_type, item, reason, priority)
+
+
+def _case_task(cases: list[dict], title_keywords: list[str], reason: str, priority: int) -> dict | None:
+    for keyword in title_keywords:
+        for case in cases:
+            text = f"{case.get('title', '')} {case.get('difficulty', '')} {case.get('disease_category', '')}"
+            if keyword in text:
+                return _make_task("case", case, reason, priority)
+    return _first_task(cases, "case", reason, priority)
+
+
+def _make_task(task_type: str, item: dict, reason: str, priority: int) -> dict:
+    return {
+        "type": task_type,
+        "id": item["id"],
+        "title": item["title"],
+        "reason": reason,
+        "priority": priority,
+    }
+
+
+def _dedupe_tasks(tasks: list[dict]) -> list[dict]:
+    seen = set()
+    unique = []
+    for task in sorted(tasks, key=lambda item: item["priority"], reverse=True):
+        key = (task["type"], task["id"])
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(task)
+    return unique

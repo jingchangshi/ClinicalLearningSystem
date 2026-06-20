@@ -14,9 +14,14 @@ export default async function TeacherDashboard() {
           <p className="text-sm text-slate-500">教师驾驶舱</p>
           <h1 className="text-2xl font-semibold">班级临床推理表现</h1>
         </div>
-        <Link href="/teacher/cases" className="rounded-md bg-clinic px-4 py-2 text-white">
-          管理病例
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/teacher/case-generator" className="rounded-md border border-slate-300 px-4 py-2 hover:border-clinic">
+            AI生成病例
+          </Link>
+          <Link href="/teacher/cases" className="rounded-md bg-clinic px-4 py-2 text-white">
+            管理病例
+          </Link>
+        </div>
       </section>
 
       <div className="grid gap-4 md:grid-cols-4">

@@ -22,6 +22,18 @@ class Student(Base):
     recommendations: Mapped[list["LearningRecommendation"]] = relationship(
         back_populates="student", cascade="all, delete-orphan"
     )
+    knowledge_progress: Mapped[list["KnowledgeProgress"]] = relationship(
+        back_populates="student", cascade="all, delete-orphan"
+    )
+    skill_sessions: Mapped[list["SkillSession"]] = relationship(
+        back_populates="student", cascade="all, delete-orphan"
+    )
+    guideline_sessions: Mapped[list["GuidelineLearningSession"]] = relationship(
+        back_populates="student", cascade="all, delete-orphan"
+    )
+    sp_sessions: Mapped[list["SPSession"]] = relationship(
+        back_populates="student", cascade="all, delete-orphan"
+    )
 
 
 class Case(Base):
@@ -142,3 +154,161 @@ class LearningRecommendation(Base):
 
     student: Mapped["Student"] = relationship(back_populates="recommendations")
     recommended_case: Mapped["Case"] = relationship()
+
+
+class KnowledgeUnit(Base):
+    __tablename__ = "knowledge_units"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    category: Mapped[str] = mapped_column(String(100), nullable=False)
+    level: Mapped[str] = mapped_column(String(50), nullable=False)
+    learning_objectives: Mapped[str] = mapped_column(Text, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    key_points: Mapped[str] = mapped_column(Text, nullable=False)
+    quiz_items: Mapped[str] = mapped_column(Text, nullable=False)
+    related_case_ids: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    progress: Mapped[list["KnowledgeProgress"]] = relationship(
+        back_populates="knowledge_unit", cascade="all, delete-orphan"
+    )
+
+
+class KnowledgeProgress(Base):
+    __tablename__ = "knowledge_progress"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), nullable=False)
+    knowledge_unit_id: Mapped[int] = mapped_column(ForeignKey("knowledge_units.id"), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="not_started")
+    quiz_score: Mapped[float] = mapped_column(Float, default=0)
+    mastery_score: Mapped[float] = mapped_column(Float, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    student: Mapped["Student"] = relationship(back_populates="knowledge_progress")
+    knowledge_unit: Mapped["KnowledgeUnit"] = relationship(back_populates="progress")
+
+
+class ClinicalSkill(Base):
+    __tablename__ = "clinical_skills"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    category: Mapped[str] = mapped_column(String(100), nullable=False)
+    difficulty: Mapped[str] = mapped_column(String(50), nullable=False)
+    indication: Mapped[str] = mapped_column(Text, nullable=False)
+    contraindication: Mapped[str] = mapped_column(Text, nullable=False)
+    steps: Mapped[str] = mapped_column(Text, nullable=False)
+    common_errors: Mapped[str] = mapped_column(Text, nullable=False)
+    scoring_rubric: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    sessions: Mapped[list["SkillSession"]] = relationship(
+        back_populates="skill", cascade="all, delete-orphan"
+    )
+
+
+class SkillSession(Base):
+    __tablename__ = "skill_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), nullable=False)
+    skill_id: Mapped[int] = mapped_column(ForeignKey("clinical_skills.id"), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="in_progress")
+    submitted_steps: Mapped[str | None] = mapped_column(Text, nullable=True)
+    score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    student: Mapped["Student"] = relationship(back_populates="skill_sessions")
+    skill: Mapped["ClinicalSkill"] = relationship(back_populates="sessions")
+
+
+class GuidelineDocument(Base):
+    __tablename__ = "guideline_documents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    organization: Mapped[str] = mapped_column(String(100), nullable=False)
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    disease_category: Mapped[str] = mapped_column(String(100), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    recommendations: Mapped[str] = mapped_column(Text, nullable=False)
+    pico_examples: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    sessions: Mapped[list["GuidelineLearningSession"]] = relationship(
+        back_populates="guideline", cascade="all, delete-orphan"
+    )
+
+
+class GuidelineLearningSession(Base):
+    __tablename__ = "guideline_learning_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), nullable=False)
+    guideline_id: Mapped[int] = mapped_column(ForeignKey("guideline_documents.id"), nullable=False)
+    clinical_question: Mapped[str] = mapped_column(Text, nullable=False)
+    pico: Mapped[str] = mapped_column(Text, nullable=False)
+    answer: Mapped[str] = mapped_column(Text, nullable=False)
+    score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    student: Mapped["Student"] = relationship(back_populates="guideline_sessions")
+    guideline: Mapped["GuidelineDocument"] = relationship(back_populates="sessions")
+
+
+class SPCase(Base):
+    __tablename__ = "sp_cases"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    disease_category: Mapped[str] = mapped_column(String(100), nullable=False)
+    difficulty: Mapped[str] = mapped_column(String(50), nullable=False)
+    patient_profile: Mapped[str] = mapped_column(Text, nullable=False)
+    opening_statement: Mapped[str] = mapped_column(Text, nullable=False)
+    hidden_history: Mapped[str] = mapped_column(Text, nullable=False)
+    emotional_style: Mapped[str] = mapped_column(String(100), nullable=False)
+    expected_tasks: Mapped[str] = mapped_column(Text, nullable=False)
+    scoring_rubric: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    sessions: Mapped[list["SPSession"]] = relationship(
+        back_populates="sp_case", cascade="all, delete-orphan"
+    )
+
+
+class SPSession(Base):
+    __tablename__ = "sp_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), nullable=False)
+    sp_case_id: Mapped[int] = mapped_column(ForeignKey("sp_cases.id"), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="in_progress")
+    transcript: Mapped[str] = mapped_column(Text, nullable=False)
+    diagnosis_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    communication_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    history_taking_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    reasoning_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    humanistic_care_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    total_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    student: Mapped["Student"] = relationship(back_populates="sp_sessions")
+    sp_case: Mapped["SPCase"] = relationship(back_populates="sessions")
+
+
+class GeneratedCaseDraft(Base):
+    __tablename__ = "generated_case_drafts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    teacher_prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    generated_payload: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="draft")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

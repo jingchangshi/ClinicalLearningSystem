@@ -2,9 +2,19 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Case, CompetencyProfile, LearningRecommendation, Student
+from app.models import (
+    Case,
+    ClinicalSkill,
+    CompetencyProfile,
+    GuidelineDocument,
+    KnowledgeUnit,
+    LearningRecommendation,
+    SPCase,
+    Student,
+)
 from app.services.recommendation_service import (
     PATHWAY_STAGES,
+    build_learning_pathway,
     choose_recommendation,
     determine_pathway_stage,
     weakest_abilities,
@@ -12,7 +22,11 @@ from app.services.recommendation_service import (
 from app.services.serializers import (
     ABILITY_LABELS,
     serialize_case_summary,
+    serialize_guideline_summary,
+    serialize_knowledge_summary,
     serialize_profile,
+    serialize_skill_summary,
+    serialize_sp_case_summary,
     serialize_student,
 )
 
@@ -91,18 +105,32 @@ def get_pathway(student_id: int, db: Session = Depends(get_db)) -> dict:
     ]
     recommendation = choose_recommendation(profile, recent_scores, cases)
     weak_keys = weakest_abilities(profile, limit=3)
+    knowledge_suggestions = _knowledge_suggestions(db, weak_keys)
+    learning_pathway = build_learning_pathway(
+        profile,
+        {
+            "cases": cases,
+            "knowledge_units": [serialize_knowledge_summary(unit) for unit in db.query(KnowledgeUnit).all()],
+            "clinical_skills": [serialize_skill_summary(skill) for skill in db.query(ClinicalSkill).all()],
+            "guidelines": [serialize_guideline_summary(guideline) for guideline in db.query(GuidelineDocument).all()],
+            "sp_cases": [serialize_sp_case_summary(sp_case) for sp_case in db.query(SPCase).all()],
+        },
+    )
     return {
         "student": serialize_student(student),
         "competency": profile,
         "pathway_stages": PATHWAY_STAGES,
-        "current_stage": determine_pathway_stage(profile),
+        "current_stage": learning_pathway["current_stage"],
         "completed_cases": completed,
         "recommended_case": recommendation["case"],
         "recommendation_reason": recommendation["reason"],
         "weak_abilities": [
-            {"key": key, "label": ABILITY_LABELS[key], "score": profile[key]} for key in weak_keys
+            {"key": key, "label": ABILITY_LABELS[key], "score": profile[key]}
+            for key in learning_pathway["weak_abilities"]
         ],
-        "next_stage_goal": _next_stage_goal(determine_pathway_stage(profile)),
+        "recommended_tasks": learning_pathway["recommended_tasks"],
+        "knowledge_suggestions": knowledge_suggestions,
+        "next_stage_goal": _next_stage_goal(learning_pathway["current_stage"]),
     }
 
 
@@ -150,3 +178,32 @@ def _next_stage_goal(stage: str) -> str:
         "stage_4_evidence_based_learning": "能使用指南和证据等级支撑治疗决策。",
     }
     return goals[stage]
+
+
+def _knowledge_suggestions(db: Session, weak_keys: list[str]) -> list[dict]:
+    units = db.query(KnowledgeUnit).all()
+    if not units:
+        return []
+    preferred_titles = []
+    if "medical_knowledge" in weak_keys:
+        preferred_titles.append("SLE核心诊断线索")
+    if "key_information" in weak_keys or "differential_diagnosis" in weak_keys:
+        preferred_titles.append("发热皮疹的鉴别诊断")
+    if "clinical_decision" in weak_keys:
+        preferred_titles.append("免疫抑制治疗安全监测")
+    suggestions = []
+    for title in preferred_titles:
+        unit = next((item for item in units if item.title == title), None)
+        if unit:
+            suggestions.append(
+                {
+                    "unit": serialize_knowledge_summary(unit),
+                    "reason": f"当前能力画像提示{', '.join(ABILITY_LABELS[key] for key in weak_keys)}需要加强，建议先完成该知识单元。",
+                }
+            )
+    return suggestions[:2] or [
+        {
+            "unit": serialize_knowledge_summary(units[0]),
+            "reason": "建议通过基础知识学习巩固病例训练前置概念。",
+        }
+    ]

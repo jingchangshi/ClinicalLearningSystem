@@ -3,7 +3,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import cases, sessions, students, teacher
+from app.routes import case_generation, cases, guidelines, knowledge, sessions, skills, sp, students, teacher
 from app.seed_data import init_db
 
 init_db()
@@ -35,6 +35,11 @@ app.include_router(students.router)
 app.include_router(cases.router)
 app.include_router(sessions.router)
 app.include_router(teacher.router)
+app.include_router(knowledge.router)
+app.include_router(skills.router)
+app.include_router(guidelines.router)
+app.include_router(sp.router)
+app.include_router(case_generation.router)
 
 
 @app.get("/health")

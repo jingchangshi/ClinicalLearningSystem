@@ -10,6 +10,12 @@
 - 自动评分：按 6 个能力维度生成分项评分、总分、优点、不足和形成性反馈。
 - 能力画像更新：按“旧分数 * 0.7 + 本次分数 * 0.3”更新学生画像。
 - 自适应学习路径：按能力短板进入 4 个学习阶段并推荐下一病例。
+- 统一学习路径：按能力短板混合推荐知识、技能、病例、指南和 SP 任务。
+- 基础知识学习：提供风湿免疫核心知识单元、学生学习进度和知识测验。
+- 临床技能训练：提供查体/操作步骤练习、OSCE 风格评分和改进反馈。
+- 循证指南学习：提供指南摘要、推荐意见、PICO 练习和循证医学能力更新。
+- 标准化病人 SP：提供虚拟病人问诊、沟通训练和 OSCE 风格评分。
+- AI 病例生成器：教师输入疾病类别、教学目标和能力维度后生成病例草稿，并可批准入库。
 - 教师驾驶舱：展示班级整体表现、共性短板、教学重点、学生表格和最近训练记录。
 - 病例管理：教师端支持病例查看、新增、编辑和删除。
 
@@ -58,7 +64,7 @@ INTERNAL_API_BASE_URL=http://127.0.0.1:8100 npm run start -- --hostname 0.0.0.0 
 ```
 
 4. 推荐使用路径：
-    打开 / → 学生端 → 选择学生 → 点击推荐病例 → 完成 5 个阶段回答 → 每阶段获取追问 → 提交病例 → 查看结果页 → 查看学习路径 → 教师端查看班级表现。
+    打开 / → 学生端 → 选择学生 → 知识单元学习/临床技能训练/循证指南学习/SP模拟考核/点击推荐病例 → 完成 5 个阶段回答 → 每阶段获取追问 → 提交病例 → 查看结果页 → 查看学习路径 → 教师端查看班级表现。
 
 
 ## 技术栈
@@ -103,7 +109,7 @@ cd backend
 python3 -m app.seed_data --reset
 ```
 
-数据库文件位于 `backend/clinical_learning.db`。种子数据包括 3 名学生、5 个风湿免疫病例、初始能力画像和学习推荐。
+数据库文件位于 `backend/clinical_learning.db`。种子数据包括 3 名学生、5 个风湿免疫病例、3 个知识单元、2 个临床技能、2 份指南、2 个 SP 病例、初始能力画像和学习推荐。
 
 ## 后端启动
 
@@ -177,6 +183,14 @@ systemctl --user enable clinical-backend.service clinical-frontend.service
 systemctl --user start clinical-backend.service clinical-frontend.service
 ```
 
+代码更新后重新构建并重启：
+
+```bash
+cd /home/jcshi/workspace/clinical_learning_system/frontend
+npm run build
+systemctl --user restart clinical-backend.service clinical-frontend.service
+```
+
 查看状态和日志：
 
 ```bash
@@ -213,6 +227,7 @@ curl http://127.0.0.1:8100/api/health
 curl http://127.0.0.1:8101/api/students
 curl -I http://129.153.118.58:8101/
 curl http://129.153.118.58:8101/api/students
+curl http://129.153.118.58:8101/api/knowledge
 ```
 
 ## 环境变量与真实 AI 接入
@@ -229,21 +244,40 @@ export OPENAI_MODEL=gpt-4o-mini
 
 预留函数位于 `backend/app/services/llm_client.py`：
 
+- `chat_json(system_prompt, user_prompt, fallback)`
+- `chat_text(system_prompt, user_prompt, fallback)`
 - `generate_reasoning_question(case, step, student_answer)`
 - `score_student_answer(case, answers, rubric)`
 - `generate_learning_recommendation(profile, recent_scores, cases)`
 
 没有 `OPENAI_API_KEY` 时会自动回退到本地规则逻辑，不影响系统运行。
 
+无 API Key smoke test：
+
+```bash
+cd /home/jcshi/workspace/clinical_learning_system
+uv run --with-requirements backend/requirements.txt python scripts/smoke_no_api_key.py
+```
+
 ## 核心页面
 
 - `/`：角色入口，选择学生端或教师端
 - `/student/dashboard`：学生首页
+- `/student/knowledge`：基础知识学习列表
+- `/student/knowledge/[unitId]`：知识单元详情和测验
+- `/student/skills`：临床技能训练列表
+- `/student/skills/[skillId]`：技能步骤练习和评分
+- `/student/guidelines`：循证指南学习列表
+- `/student/guidelines/[guidelineId]`：指南详情和 PICO 练习
+- `/student/sp`：标准化病人 SP 病例列表
+- `/student/sp/[caseId]`：SP 聊天问诊考核
+- `/student/sp/result/[sessionId]`：SP 考核评分反馈
 - `/student/case/[caseId]`：病例训练页
 - `/student/result/[sessionId]`：评分反馈页
-- `/student/pathway`：自适应学习路径页
+- `/student/pathway`：自适应学习路径页，展示混合式学习任务
 - `/teacher/dashboard`：教师驾驶舱
 - `/teacher/cases`：病例管理页
+- `/teacher/case-generator`：AI 病例生成器
 
 ## 主要 API
 
@@ -253,18 +287,38 @@ export OPENAI_MODEL=gpt-4o-mini
 - `GET /api/cases/{case_id}`
 - `GET /api/students/{student_id}/competency`
 - `GET /api/students/{student_id}/dashboard`
+- `GET /api/students/{student_id}/pathway`
+- `GET /api/students/{student_id}/knowledge-progress`
+- `GET /api/knowledge`
+- `GET /api/knowledge/{unit_id}`
+- `POST /api/knowledge/{unit_id}/quiz`
+- `GET /api/skills`
+- `GET /api/skills/{skill_id}`
+- `POST /api/skills/{skill_id}/sessions/start`
+- `POST /api/skill-sessions/{session_id}/submit`
+- `GET /api/guidelines`
+- `GET /api/guidelines/{guideline_id}`
+- `POST /api/guidelines/{guideline_id}/pico`
+- `GET /api/sp-cases`
+- `GET /api/sp-cases/{sp_case_id}`
+- `POST /api/sp-sessions/start`
+- `POST /api/sp-sessions/{session_id}/message`
+- `POST /api/sp-sessions/{session_id}/submit`
+- `GET /api/sp-sessions/{session_id}/result`
 - `POST /api/sessions/start`
 - `GET /api/sessions/{session_id}`
 - `POST /api/sessions/{session_id}/answers`
 - `POST /api/sessions/{session_id}/coach`
 - `POST /api/sessions/{session_id}/submit`
 - `GET /api/sessions/{session_id}/result`
-- `GET /api/students/{student_id}/pathway`
 - `GET /api/teacher/dashboard`
 - `GET /api/teacher/cases`
 - `POST /api/teacher/cases`
 - `PUT /api/teacher/cases/{case_id}`
 - `DELETE /api/teacher/cases/{case_id}`
+- `POST /api/teacher/case-generator/generate`
+- `POST /api/teacher/case-generator/{draft_id}/approve`
+- `GET /api/health`
 
 ## MVP 跑通路径
 

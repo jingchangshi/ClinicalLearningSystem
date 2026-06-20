@@ -1,7 +1,17 @@
 import argparse
 
 from app.database import Base, SessionLocal, engine
-from app.models import Case, CompetencyProfile, LearningRecommendation, Student
+from app.models import (
+    Case,
+    ClinicalSkill,
+    CompetencyProfile,
+    GuidelineDocument,
+    KnowledgeProgress,
+    KnowledgeUnit,
+    LearningRecommendation,
+    SPCase,
+    Student,
+)
 from app.services.recommendation_service import determine_pathway_stage
 from app.services.serializers import dumps_json, serialize_case_summary, serialize_profile
 
@@ -14,6 +24,8 @@ def init_db(reset: bool = False) -> None:
     db = SessionLocal()
     try:
         if db.query(Student).first():
+            _seed_learning_modules(db)
+            db.commit()
             return
 
         students = [
@@ -91,6 +103,7 @@ def init_db(reset: bool = False) -> None:
                     pathway_stage=stage,
                 )
             )
+        _seed_learning_modules(db)
         db.commit()
     finally:
         db.close()
@@ -123,6 +136,276 @@ def _initial_case_for_stage(stage: str, cases: list[dict]) -> dict:
     }
     title = preferences.get(stage, "SLE基础病例")
     return next(case for case in cases if title in case["title"])
+
+
+def _seed_learning_modules(db) -> None:
+    if not db.query(KnowledgeUnit).first():
+        knowledge_units = [_make_knowledge_unit(item) for item in _knowledge_payloads()]
+        db.add_all(knowledge_units)
+        db.flush()
+        students = db.query(Student).all()
+        for student in students:
+            for unit in knowledge_units:
+                db.add(
+                    KnowledgeProgress(
+                        student_id=student.id,
+                        knowledge_unit_id=unit.id,
+                        status="not_started",
+                        quiz_score=0,
+                        mastery_score=0,
+                    )
+                )
+
+    if not db.query(ClinicalSkill).first():
+        db.add_all([_make_skill(item) for item in _skill_payloads()])
+
+    if not db.query(GuidelineDocument).first():
+        db.add_all([_make_guideline(item) for item in _guideline_payloads()])
+
+    if not db.query(SPCase).first():
+        db.add_all([_make_sp_case(item) for item in _sp_case_payloads()])
+
+
+def _make_knowledge_unit(payload: dict) -> KnowledgeUnit:
+    return KnowledgeUnit(
+        title=payload["title"],
+        category=payload["category"],
+        level=payload["level"],
+        learning_objectives=dumps_json(payload["learning_objectives"]),
+        content=payload["content"],
+        key_points=dumps_json(payload["key_points"]),
+        quiz_items=dumps_json(payload["quiz_items"]),
+        related_case_ids=dumps_json(payload["related_case_ids"]),
+    )
+
+
+def _make_skill(payload: dict) -> ClinicalSkill:
+    return ClinicalSkill(
+        title=payload["title"],
+        category=payload["category"],
+        difficulty=payload["difficulty"],
+        indication=payload["indication"],
+        contraindication=payload["contraindication"],
+        steps=dumps_json(payload["steps"]),
+        common_errors=dumps_json(payload["common_errors"]),
+        scoring_rubric=dumps_json(payload["scoring_rubric"]),
+    )
+
+
+def _make_guideline(payload: dict) -> GuidelineDocument:
+    return GuidelineDocument(
+        title=payload["title"],
+        organization=payload["organization"],
+        year=payload["year"],
+        disease_category=payload["disease_category"],
+        source_type=payload["source_type"],
+        summary=payload["summary"],
+        recommendations=dumps_json(payload["recommendations"]),
+        pico_examples=dumps_json(payload["pico_examples"]),
+    )
+
+
+def _make_sp_case(payload: dict) -> SPCase:
+    return SPCase(
+        title=payload["title"],
+        disease_category=payload["disease_category"],
+        difficulty=payload["difficulty"],
+        patient_profile=dumps_json(payload["patient_profile"]),
+        opening_statement=payload["opening_statement"],
+        hidden_history=dumps_json(payload["hidden_history"]),
+        emotional_style=payload["emotional_style"],
+        expected_tasks=dumps_json(payload["expected_tasks"]),
+        scoring_rubric=dumps_json(payload["scoring_rubric"]),
+    )
+
+
+def _knowledge_payloads() -> list[dict]:
+    return [
+        {
+            "title": "SLE核心诊断线索",
+            "category": "风湿免疫基础",
+            "level": "基础",
+            "learning_objectives": ["识别SLE常见临床表现", "理解自身抗体和补体的诊断意义"],
+            "content": "系统性红斑狼疮常表现为发热、皮疹、关节痛、血细胞减少、蛋白尿等多系统受累。ANA敏感性高，抗dsDNA与疾病活动度和肾脏受累相关，补体下降提示免疫复合物活动。",
+            "key_points": ["多系统受累", "ANA筛查意义", "抗dsDNA与补体变化", "狼疮肾炎风险"],
+            "quiz_items": [
+                {
+                    "question": "SLE患者出现蛋白尿时应重点评估哪类器官受累？",
+                    "answer_keywords": ["肾", "狼疮肾炎", "肾脏"],
+                },
+                {
+                    "question": "哪些免疫学指标支持SLE活动？",
+                    "answer_keywords": ["抗dsDNA", "补体", "ANA"],
+                },
+            ],
+            "related_case_ids": [1, 2],
+        },
+        {
+            "title": "发热皮疹的鉴别诊断",
+            "category": "症状群鉴别",
+            "level": "进阶",
+            "learning_objectives": ["区分SLE活动、感染、AOSD和HLH", "建立高危鉴别诊断优先级"],
+            "content": "发热和皮疹可见于感染、SLE活动、成人Still病、HLH、淋巴瘤和药物反应。鉴别时需结合热型、皮疹特点、血培养、铁蛋白、血细胞变化、器官受累和免疫指标。",
+            "key_points": ["感染排除", "AOSD热型", "HLH高铁蛋白", "淋巴瘤警示信号"],
+            "quiz_items": [
+                {
+                    "question": "发热皮疹并铁蛋白显著升高时应考虑哪些诊断？",
+                    "answer_keywords": ["成人Still", "AOSD", "HLH"],
+                },
+                {
+                    "question": "免疫抑制治疗前为什么要排除感染？",
+                    "answer_keywords": ["感染", "免疫抑制", "风险"],
+                },
+            ],
+            "related_case_ids": [2, 3],
+        },
+        {
+            "title": "免疫抑制治疗安全监测",
+            "category": "治疗决策",
+            "level": "中等",
+            "learning_objectives": ["掌握激素和免疫抑制剂常见风险", "制定感染筛查和随访监测计划"],
+            "content": "风湿免疫病治疗常需糖皮质激素、羟氯喹、环磷酰胺、吗替麦考酚酯或生物制剂。治疗前需评估感染、肝肾功能、妊娠风险和疫苗状态，治疗中需监测血常规、肝肾功能、感染和器官活动度。",
+            "key_points": ["感染筛查", "肝肾功能监测", "血常规监测", "随访疾病活动度"],
+            "quiz_items": [
+                {
+                    "question": "开始免疫抑制剂前应筛查哪些风险？",
+                    "answer_keywords": ["感染", "肝", "肾", "妊娠"],
+                },
+                {
+                    "question": "治疗随访中至少应监测哪些项目？",
+                    "answer_keywords": ["血常规", "肝肾功能", "感染", "活动度"],
+                },
+            ],
+            "related_case_ids": [2, 4, 5],
+        },
+    ]
+
+
+def _skill_payloads() -> list[dict]:
+    return [
+        {
+            "title": "炎性关节查体",
+            "category": "体格检查",
+            "difficulty": "基础",
+            "indication": "关节痛、晨僵、疑似炎性关节炎或结缔组织病关节受累。",
+            "contraindication": "局部严重疼痛、开放伤口或患者无法配合时需调整检查方式。",
+            "steps": ["手卫生并解释检查", "视诊关节肿胀和畸形", "触诊压痛和皮温", "评估主动和被动活动度", "记录受累关节分布"],
+            "common_errors": ["未比较双侧", "只问疼痛不查肿胀", "遗漏功能受限评估"],
+            "scoring_rubric": {
+                "preparation": "能说明目的并保护隐私。",
+                "sequence": "按视诊、触诊、活动度顺序完成。",
+                "safety": "动作轻柔，避免诱发明显疼痛。",
+                "documentation": "能记录关节分布和阳性体征。",
+            },
+        },
+        {
+            "title": "膝关节穿刺模拟",
+            "category": "操作技能",
+            "difficulty": "进阶",
+            "indication": "关节腔积液需要明确感染、晶体性关节炎或炎症性质。",
+            "contraindication": "穿刺部位感染、严重凝血异常或患者拒绝。",
+            "steps": ["核对适应证和禁忌证", "取得知情同意", "无菌铺巾和消毒", "定位穿刺点", "抽取关节液并送检", "压迫止血并告知注意事项"],
+            "common_errors": ["未评估凝血风险", "无菌观念不足", "未送检细胞计数和培养"],
+            "scoring_rubric": {
+                "indication": "能说明穿刺目的。",
+                "asepsis": "严格无菌操作。",
+                "specimen": "能安排常规、生化、培养和晶体检查。",
+                "aftercare": "能说明术后观察和并发症警示。",
+            },
+        },
+    ]
+
+
+def _guideline_payloads() -> list[dict]:
+    return [
+        {
+            "title": "SLE管理建议摘要",
+            "organization": "EULAR",
+            "year": 2023,
+            "disease_category": "系统性红斑狼疮",
+            "source_type": "指南摘要",
+            "summary": "SLE治疗强调疾病活动度、器官受累和药物风险分层，推荐基础使用羟氯喹并尽量减少长期激素暴露。",
+            "recommendations": [
+                {"text": "无禁忌时推荐羟氯喹作为基础治疗。", "grade": "强推荐"},
+                {"text": "根据器官受累选择糖皮质激素和免疫抑制剂。", "grade": "专家共识"},
+            ],
+            "pico_examples": [
+                {
+                    "p": "活动性SLE患者",
+                    "i": "羟氯喹联合低剂量激素",
+                    "c": "单用激素",
+                    "o": "复发率和药物不良反应",
+                }
+            ],
+        },
+        {
+            "title": "ANCA相关血管炎诱导缓解治疗摘要",
+            "organization": "ACR/VF",
+            "year": 2021,
+            "disease_category": "ANCA相关血管炎",
+            "source_type": "指南摘要",
+            "summary": "重症ANCA相关血管炎诱导缓解治疗需结合糖皮质激素、利妥昔单抗或环磷酰胺，并同步评估感染风险。",
+            "recommendations": [
+                {"text": "重症活动期可使用利妥昔单抗或环磷酰胺诱导缓解。", "grade": "有条件推荐"},
+                {"text": "治疗前需排除感染并评估肾脏和肺部受累。", "grade": "专家共识"},
+            ],
+            "pico_examples": [
+                {
+                    "p": "肺肾受累ANCA相关血管炎患者",
+                    "i": "利妥昔单抗",
+                    "c": "环磷酰胺",
+                    "o": "缓解率、复发率和感染风险",
+                }
+            ],
+        },
+    ]
+
+
+def _sp_case_payloads() -> list[dict]:
+    return [
+        {
+            "title": "发热皮疹青年女性问诊",
+            "disease_category": "系统性红斑狼疮",
+            "difficulty": "基础",
+            "patient_profile": {"age": 21, "gender": "女", "occupation": "大学生"},
+            "opening_statement": "医生，我最近总是低烧，脸上起红斑，手指关节也疼。",
+            "hidden_history": {
+                "duration": "大概一个月，最近一周更明显。",
+                "fever": "多是低热，最高大概38度。",
+                "pain": "双手小关节疼，早上会僵一会儿。",
+                "associated": "最近掉头发，还有口腔溃疡。",
+            },
+            "emotional_style": "焦虑但愿意配合",
+            "expected_tasks": ["问清发热和皮疹特点", "询问关节、肾脏和血液系统线索", "表达共情", "总结初步诊断和检查计划"],
+            "scoring_rubric": {
+                "history_taking": "覆盖主诉、现病史、系统回顾和危险信号。",
+                "communication": "语言清晰，能回应患者焦虑。",
+                "reasoning": "能提出SLE及必要鉴别诊断。",
+                "humanistic_care": "体现隐私保护和共情。",
+            },
+        },
+        {
+            "title": "咳血尿色加深中年男性问诊",
+            "disease_category": "ANCA相关血管炎",
+            "difficulty": "进阶",
+            "patient_profile": {"age": 52, "gender": "男", "occupation": "司机"},
+            "opening_statement": "我最近咳嗽有血丝，小便颜色也很深，人很乏力。",
+            "hidden_history": {
+                "duration": "两周左右，越来越明显。",
+                "fever": "偶尔低热，没有寒战。",
+                "pain": "没有明显胸痛，但鼻子经常堵和出血。",
+                "associated": "尿量变少，腿有点肿。",
+            },
+            "emotional_style": "担心病情严重，需要解释",
+            "expected_tasks": ["识别肺肾综合征", "询问鼻窦和肾脏受累", "评估感染和肿瘤鉴别", "说明紧急检查必要性"],
+            "scoring_rubric": {
+                "history_taking": "覆盖咯血、尿色、鼻窦、肾脏和全身症状。",
+                "communication": "解释病情紧急性但避免恐吓。",
+                "reasoning": "能考虑ANCA相关血管炎和感染鉴别。",
+                "humanistic_care": "关注患者工作和就医顾虑。",
+            },
+        },
+    ]
 
 
 def _case_payloads() -> list[dict]:

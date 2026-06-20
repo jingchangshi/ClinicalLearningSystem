@@ -85,6 +85,113 @@ export type Score = {
   weaknesses: string;
   chart_data: ChartPoint[];
 };
+export type KnowledgeUnit = {
+  id: number;
+  title: string;
+  category: string;
+  level: string;
+  learning_objectives: string[];
+  content?: string;
+  key_points: string[];
+  quiz_items?: { question: string; answer_keywords: string[] }[];
+  related_case_ids: number[];
+  created_at?: string;
+};
+export type KnowledgeProgress = {
+  id: number;
+  student_id: number;
+  knowledge_unit_id: number;
+  status: string;
+  quiz_score: number;
+  mastery_score: number;
+  updated_at: string;
+  knowledge_unit: KnowledgeUnit;
+};
+export type ClinicalSkill = {
+  id: number;
+  title: string;
+  category: string;
+  difficulty: string;
+  indication: string;
+  contraindication?: string;
+  steps?: string[];
+  common_errors: string[];
+  scoring_rubric?: Record<string, string>;
+  created_at?: string;
+};
+export type SkillSession = {
+  id: number;
+  student_id: number;
+  skill_id: number;
+  status: string;
+  submitted_steps: string[];
+  score: number | null;
+  feedback: string | null;
+  created_at: string;
+  completed_at: string | null;
+  skill: ClinicalSkill;
+};
+export type GuidelineDocument = {
+  id: number;
+  title: string;
+  organization: string;
+  year: number;
+  disease_category: string;
+  source_type: string;
+  summary: string;
+  recommendations?: { text: string; grade: string }[];
+  pico_examples?: { p: string; i: string; c: string; o: string }[];
+  created_at?: string;
+};
+export type GuidelineLearningSession = {
+  id: number;
+  student_id: number;
+  guideline_id: number;
+  clinical_question: string;
+  pico: string;
+  answer: string;
+  score: number | null;
+  feedback: string | null;
+  created_at: string;
+  guideline: GuidelineDocument;
+};
+export type SPCase = {
+  id: number;
+  title: string;
+  disease_category: string;
+  difficulty: string;
+  patient_profile: Record<string, string | number>;
+  opening_statement: string;
+  hidden_history?: Record<string, string>;
+  emotional_style: string;
+  expected_tasks: string[];
+  scoring_rubric?: Record<string, string>;
+  created_at?: string;
+};
+export type SPSession = {
+  id: number;
+  student_id: number;
+  sp_case_id: number;
+  status: string;
+  transcript: { role: "student" | "patient"; message: string }[];
+  diagnosis_summary: string | null;
+  communication_score: number | null;
+  history_taking_score: number | null;
+  reasoning_score: number | null;
+  humanistic_care_score: number | null;
+  total_score: number | null;
+  feedback: string | null;
+  started_at: string;
+  completed_at: string | null;
+  sp_case: SPCase;
+};
+export type RecommendedTask = {
+  type: "knowledge_unit" | "clinical_skill" | "case" | "guideline" | "sp_case";
+  id: number;
+  title: string;
+  reason: string;
+  priority: number;
+};
 
 export function listStudents() {
   return request<Student[]>("/api/students");
@@ -161,8 +268,146 @@ export function getPathway(studentId: number) {
     recommended_case: CaseSummary;
     recommendation_reason: string;
     weak_abilities: { key: string; label: string; score: number }[];
+    recommended_tasks: RecommendedTask[];
+    knowledge_suggestions: { unit: KnowledgeUnit; reason: string }[];
     next_stage_goal: string;
   }>(`/api/students/${studentId}/pathway`);
+}
+
+export function listKnowledge() {
+  return request<KnowledgeUnit[]>("/api/knowledge");
+}
+
+export function getKnowledgeUnit(unitId: string | number) {
+  return request<KnowledgeUnit>(`/api/knowledge/${unitId}`);
+}
+
+export function getKnowledgeProgress(studentId: number) {
+  return request<KnowledgeProgress[]>(`/api/students/${studentId}/knowledge-progress`);
+}
+
+export function submitKnowledgeQuiz(unitId: number, studentId: number, answers: string[]) {
+  return request<{
+    quiz_score: number;
+    mastery_score: number;
+    feedback: string;
+    updated_progress: KnowledgeProgress;
+  }>(`/api/knowledge/${unitId}/quiz`, {
+    method: "POST",
+    body: JSON.stringify({ student_id: studentId, answers }),
+  });
+}
+
+export function listSkills() {
+  return request<ClinicalSkill[]>("/api/skills");
+}
+
+export function getSkill(skillId: string | number) {
+  return request<ClinicalSkill>(`/api/skills/${skillId}`);
+}
+
+export function startSkillSession(skillId: number, studentId: number) {
+  return request<SkillSession>(`/api/skills/${skillId}/sessions/start`, {
+    method: "POST",
+    body: JSON.stringify({ student_id: studentId }),
+  });
+}
+
+export function submitSkillSession(sessionId: number, submittedSteps: string[]) {
+  return request<{
+    score: number;
+    feedback: string;
+    missed_steps: string[];
+    common_errors: string[];
+    detail: {
+      completeness_score: number;
+      order_score: number;
+      safety_score: number;
+    };
+    session: SkillSession;
+  }>(`/api/skill-sessions/${sessionId}/submit`, {
+    method: "POST",
+    body: JSON.stringify({ submitted_steps: submittedSteps }),
+  });
+}
+
+export function listGuidelines() {
+  return request<GuidelineDocument[]>("/api/guidelines");
+}
+
+export function getGuideline(guidelineId: string | number) {
+  return request<GuidelineDocument>(`/api/guidelines/${guidelineId}`);
+}
+
+export function submitGuidelinePico(
+  guidelineId: number,
+  payload: {
+    student_id: number;
+    clinical_question: string;
+    pico: string;
+    answer: string;
+  },
+) {
+  return request<{
+    score: number;
+    feedback: string;
+    recommended_answer: string;
+    detail: {
+      pico_completeness: number;
+      guideline_match: number;
+      grade_understanding: number;
+      clinical_applicability: number;
+      risk_individualization: number;
+    };
+    session: GuidelineLearningSession;
+  }>(`/api/guidelines/${guidelineId}/pico`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function listSPCases() {
+  return request<SPCase[]>("/api/sp-cases");
+}
+
+export function getSPCase(spCaseId: string | number) {
+  return request<SPCase>(`/api/sp-cases/${spCaseId}`);
+}
+
+export function startSPSession(studentId: number, spCaseId: number) {
+  return request<{ session_id: number; opening_statement: string; session: SPSession }>("/api/sp-sessions/start", {
+    method: "POST",
+    body: JSON.stringify({ student_id: studentId, sp_case_id: spCaseId }),
+  });
+}
+
+export function sendSPMessage(sessionId: number, message: string) {
+  return request<{ patient_reply: string; transcript: SPSession["transcript"] }>(
+    `/api/sp-sessions/${sessionId}/message`,
+    {
+      method: "POST",
+      body: JSON.stringify({ message }),
+    },
+  );
+}
+
+export function submitSPSession(sessionId: number, diagnosisSummary: string) {
+  return request<{
+    total_score: number;
+    communication_score: number;
+    history_taking_score: number;
+    reasoning_score: number;
+    humanistic_care_score: number;
+    feedback: string;
+    session: SPSession;
+  }>(`/api/sp-sessions/${sessionId}/submit`, {
+    method: "POST",
+    body: JSON.stringify({ diagnosis_summary: diagnosisSummary }),
+  });
+}
+
+export function getSPResult(sessionId: string | number) {
+  return request<SPSession>(`/api/sp-sessions/${sessionId}/result`);
 }
 
 export function getTeacherDashboard() {
@@ -212,4 +457,32 @@ export function teacherUpdateCase(caseId: number, payload: Omit<CaseDetail, "id"
 
 export function teacherDeleteCase(caseId: number) {
   return request<{ ok: boolean }>(`/api/teacher/cases/${caseId}`, { method: "DELETE" });
+}
+
+export type CaseGenerateRequest = {
+  disease_category: string;
+  difficulty: string;
+  teaching_goal: string;
+  required_elements: string[];
+  target_abilities: string[];
+};
+
+export function generateTeacherCase(payload: CaseGenerateRequest) {
+  return request<{ draft_id: number; generated_payload: Omit<CaseDetail, "id"> }>(
+    "/api/teacher/case-generator/generate",
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export function approveGeneratedCase(draftId: number, generatedPayload?: Omit<CaseDetail, "id">) {
+  return request<{ draft_id: number; status: string; case: CaseDetail }>(
+    `/api/teacher/case-generator/${draftId}/approve`,
+    {
+      method: "POST",
+      body: JSON.stringify(generatedPayload ? { generated_payload: generatedPayload } : {}),
+    },
+  );
 }

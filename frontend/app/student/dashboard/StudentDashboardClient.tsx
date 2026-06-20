@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, BookOpen, ClipboardCheck, FileText, MessagesSquare } from "lucide-react";
 
 import { CompetencyRadar } from "@/components/CompetencyRadar";
 import { StatCard } from "@/components/StatCard";
@@ -84,6 +84,80 @@ export function StudentDashboardClient() {
         <StatCard label="进行中病例" value={dashboard.progress.in_progress_cases} />
         <StatCard label="平均得分" value={dashboard.progress.average_score || "待评分"} />
       </div>
+
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-lg border border-slate-200 bg-white p-5">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <BookOpen className="h-6 w-6 text-clinic" />
+              <div>
+                <h2 className="font-semibold">基础知识学习</h2>
+                <p className="mt-1 text-sm text-slate-500">先补齐关键概念，再进入病例推理训练。</p>
+              </div>
+            </div>
+            <button
+              onClick={() => router.push(`/student/knowledge?studentId=${studentId}`)}
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm hover:border-clinic"
+            >
+              进入知识单元
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white p-5">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <ClipboardCheck className="h-6 w-6 text-clinic" />
+              <div>
+                <h2 className="font-semibold">临床技能训练</h2>
+                <p className="mt-1 text-sm text-slate-500">练习查体和操作流程，获得 OSCE 反馈。</p>
+              </div>
+            </div>
+            <button
+              onClick={() => router.push(`/student/skills?studentId=${studentId}`)}
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm hover:border-clinic"
+            >
+              进入技能训练
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white p-5">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <FileText className="h-6 w-6 text-clinic" />
+              <div>
+                <h2 className="font-semibold">循证指南学习</h2>
+                <p className="mt-1 text-sm text-slate-500">用 PICO 结构解读推荐等级和临床适用性。</p>
+              </div>
+            </div>
+            <button
+              onClick={() => router.push(`/student/guidelines?studentId=${studentId}`)}
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm hover:border-clinic"
+            >
+              进入指南学习
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white p-5">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <MessagesSquare className="h-6 w-6 text-clinic" />
+              <div>
+                <h2 className="font-semibold">SP 模拟考核</h2>
+                <p className="mt-1 text-sm text-slate-500">与标准化病人对话，训练问诊和沟通。</p>
+              </div>
+            </div>
+            <button
+              onClick={() => router.push(`/student/sp?studentId=${studentId}`)}
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm hover:border-clinic"
+            >
+              进入 SP 考核
+            </button>
+          </div>
+        </div>
+      </section>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
         <section className="rounded-lg border border-slate-200 bg-white p-5">
