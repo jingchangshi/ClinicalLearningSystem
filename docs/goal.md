@@ -1,167 +1,345 @@
-# ✅ CODEx PROMPT（端到端认证闭环修复）
+当前问题已经非常明确，不再是“认证没通”，而是：
+
+> ❗ Codex 仍在做“功能叠加修复”，但没有解决“主系统 vs demo系统冲突 + 前端状态机断裂”
+
+---
+
+# 一、你当前系统的真实状态（关键诊断）
+
+结合你描述 + commit 状态，可以还原出系统已经变成：
+
+## 🧠 现在其实有两套系统在并行运行
+
+### ① Demo体系（Codex持续在维护）
+
+* /demo
+* demo login flow
+* demo navbar
+* demo auth state（可能仍残留）
+* 用于展示/验证
+
+### ② 主账户体系（你真正需要的）
+
+* /login
+* /student/*
+* /teacher/*
+* /admin/*
+* AuthProvider
+* cookie session
+
+---
+
+# 二、核心问题（根因级别）
+
+## ❌ Root Cause 1：存在“双入口认证体系竞争”
+
+典型表现：
+
+```
+login 成功
+→ cookie 已写
+→ AuthProvider 正常
+
+BUT
+→ demo router / legacy login flow 仍在 intercept
+→ 或 layout 仍引用旧 navbar /旧 auth state
+→ UI 不更新 or 被重置
+```
+
+---
+
+## ❌ Root Cause 2：Auth state 被 demo 层覆盖或重置
+
+你现在非常像这种结构：
+
+```text
+App
+ ├── DemoLayout（有自己的 auth / navbar）
+ ├── MainLayout（新的 AuthProvider）
+```
+
+👉 结果：
+
+* login 成功后 state 更新 ✔
+* demo layout 又 mount ✔
+* state 被覆盖 ❌
+
+---
+
+## ❌ Root Cause 3：登录成功没有“统一路由出口”
+
+现在 likely 状态：
+
+* student login → handled
+* teacher login → partially broken
+* admin login → UI fallback
+
+原因：
+
+👉 **role-based redirect 没有统一决策层**
+
+---
+
+## ❌ Root Cause 4：Navbar 仍是“混合遗产结构”
+
+你截图里仍出现：
+
+```
+Dashboard | Pathway | Profile | Logout
+Login
+```
+
+说明：
+
+* Navbar 不是单一 auth state driven
+* 而是“路由 + 静态菜单混合”
+
+---
+
+# 三、关键结论（非常重要）
+
+你现在的问题已经不是 bug，而是：
+
+> ❗ “认证系统已经完成实现，但系统架构存在双体系竞争（demo vs production）”
+
+---
+
+# 四、必须做的修复策略（结构级，不是代码级）
+
+## 🧩 Strategy 1：强制“Single Auth Source of Truth”
+
+必须统一为：
+
+```
+AuthProvider（唯一）
+  ↓
+/api/auth/me（唯一）
+  ↓
+role-based router（唯一）
+```
+
+---
+
+## 🧩 Strategy 2：彻底隔离 demo 系统
+
+必须：
+
+* demo 不参与 auth state
+* demo 不挂 AuthProvider
+* demo 不使用 navbar auth logic
+* demo route 必须 sandbox
+
+---
+
+## 🧩 Strategy 3：强制“登录后状态机”
+
+必须定义唯一流程：
+
+```
+login success
+  ↓
+/api/auth/me
+  ↓
+setUser
+  ↓
+router.replace(role dashboard)
+  ↓
+navbar re-render
+```
+
+---
+
+## 🧩 Strategy 4：Navbar 重构为纯函数组件
+
+必须：
+
+```
+UI = f(authState)
+```
+
+不能依赖：
+
+* route
+* local state
+* demo flags
+* static menu
+
+---
+
+# 五、给 Codex 的最终修复提示词（强约束版）
+
+下面这份是你下一步必须直接用的 prompt（重点：强制“系统级收敛”，禁止 demo 干扰）
+
+---
+
+# ✅ FINAL CODEX PROMPT（系统级收敛 + 认证闭环修复）
 
 ## 🎯 目标
 
-修复 ClinicalLearningSystem 当前“登录后不跳转 / UI 不刷新 / 状态不一致”问题，并完成完整：
+彻底修复 ClinicalLearningSystem 当前：
 
-> Authentication Lifecycle + UI State + Routing 三位一体闭环
+> “demo系统与主认证系统并存导致 UI 状态混乱 + 登录后不稳定 + Navbar 不一致”
 
----
+并建立：
 
-# 🧠 Step 1：必须做完整登录链路追踪（禁止猜测）
-
-Codex 必须打印：
-
-```
-LOGIN FLOW TRACE:
-1. request sent
-2. backend response
-3. cookie set check
-4. /api/auth/me result
-5. auth state update
-6. router transition
-7. navbar rerender trigger
-```
+> ✔ 单一认证系统
+> ✔ 单一 UI 状态源
+> ✔ 单一路由决策层
+> ✔ demo完全隔离
 
 ---
 
-# 🔧 Step 2：强制修复 Auth Lifecycle（核心）
+# 🚨 Step 1：系统架构审计（必须执行）
 
-## 必须统一为以下流程：
+Codex 必须输出：
 
-```ts id="auth-flow"
-login() {
-  setLoading(true)
-
-  await POST /api/auth/login
-
-  if success:
-    await fetch("/api/auth/me")   ← 必须
-    setAuth(user)                 ← 必须
-    router.replace(role dashboard)← 必须
-
-  setLoading(false)
-}
+```text
+AUTH ARCHITECTURE MAP:
+- all login entry points
+- all AuthProvider instances
+- all navbar implementations
+- all /demo dependencies
+- all routing guards
 ```
 
 ---
 
-# 🔧 Step 3：修复 AuthProvider（关键）
+# 🚨 Step 2：强制删除/隔离 demo 认证影响
+
+## 必须：
+
+* /demo 不使用 AuthProvider
+* /demo 不触发 /api/auth/me
+* /demo 不参与 navbar state
+* /demo layout 必须独立 shell
+
+---
+
+# 🚨 Step 3：统一认证源（唯一）
 
 必须保证：
 
-```ts id="auth-provider"
-onMount:
-  fetch("/api/auth/me")
-    → setUser()
-    → setLoading(false)
+```ts
+AuthProvider:
+  source = /api/auth/me ONLY
+  state = user | null | loading
 ```
 
-并且：
+禁止：
 
-* cookie 是唯一来源
-* local state 必须可恢复
+* localStorage auth
+* demo auth state
+* secondary auth hooks
 
 ---
 
-# 🔧 Step 4：修复 Navbar 状态源（关键UI bug）
+# 🚨 Step 4：重写登录流程（强制闭环）
+
+```ts
+login flow MUST be:
+
+POST /api/auth/login
+→ await /api/auth/me
+→ setUser(global state)
+→ router.replace(role dashboard)
+→ navbar re-render must happen
+```
+
+---
+
+# 🚨 Step 5：Navbar 强制重构（关键）
 
 Navbar 必须：
 
-❌ 不允许：
-
-* 静态判断路由
-* 静态按钮
-* 不依赖 auth state
-
-✔ 必须：
-
 ```ts
-const { user, loading } = useAuth()
+const { user } = useAuth()
+
+if (!user) return LoginButton
+if (user.role === student) return StudentNav
+if (user.role === teacher) return TeacherNav
+if (user.role === admin) return AdminNav
 ```
 
-渲染规则：
+禁止：
 
-* user == null → Login
-* user.role == student → student menu
-* user.role == teacher/admin → admin menu
-
----
-
-# 🔧 Step 5：修复 login 卡住问题
-
-必须保证：
-
-* loading 永远 finally 关闭
-* error 必须 catch
-* router 必须 always execute or fallback
+* route-based rendering
+* static menus
+* demo flags
 
 ---
 
-# 🔧 Step 6：强制端到端测试（必须模拟真实浏览器行为）
+# 🚨 Step 6：路由系统统一守卫
 
-Codex 必须执行：
+必须实现：
 
-## Test 1：student login
+```
+/student/* → only student
+/teacher/* → only teacher/admin
+/demo → no auth dependency
+/login → public only
+```
 
-* login → dashboard
-* refresh → still logged in
+---
+
+# 🚨 Step 7：端到端真实浏览器验证（必须）
+
+Codex 必须用 Playwright：
+
+## Test A：student
+
+* login
+* redirect dashboard
+* refresh persist login
 * navbar correct
 
-## Test 2：teacher login
+## Test B：teacher
 
-* login → teacher dashboard
-* navbar updates
+* login success
+* no freeze
+* correct dashboard
 
-## Test 3：admin login
+## Test C：admin
 
-* full access verified
+* full access
 
-## Test 4：logout
+## Test D：demo isolation
 
-* cookie cleared
-* auth state reset
-* UI resets
-
----
-
-# 🧪 Step 7：必须输出“失败链路定位”
-
-Codex 必须明确回答：
-
-* 为什么 login 页面没跳转
-* 为什么 state 没更新
-* 为什么 navbar 没变化
-
-禁止只说“已修复”
+* /demo login does NOT affect auth state
+* switching demo ↔ main does NOT reset user
 
 ---
 
-# 🚫 禁止行为
+# 🚨 Step 8：必须输出最终架构图
 
-* ❌ 不允许只改 backend
-* ❌ 不允许只改 proxy
-* ❌ 不允许只说 build success
-* ❌ 不允许不做 /api/auth/me 链路验证
-* ❌ 不允许 UI 静态判断
-
----
-
-# 🏁 成功标准（非常关键）
-
-## 登录行为必须一致：
-
-### 任意角色：
+Codex 必须输出：
 
 ```
-login → auth state updated → redirect → UI changed → navbar correct
+FINAL ARCHITECTURE:
+
+AuthProvider (single source)
+        ↓
+   /api/auth/me
+        ↓
+ global user state
+        ↓
+ role router
+        ↓
+ navbar render
+        ↓
+ pages
 ```
 
 ---
 
-## UI必须满足：
+# 🧨 成功标准（非常关键）
 
-* 登录前：Login
-* 登录后：Role-based navbar
-* 刷新后：仍保持登录状态
+系统必须满足：
+
+* 登录后 UI 必然变化
+* navbar 永远正确
+* demo 不影响任何状态
+* refresh 保持登录
+* 不存在“双 auth 系统”
+
+---
 
