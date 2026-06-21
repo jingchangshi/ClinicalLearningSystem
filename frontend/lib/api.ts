@@ -245,7 +245,7 @@ export type LearningEvidence = {
 };
 
 export function login(username: string, password: string) {
-  return request<{ access_token: string; token_type: string; user: User }>("/auth/login", {
+  return request<{ token_type: string; user: User }>("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ username, password }),
   });
@@ -258,14 +258,14 @@ export function register(payload: {
   student_id?: number;
   teacher_id?: number;
 }) {
-  return request<{ access_token: string; token_type: string; user: User }>("/auth/register", {
+  return request<{ token_type: string; user: User }>("/api/auth/register", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
 export function getMe() {
-  return request<User>("/auth/me");
+  return request<User>("/api/auth/me");
 }
 
 export function listStudents() {

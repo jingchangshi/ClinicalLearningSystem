@@ -5,7 +5,6 @@ from typing import Annotated
 import bcrypt
 import jwt
 from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -14,9 +13,6 @@ from app.models import User
 JWT_SECRET = os.getenv("JWT_SECRET", "dev-clinpath-change-me")
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = int(os.getenv("ACCESS_TOKEN_EXPIRE_HOURS", "12"))
-
-bearer_scheme = HTTPBearer(auto_error=False)
-
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
@@ -42,10 +38,9 @@ def create_access_token(user: User) -> str:
 
 def get_current_user(
     request: Request,
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
     db: Annotated[Session, Depends(get_db)],
 ) -> User:
-    token = request.cookies.get("access_token") or (credentials.credentials if credentials else None)
+    token = request.cookies.get("access_token")
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

@@ -1,180 +1,182 @@
-目标：
-修复 ClinicalLearningSystem 当前 commit 1fdf9d8fd4277fcf1e08895b60de4f2b4235afd0 中存在的“登录成功后页面回跳 /login 问题”，并统一认证存储机制，同时规范 LLM 调用架构为服务层。
+# ✅ Codex Goal Prompt：认证系统与登录问题自动诊断修复（ClinPath）
+
+## 🎯 目标
+
+对仓库 `ClinicalLearningSystem` 当前版本进行**端到端自动诊断与修复**，重点解决：
+
+### 核心问题
+
+1. 登录接口偶发 `405 Method Not Allowed`
+2. 前后端 auth 路由可能存在版本不一致（/auth vs /api/auth）
+3. 登录成功但前端行为异常（跳转 /login 或无状态更新）
+4. cookie / credentials / proxy / middleware 鉴权链不一致风险
+5. API 路由存在历史遗留冲突（多版本 auth 实现）
 
 ---
 
-# 一、核心问题修复：登录后重定向循环（最高优先级）
+## 🧠 必须执行的诊断流程（Codex必须按顺序做）
 
-## 问题现象
-- login API 成功
-- token 保存成功（localStorage）
-- router.push 成功跳转 /teacher/dashboard
-- 页面立即回到 /login
+### Step 1：完整扫描认证链路
 
-## 根本原因
-Next.js middleware / server auth guard 无法读取 localStorage token，导致误判未登录。
+定位以下文件并逐个分析：
 
----
+* backend auth router（login/register/me）
+* frontend login page
+* frontend api client（axios/fetch封装）
+* middleware / proxy.ts
+* nginx / vite / next proxy（如存在）
 
-# 二、必须统一认证机制（必须实现）
+输出：
 
-## 方案：改为 HttpOnly Cookie（推荐）
-
-### 1. 后端修改 /auth/login
-
-在返回 token 的同时：
-
-- 设置 cookie：
-
-access_token=<jwt>
-
-属性：
-- httpOnly = true
-- sameSite = lax
-- path = /
+* 当前 login endpoint 实际路径
+* 当前 HTTP method（POST/GET）
+* cookie 写入位置
+* token读取位置
 
 ---
 
-### 2. 前端修改
+### Step 2：构建“真实请求路径图”
 
-删除：
+必须生成：
 
-- saveAuthToken(localStorage)
+```
+Frontend login request → Proxy → Backend route → Response → Cookie → Middleware check → Dashboard
+```
 
-改为：
+并标出：
 
-- 依赖 cookie 自动携带
-- axios/fetch 必须带 credentials: "include"
-
----
-
-### 3. middleware.ts 修复
-
-必须改为：
-
-- 从 request.cookies 读取 access_token
-- 不再读取 localStorage（server无法访问）
+* 哪一环可能 mismatch
+* 哪一环存在 legacy logic
 
 ---
 
-### 4. 路由守卫统一
+### Step 3：自动验证（必须执行）
 
-规则：
+Codex必须模拟或检查以下一致性：
 
-- /login → 永远可访问
-- /student/* → require student cookie token
-- /teacher/* → require teacher/admin role
-- /demo → public
-
----
-
-# 三、前端登录流程修复
-
-修改 LoginClient.tsx：
-
-1. 删除 saveAuthToken
-2. login API 必须：
-
-fetch('/api/auth/login', {
-  credentials: 'include'
-})
-
-3. login success 后：
-
-router.push(next || role-based route)
-
----
-
-# 四、API client 修复
-
-frontend/lib/api.ts：
-
-统一：
-
-- credentials: "include"
-- 不依赖 localStorage token
-
----
-
-# 五、后端认证统一检查
+#### 1. 路由一致性检查
 
 确保：
 
-- /api/auth/login
-- /api/auth/register
-- /api/auth/me
-
-全部基于 cookie 或 Authorization header（二选一，必须统一 cookie）
+* frontend login URL == backend login route
+* method == POST
+* prefix一致（/api/auth/login 或 /auth/login 只能保留一个）
 
 ---
 
-# 六、LLM 架构重构（新增要求）
+#### 2. Cookie一致性检查
 
-## 目标：统一 LLM 服务层
+检查：
 
----
-
-## 1. 新增 LLMService（必须）
-
-backend/app/services/llm_service.py
-
-统一入口：
-
-- chat_completion()
-- generate_case()
-- explain_recommendation()
-- generate_sp_feedback()
-- generate_guideline_rationale()
+* Set-Cookie 是否存在
+* SameSite / Path / Domain 是否合理
+* credentials: include 是否全局启用
 
 ---
 
-## 2. 环境变量
+#### 3. Middleware检查
 
-必须支持：
+验证：
 
-LLM_API_KEY
-LLM_BASE_URL
-LLM_MODEL
-
----
-
-## 3. 禁止直接调用 client
-
-所有模块必须：
-
-❌ 直接调用 openai / http
-✔ 通过 LLMService
+* 是否正确读取 access_token cookie
+* 是否存在双系统（token + cookie混用）
+* 是否存在错误 redirect loop
 
 ---
 
-## 4. fallback机制
+### Step 4：运行级修复策略（必须执行）
 
-没有 API key：
+Codex必须自动执行以下修复策略：
 
-- 使用 deterministic template
-- 系统不可崩溃
+#### A. 路由统一（强制）
+
+统一为：
+
+```
+/api/auth/login
+/api/auth/register
+/api/auth/me
+```
+
+删除或废弃旧路径。
 
 ---
 
-# 七、必须接入 LLM 的模块
+#### B. 前端统一 API client
 
-1. recommendation_service → explanation
-2. case_generator_service → case generation
-3. SP feedback → narrative feedback
-4. guideline scoring → rationale explanation
-5. teacher dashboard → teaching insight summary
+确保：
+
+* baseURL = /api
+* 所有 auth 请求走同一封装
+* 禁止 hardcoded /auth 或 /api/auth 混用
 
 ---
 
-# 八、验收标准
+#### C. cookie策略统一
 
-必须满足：
+确保：
 
-1. login 后不再跳回 /login
-2. teacher/student 正常跳转
-3. middleware 正确识别登录态
-4. cookie 方式生效
-5. localStorage 不再作为认证依据
-6. LLMService 可统一调用
-7. 无 API 404 / redirect loop
-8. npm run build 通过
+* HttpOnly enabled
+* SameSite=Lax 或 None（根据实际）
+* credentials: include 全局开启
+
+---
+
+#### D. middleware 修复
+
+必须保证：
+
+* /login /demo public
+* /student/* requires student
+* /teacher/* requires teacher/admin
+* token 从 cookie 读取唯一来源
+
+---
+
+### Step 5：自动回归验证（必须）
+
+Codex必须验证：
+
+#### 登录链路：
+
+1. POST /api/auth/login → 200
+2. Set-Cookie 存在
+3. /api/auth/me → 200
+4. /student/dashboard → 200（student）
+5. /teacher/dashboard → 200（teacher）
+6. role mismatch → redirect /login
+
+---
+
+## ⚠️ 强约束规则
+
+* 不允许新增第二套 auth system
+* 不允许同时存在 /auth 和 /api/auth
+* 不允许 token + cookie 双轨并存
+* 不允许前后端路径不一致
+* 不允许“临时兼容代码”
+
+---
+
+## 📦 输出要求
+
+Codex必须输出：
+
+1. 问题列表（root cause）
+2. 修改文件清单
+3. 每个修改的原因
+4. 最终验证结果（必须逐条列出）
+5. 如果失败，继续循环直到通过
+
+---
+
+## 🔥 成功标准
+
+系统必须满足：
+
+* 登录不再出现 404 / 405
+* 登录后不会跳回 /login
+* cookie 驱动完整 session
+* role guard 稳定
+* 前后端 API 完全一致
+

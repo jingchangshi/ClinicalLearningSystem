@@ -34,7 +34,7 @@ def _auth_response(response: Response, user: User) -> dict:
         path="/",
         max_age=60 * 60 * 12,
     )
-    return {"access_token": token, "token_type": "bearer", "user": serialize_user(user)}
+    return {"token_type": "cookie", "user": serialize_user(user)}
 
 
 @router.post("/register")
