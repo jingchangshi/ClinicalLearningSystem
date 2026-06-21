@@ -75,6 +75,12 @@ def login(payload: LoginRequest, response: Response, db: Session = Depends(get_d
     return _auth_response(response, user)
 
 
+@router.post("/logout")
+def logout(response: Response) -> dict:
+    response.delete_cookie(key="access_token", path="/")
+    return {"ok": True}
+
+
 @router.get("/me")
 def me(user: User = Depends(get_current_user)) -> dict:
     return serialize_user(user)

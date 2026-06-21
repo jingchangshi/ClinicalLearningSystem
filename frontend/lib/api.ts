@@ -268,6 +268,10 @@ export function getMe() {
   return request<User>("/api/auth/me");
 }
 
+export function logout() {
+  return request<{ ok: boolean }>("/api/auth/logout", { method: "POST" });
+}
+
 export function listStudents() {
   return request<Student[]>("/api/students");
 }
@@ -282,7 +286,7 @@ export function getStudentDashboard(studentId: number) {
     recent_advice: string;
     learning_evidence: LearningEvidence[];
     progress: { completed_cases: number; in_progress_cases: number; average_score: number };
-  }>("/student/dashboard");
+  }>("/api/student/dashboard");
 }
 
 export function getCase(caseId: string | number) {
@@ -351,7 +355,7 @@ export function getPathway(studentId: number) {
     learning_evidence: LearningEvidence[];
     knowledge_suggestions: { unit: KnowledgeUnit; reason: string }[];
     next_stage_goal: string;
-  }>("/student/pathway");
+  }>("/api/student/pathway");
 }
 
 export function listKnowledge() {
@@ -364,7 +368,7 @@ export function getKnowledgeUnit(unitId: string | number) {
 
 export function getKnowledgeProgress(studentId: number) {
   void studentId;
-  return request<KnowledgeProgress[]>("/student/knowledge-progress");
+  return request<KnowledgeProgress[]>("/api/student/knowledge-progress");
 }
 
 export function submitKnowledgeQuiz(unitId: number, studentId: number | null, answers: string[]) {

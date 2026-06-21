@@ -4,7 +4,7 @@ import { FormEvent, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ShieldCheck } from "lucide-react";
 
-import { login } from "@/lib/api";
+import { useAuth } from "@/components/AuthProvider";
 
 const demoAccounts = [
   { label: "学生账号", username: "student1", password: "student123" },
@@ -15,29 +15,27 @@ const demoAccounts = [
 export function LoginClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { login, loading } = useAuth();
   const [username, setUsername] = useState("student1");
   const [password, setPassword] = useState("student123");
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    setBusy(true);
     setError(null);
     try {
-      const response = await login(username, password);
+      const user = await login(username, password);
       const next = searchParams.get("next");
       if (next?.startsWith("/")) {
         router.push(next);
-      } else if (response.user.role === "student") {
+      } else if (user.role === "student") {
         router.push("/student/dashboard");
       } else {
         router.push("/teacher/dashboard");
       }
+      router.refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "登录失败");
-    } finally {
-      setBusy(false);
     }
   }
 
@@ -90,10 +88,10 @@ export function LoginClient() {
         </label>
         {error ? <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-alert">{error}</p> : null}
         <button
-          disabled={busy}
+          disabled={loading}
           className="mt-6 w-full rounded-xl bg-clinic px-4 py-3 font-semibold text-white disabled:opacity-60"
         >
-          {busy ? "登录中..." : "登录并进入系统"}
+          {loading ? "登录中..." : "登录并进入系统"}
         </button>
       </form>
     </div>

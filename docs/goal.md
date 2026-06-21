@@ -1,182 +1,273 @@
-# ✅ Codex Goal Prompt：认证系统与登录问题自动诊断修复（ClinPath）
+# ✅ Codex Goal Prompt（最终修复 + 账户系统完整闭环）
 
-## 🎯 目标
+## 🎯 项目目标
 
-对仓库 `ClinicalLearningSystem` 当前版本进行**端到端自动诊断与修复**，重点解决：
+对 `ClinicalLearningSystem` 当前版本进行**账户系统最终收敛修复与UI闭环重构**，确保：
 
-### 核心问题
-
-1. 登录接口偶发 `405 Method Not Allowed`
-2. 前后端 auth 路由可能存在版本不一致（/auth vs /api/auth）
-3. 登录成功但前端行为异常（跳转 /login 或无状态更新）
-4. cookie / credentials / proxy / middleware 鉴权链不一致风险
-5. API 路由存在历史遗留冲突（多版本 auth 实现）
+> 登录系统不仅“API正确”，而且“用户体验完整一致”。
 
 ---
 
-## 🧠 必须执行的诊断流程（Codex必须按顺序做）
+# 🧠 一、必须先做的系统级诊断（强制）
 
-### Step 1：完整扫描认证链路
+Codex 必须执行以下分析并输出报告：
 
-定位以下文件并逐个分析：
-
-* backend auth router（login/register/me）
-* frontend login page
-* frontend api client（axios/fetch封装）
-* middleware / proxy.ts
-* nginx / vite / next proxy（如存在）
-
-输出：
-
-* 当前 login endpoint 实际路径
-* 当前 HTTP method（POST/GET）
-* cookie 写入位置
-* token读取位置
-
----
-
-### Step 2：构建“真实请求路径图”
-
-必须生成：
-
-```
-Frontend login request → Proxy → Backend route → Response → Cookie → Middleware check → Dashboard
-```
-
-并标出：
-
-* 哪一环可能 mismatch
-* 哪一环存在 legacy logic
-
----
-
-### Step 3：自动验证（必须执行）
-
-Codex必须模拟或检查以下一致性：
-
-#### 1. 路由一致性检查
-
-确保：
-
-* frontend login URL == backend login route
-* method == POST
-* prefix一致（/api/auth/login 或 /auth/login 只能保留一个）
-
----
-
-#### 2. Cookie一致性检查
+## 1. 登录失败路径分析（重点 teacher/admin）
 
 检查：
 
-* Set-Cookie 是否存在
-* SameSite / Path / Domain 是否合理
-* credentials: include 是否全局启用
+* frontend login request payload
+* login role 参数是否传递
+* backend login route 是否正确解析 role
+* teacher/admin 用户数据库字段
+* JWT/cookie 是否正确写入 role
+* proxy.ts 是否误判 role
 
----
-
-#### 3. Middleware检查
-
-验证：
-
-* 是否正确读取 access_token cookie
-* 是否存在双系统（token + cookie混用）
-* 是否存在错误 redirect loop
-
----
-
-### Step 4：运行级修复策略（必须执行）
-
-Codex必须自动执行以下修复策略：
-
-#### A. 路由统一（强制）
-
-统一为：
+输出：
 
 ```
-/api/auth/login
-/api/auth/register
-/api/auth/me
+- student login success chain
+- teacher login failure point
+- admin login failure point
 ```
 
-删除或废弃旧路径。
+---
+
+## 2. UI 状态未更新原因分析
+
+检查：
+
+* auth context / global state
+* cookie → frontend state hydration
+* /api/auth/me 是否在登录后触发
+* navbar 是否依赖 stale state
+* 是否存在 hardcoded menu（student/teacher按钮）
 
 ---
 
-#### B. 前端统一 API client
+## 3. 登录“卡住2秒恢复”的原因分析
 
-确保：
+重点检查：
 
-* baseURL = /api
-* 所有 auth 请求走同一封装
-* 禁止 hardcoded /auth 或 /api/auth 混用
-
----
-
-#### C. cookie策略统一
-
-确保：
-
-* HttpOnly enabled
-* SameSite=Lax 或 None（根据实际）
-* credentials: include 全局开启
+* login loading state未正确 reset
+* promise reject未 catch
+* router push 未执行
+* middleware redirect loop
+* role mismatch silent fail
 
 ---
 
-#### D. middleware 修复
+# 🔧 二、必须修复的问题（强制执行）
+
+---
+
+## ❗Fix 1：统一登录角色系统（核心修复）
+
+### 要求：
+
+backend login 必须：
+
+```ts
+return {
+  id,
+  username,
+  role: "student" | "teacher" | "admin"
+}
+```
+
+cookie 必须包含：
+
+```
+access_token (JWT with role embedded)
+```
+
+---
+
+## ❗Fix 2：修复 teacher/admin 登录失败
+
+必须检查并修复：
+
+* 用户表 role 字段映射错误
+* login service 忽略 role
+* JWT encode 未包含 role
+* frontend login 未传 role 或 selector
+
+👉 要求：
+
+✔ teacher login 必须成功
+✔ admin login 必须成功
+✔ student 不受影响
+
+---
+
+## ❗Fix 3：统一 Auth State（关键UI问题）
+
+必须新增或修复：
+
+### frontend auth state layer
+
+```ts
+auth.user
+auth.role
+auth.isAuthenticated
+auth.loading
+```
+
+登录后必须：
+
+1. 调用 `/api/auth/me`
+2. 更新全局 state
+3. 触发 navbar rerender
+
+---
+
+## ❗Fix 4：彻底重构 Navbar（UI闭环）
+
+当前问题：
+
+> 仍显示 student/teacher 登录按钮（旧系统残留）
+
+必须改为：
+
+### 未登录状态：
+
+* Login
+
+### student：
+
+* Dashboard
+* Pathway
+* Profile
+* Logout
+
+### teacher/admin：
+
+* Teacher Dashboard
+* Class Analytics
+* Students Overview
+* Logout
+
+---
+
+## ❗Fix 5：登录流程修复（卡住问题）
 
 必须保证：
 
-* /login /demo public
-* /student/* requires student
-* /teacher/* requires teacher/admin
-* token 从 cookie 读取唯一来源
+```text
+login click
+→ setLoading(true)
+→ POST /api/auth/login
+→ success
+→ call /api/auth/me
+→ setUser()
+→ router.push(role dashboard)
+→ setLoading(false)
+```
+
+任何失败必须：
+
+* setLoading(false)
+* show error
 
 ---
 
-### Step 5：自动回归验证（必须）
+## ❗Fix 6：middleware 统一修复
 
-Codex必须验证：
+必须保证：
 
-#### 登录链路：
-
-1. POST /api/auth/login → 200
-2. Set-Cookie 存在
-3. /api/auth/me → 200
-4. /student/dashboard → 200（student）
-5. /teacher/dashboard → 200（teacher）
-6. role mismatch → redirect /login
+* /login 永远可访问
+* /demo 永远可访问
+* /student/* 仅 student
+* /teacher/* 仅 teacher/admin
+* role mismatch → redirect /login（不循环）
 
 ---
 
-## ⚠️ 强约束规则
+# 🧪 三、强制回归测试（Codex必须执行）
 
-* 不允许新增第二套 auth system
-* 不允许同时存在 /auth 和 /api/auth
-* 不允许 token + cookie 双轨并存
-* 不允许前后端路径不一致
-* 不允许“临时兼容代码”
+## 登录测试：
+
+### student：
+
+* login success
+* dashboard OK
+* navbar correct
+
+### teacher：
+
+* login success
+* teacher dashboard OK
+* navbar correct
+
+### admin：
+
+* login success
+* full access OK
 
 ---
 
-## 📦 输出要求
+## UI测试：
+
+* login → navbar变化
+* refresh → state恢复
+* logout → state清空
+* no stale buttons
+
+---
+
+## API测试：
+
+* /api/auth/login 200
+* /api/auth/me 200
+* role mismatch 403
+* cookie persistent
+
+---
+
+# 🧹 四、禁止行为（非常重要）
+
+Codex 不允许：
+
+* ❌ 保留 student/teacher 混合导航旧UI
+* ❌ 双 auth system（token + cookie）
+* ❌ localStorage fallback
+* ❌ role hardcode in frontend
+* ❌ login success 但 UI 不更新
+* ❌ 静默失败（必须可见错误）
+
+---
+
+# 📦 五、输出要求
 
 Codex必须输出：
 
-1. 问题列表（root cause）
-2. 修改文件清单
-3. 每个修改的原因
-4. 最终验证结果（必须逐条列出）
-5. 如果失败，继续循环直到通过
+1. teacher/admin 登录失败 root cause
+2. navbar 不更新 root cause
+3. loading 卡住 root cause
+4. 修改文件列表
+5. 每个修复说明
+6. 最终验证结果（逐条）
 
 ---
 
-## 🔥 成功标准
+# 🏁 六、成功标准（非常关键）
 
-系统必须满足：
+系统必须达到：
 
-* 登录不再出现 404 / 405
-* 登录后不会跳回 /login
-* cookie 驱动完整 session
-* role guard 稳定
-* 前后端 API 完全一致
+## 认证层：
+
+* 三类用户全部可登录
+* role 完整贯通 backend → cookie → frontend
+
+## UI层：
+
+* navbar 完全动态
+* 登录后立即变化
+* 无旧系统残留
+
+## 体验层：
+
+* login 无卡顿
+* 无“登录中停住”
+* 无状态错乱
 
