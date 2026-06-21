@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { BarChart3, GraduationCap, LogIn, LogOut, Route, UserRound, Users } from "lucide-react";
 
 import { useAuth } from "@/components/AuthProvider";
@@ -20,14 +20,11 @@ const teacherLinks = [
 
 export function Navbar() {
   const pathname = usePathname();
-  const router = useRouter();
   const { role, isAuthenticated, loading, logout } = useAuth();
   const links = role === "student" ? studentLinks : role === "teacher" || role === "admin" ? teacherLinks : [];
 
   async function handleLogout() {
     await logout();
-    router.push("/login");
-    router.refresh();
   }
 
   if (loading) {

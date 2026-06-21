@@ -1,7 +1,8 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ShieldCheck } from "lucide-react";
 
 import { useAuth } from "@/components/AuthProvider";
@@ -13,7 +14,6 @@ const demoAccounts = [
 ];
 
 export function LoginClient() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { login, loading } = useAuth();
   const [username, setUsername] = useState("student1");
@@ -24,16 +24,7 @@ export function LoginClient() {
     event.preventDefault();
     setError(null);
     try {
-      const user = await login(username, password);
-      const next = searchParams.get("next");
-      if (next?.startsWith("/")) {
-        router.replace(next);
-      } else if (user.role === "student") {
-        router.replace("/student/dashboard");
-      } else {
-        router.replace("/teacher/dashboard");
-      }
-      router.refresh();
+      await login(username, password, searchParams.get("next"));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "登录失败");
     }
@@ -93,6 +84,12 @@ export function LoginClient() {
         >
           {loading ? "登录中..." : "登录并进入系统"}
         </button>
+        <p className="mt-4 text-center text-sm text-slate-500">
+          还没有账号？{" "}
+          <Link href="/register" className="font-medium text-clinic hover:underline">
+            注册新账号
+          </Link>
+        </p>
       </form>
     </div>
   );
