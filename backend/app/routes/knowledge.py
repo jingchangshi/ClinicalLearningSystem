@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.auth import get_current_user, require_student_access, student_id_from_user
 from app.database import get_db
-from app.models import KnowledgeProgress, KnowledgeUnit, Student
+from app.models import KnowledgeProgress, KnowledgeUnit, Student, User
 from app.services.competency_update_service import update_competency_from_knowledge
 from app.services.serializers import (
     loads_json,
@@ -18,17 +19,21 @@ router = APIRouter(prefix="/api", tags=["knowledge"])
 
 
 class QuizSubmitRequest(BaseModel):
-    student_id: int
+    student_id: int | None = None
     answers: list[str]
 
 
 @router.get("/knowledge")
-def list_knowledge(db: Session = Depends(get_db)) -> list[dict]:
+def list_knowledge(db: Session = Depends(get_db), _user: User = Depends(get_current_user)) -> list[dict]:
     return [serialize_knowledge_summary(unit) for unit in db.query(KnowledgeUnit).all()]
 
 
 @router.get("/knowledge/{unit_id}")
-def get_knowledge(unit_id: int, db: Session = Depends(get_db)) -> dict:
+def get_knowledge(
+    unit_id: int,
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+) -> dict:
     unit = db.get(KnowledgeUnit, unit_id)
     if not unit:
         raise HTTPException(status_code=404, detail="Knowledge unit not found")
@@ -36,7 +41,12 @@ def get_knowledge(unit_id: int, db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("/students/{student_id}/knowledge-progress")
-def get_student_knowledge_progress(student_id: int, db: Session = Depends(get_db)) -> list[dict]:
+def get_student_knowledge_progress(
+    student_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[dict]:
+    require_student_access(student_id, user)
     if not db.get(Student, student_id):
         raise HTTPException(status_code=404, detail="Student not found")
     _ensure_progress_rows(db, student_id)
@@ -50,14 +60,20 @@ def get_student_knowledge_progress(student_id: int, db: Session = Depends(get_db
 
 
 @router.post("/knowledge/{unit_id}/quiz")
-def submit_quiz(unit_id: int, payload: QuizSubmitRequest, db: Session = Depends(get_db)) -> dict:
+def submit_quiz(
+    unit_id: int,
+    payload: QuizSubmitRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
     unit = db.get(KnowledgeUnit, unit_id)
     if not unit:
         raise HTTPException(status_code=404, detail="Knowledge unit not found")
-    if not db.get(Student, payload.student_id):
+    student_id = student_id_from_user(user, payload.student_id)
+    if not db.get(Student, student_id):
         raise HTTPException(status_code=404, detail="Student not found")
 
-    progress = _get_or_create_progress(db, payload.student_id, unit_id)
+    progress = _get_or_create_progress(db, student_id, unit_id)
     quiz_score = _score_quiz(loads_json(unit.quiz_items, []), payload.answers)
     mastery_score = round((progress.mastery_score or 0) * 0.6 + quiz_score * 0.4, 1)
     progress.quiz_score = quiz_score
@@ -65,7 +81,7 @@ def submit_quiz(unit_id: int, payload: QuizSubmitRequest, db: Session = Depends(
     progress.status = "completed" if mastery_score >= 80 else "in_progress"
     progress.updated_at = datetime.utcnow()
     db.flush()
-    update_competency_from_knowledge(db, payload.student_id, quiz_score, progress.id)
+    update_competency_from_knowledge(db, student_id, quiz_score, progress.id)
     db.commit()
     db.refresh(progress)
 

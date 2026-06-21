@@ -69,7 +69,7 @@ export default async function ResultPage({ params }: { params: Promise<{ session
       </section>
 
       <Link
-        href={`/student/pathway?studentId=${result.session.student.id}`}
+        href="/student/pathway"
         className="inline-flex rounded-md bg-clinic px-4 py-2 text-white"
       >
         返回学习路径

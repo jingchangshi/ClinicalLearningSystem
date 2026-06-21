@@ -6,6 +6,33 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 
 
+class Teacher(Base):
+    __tablename__ = "teachers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    teacher_no: Mapped[str] = mapped_column(String(50), nullable=False, unique=True)
+    department: Mapped[str] = mapped_column(String(100), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    user: Mapped["User"] = relationship(back_populates="teacher", uselist=False)
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    username: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    student_id: Mapped[int | None] = mapped_column(ForeignKey("students.id"), nullable=True)
+    teacher_id: Mapped[int | None] = mapped_column(ForeignKey("teachers.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    student: Mapped["Student | None"] = relationship(back_populates="user")
+    teacher: Mapped["Teacher | None"] = relationship(back_populates="user")
+
+
 class Student(Base):
     __tablename__ = "students"
 
@@ -34,6 +61,7 @@ class Student(Base):
     sp_sessions: Mapped[list["SPSession"]] = relationship(
         back_populates="student", cascade="all, delete-orphan"
     )
+    user: Mapped["User"] = relationship(back_populates="student", uselist=False)
 
 
 class Case(Base):

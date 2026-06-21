@@ -8,10 +8,8 @@ import { sendSPMessage, SPCase, SPSession, startSPSession, submitSPSession } fro
 
 export function SPChatClient({
   spCase,
-  initialStudentId,
 }: {
   spCase: SPCase;
-  initialStudentId: number;
 }) {
   const router = useRouter();
   const [sessionId, setSessionId] = useState<number | null>(null);
@@ -23,10 +21,10 @@ export function SPChatClient({
 
   async function ensureSession() {
     if (sessionId) return sessionId;
-    const response = await startSPSession(initialStudentId, spCase.id);
+    const response = await startSPSession(null, spCase.id);
     setSessionId(response.session_id);
     setTranscript(response.session.transcript);
-    window.history.replaceState(null, "", `?studentId=${initialStudentId}&sessionId=${response.session_id}`);
+    window.history.replaceState(null, "", `?sessionId=${response.session_id}`);
     return response.session_id;
   }
 

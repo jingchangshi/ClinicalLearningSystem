@@ -2,29 +2,24 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { MessagesSquare } from "lucide-react";
 
-import { listSPCases, listStudents, SPCase, Student } from "@/lib/api";
+import { getMe, listSPCases, SPCase } from "@/lib/api";
 
 export function SPListClient() {
-  const searchParams = useSearchParams();
-  const [students, setStudents] = useState<Student[]>([]);
-  const [studentId, setStudentId] = useState(Number(searchParams.get("studentId") ?? 1));
   const [cases, setCases] = useState<SPCase[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([listStudents(), listSPCases()])
-      .then(([studentRows, caseRows]) => {
-        setStudents(studentRows);
-        setCases(caseRows);
-        if (!studentRows.some((student) => student.id === studentId) && studentRows[0]) {
-          setStudentId(studentRows[0].id);
+    Promise.all([getMe(), listSPCases()])
+      .then(([user, caseRows]) => {
+        if (user.role !== "student" || !user.student_id) {
+          throw new Error("请使用学生账号登录后访问SP训练。");
         }
+        setCases(caseRows);
       })
       .catch((reason) => setError(reason instanceof Error ? reason.message : "SP 病例加载失败"));
-  }, [studentId]);
+  }, []);
 
   if (error) {
     return <div className="rounded-lg border border-red-200 bg-red-50 p-5 text-alert">{error}</div>;
@@ -37,27 +32,14 @@ export function SPListClient() {
           <p className="text-sm text-slate-500">标准化病人 SP</p>
           <h1 className="text-2xl font-semibold text-ink">问诊与沟通考核</h1>
         </div>
-        <label className="text-sm">
-          <span className="mr-2 text-slate-500">选择学生</span>
-          <select
-            value={studentId}
-            onChange={(event) => setStudentId(Number(event.target.value))}
-            className="rounded-md border border-slate-300 bg-white px-3 py-2"
-          >
-            {students.map((student) => (
-              <option key={student.id} value={student.id}>
-                {student.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <span className="rounded-full bg-teal-50 px-4 py-2 text-sm font-semibold text-clinic">当前登录学生</span>
       </section>
 
       <section className="grid gap-4 md:grid-cols-2">
         {cases.map((spCase) => (
           <Link
             key={spCase.id}
-            href={`/student/sp/${spCase.id}?studentId=${studentId}`}
+            href={`/student/sp/${spCase.id}`}
             className="rounded-lg border border-slate-200 bg-white p-5 hover:border-clinic"
           >
             <div className="flex items-start justify-between gap-3">

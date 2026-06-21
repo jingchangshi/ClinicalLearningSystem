@@ -7,10 +7,8 @@ import { KnowledgeUnit, submitKnowledgeQuiz } from "@/lib/api";
 
 export function KnowledgeDetailClient({
   unit,
-  initialStudentId,
 }: {
   unit: KnowledgeUnit;
-  initialStudentId: number;
 }) {
   const quizItems = unit.quiz_items ?? [];
   const [answers, setAnswers] = useState<string[]>(quizItems.map(() => ""));
@@ -26,7 +24,7 @@ export function KnowledgeDetailClient({
     setBusy(true);
     setError(null);
     try {
-      const response = await submitKnowledgeQuiz(unit.id, initialStudentId, answers);
+      const response = await submitKnowledgeQuiz(unit.id, null, answers);
       setResult(response);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "测验提交失败");
@@ -98,7 +96,7 @@ export function KnowledgeDetailClient({
         ) : null}
       </section>
 
-      <Link href={`/student/knowledge?studentId=${initialStudentId}`} className="inline-flex rounded-md border border-slate-300 px-4 py-2">
+      <Link href="/student/knowledge" className="inline-flex rounded-md border border-slate-300 px-4 py-2">
         返回知识列表
       </Link>
     </div>

@@ -2,29 +2,24 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { ClipboardCheck, TriangleAlert } from "lucide-react";
 
-import { ClinicalSkill, listSkills, listStudents, Student } from "@/lib/api";
+import { ClinicalSkill, getMe, listSkills } from "@/lib/api";
 
 export function SkillsListClient() {
-  const searchParams = useSearchParams();
-  const [students, setStudents] = useState<Student[]>([]);
-  const [studentId, setStudentId] = useState(Number(searchParams.get("studentId") ?? 1));
   const [skills, setSkills] = useState<ClinicalSkill[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([listStudents(), listSkills()])
-      .then(([studentRows, skillRows]) => {
-        setStudents(studentRows);
-        setSkills(skillRows);
-        if (!studentRows.some((student) => student.id === studentId) && studentRows[0]) {
-          setStudentId(studentRows[0].id);
+    Promise.all([getMe(), listSkills()])
+      .then(([user, skillRows]) => {
+        if (user.role !== "student" || !user.student_id) {
+          throw new Error("请使用学生账号登录后访问技能训练。");
         }
+        setSkills(skillRows);
       })
       .catch((reason) => setError(reason instanceof Error ? reason.message : "技能项目加载失败"));
-  }, [studentId]);
+  }, []);
 
   if (error) {
     return <div className="rounded-lg border border-red-200 bg-red-50 p-5 text-alert">{error}</div>;
@@ -37,27 +32,14 @@ export function SkillsListClient() {
           <p className="text-sm text-slate-500">临床技能训练</p>
           <h1 className="text-2xl font-semibold text-ink">OSCE 操作站练习</h1>
         </div>
-        <label className="text-sm">
-          <span className="mr-2 text-slate-500">选择学生</span>
-          <select
-            value={studentId}
-            onChange={(event) => setStudentId(Number(event.target.value))}
-            className="rounded-md border border-slate-300 bg-white px-3 py-2"
-          >
-            {students.map((student) => (
-              <option key={student.id} value={student.id}>
-                {student.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <span className="rounded-full bg-teal-50 px-4 py-2 text-sm font-semibold text-clinic">当前登录学生</span>
       </section>
 
       <section className="grid gap-4 md:grid-cols-2">
         {skills.map((skill) => (
           <Link
             key={skill.id}
-            href={`/student/skills/${skill.id}?studentId=${studentId}`}
+            href={`/student/skills/${skill.id}`}
             className="rounded-lg border border-slate-200 bg-white p-5 hover:border-clinic"
           >
             <div className="flex items-start justify-between gap-3">

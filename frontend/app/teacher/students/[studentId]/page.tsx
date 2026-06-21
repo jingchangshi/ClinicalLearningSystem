@@ -89,7 +89,6 @@ export default async function TeacherStudentProfilePage({
 }
 
 function taskHref(type: string, id: number, studentId: number) {
-  const suffix = `?studentId=${studentId}`;
   const paths: Record<string, string> = {
     knowledge_unit: `/student/knowledge/${id}`,
     clinical_skill: `/student/skills/${id}`,
@@ -97,5 +96,6 @@ function taskHref(type: string, id: number, studentId: number) {
     guideline: `/student/guidelines/${id}`,
     sp_case: `/student/sp/${id}`,
   };
-  return `${paths[type] ?? "/student/dashboard"}${suffix}`;
+  void studentId;
+  return paths[type] ?? "/student/dashboard";
 }

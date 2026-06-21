@@ -3,7 +3,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import case_generation, cases, guidelines, knowledge, sessions, skills, sp, students, teacher
+from app.routes import auth, case_generation, cases, guidelines, knowledge, sessions, skills, sp, students, teacher
 from app.seed_data import init_db
 
 init_db()
@@ -31,6 +31,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router)
 app.include_router(students.router)
 app.include_router(cases.router)
 app.include_router(sessions.router)

@@ -3,6 +3,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.auth import get_current_user, require_student_access, student_id_from_user
 from app.database import get_db
 from app.models import (
     AIMessage,
@@ -12,6 +13,7 @@ from app.models import (
     Score,
     Student,
     StudentAnswer,
+    User,
 )
 from app.services.competency_update_service import update_competency_from_case
 from app.schemas import AnswerCreate, CoachRequest, SessionStartRequest
@@ -34,12 +36,17 @@ router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
 
 @router.post("/start")
-def start_session(payload: SessionStartRequest, db: Session = Depends(get_db)) -> dict:
-    if not db.get(Student, payload.student_id):
+def start_session(
+    payload: SessionStartRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    student_id = student_id_from_user(user, payload.student_id)
+    if not db.get(Student, student_id):
         raise HTTPException(status_code=404, detail="Student not found")
     if not db.get(Case, payload.case_id):
         raise HTTPException(status_code=404, detail="Case not found")
-    session = CaseSession(student_id=payload.student_id, case_id=payload.case_id)
+    session = CaseSession(student_id=student_id, case_id=payload.case_id)
     db.add(session)
     db.commit()
     db.refresh(session)
@@ -47,14 +54,25 @@ def start_session(payload: SessionStartRequest, db: Session = Depends(get_db)) -
 
 
 @router.get("/{session_id}")
-def get_session(session_id: int, db: Session = Depends(get_db)) -> dict:
+def get_session(
+    session_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
     session = _get_session(db, session_id)
+    require_student_access(session.student_id, user)
     return _serialize_session(session)
 
 
 @router.post("/{session_id}/answers")
-def save_answer(session_id: int, payload: AnswerCreate, db: Session = Depends(get_db)) -> dict:
+def save_answer(
+    session_id: int,
+    payload: AnswerCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
     session = _get_session(db, session_id)
+    require_student_access(session.student_id, user)
     answer = StudentAnswer(
         session_id=session.id,
         step=payload.step,
@@ -73,8 +91,14 @@ def save_answer(session_id: int, payload: AnswerCreate, db: Session = Depends(ge
 
 
 @router.post("/{session_id}/coach")
-def coach(session_id: int, payload: CoachRequest, db: Session = Depends(get_db)) -> dict:
+def coach(
+    session_id: int,
+    payload: CoachRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
     session = _get_session(db, session_id)
+    require_student_access(session.student_id, user)
     question = generate_reasoning_question(
         serialize_case(session.case),
         payload.step,
@@ -100,8 +124,13 @@ def coach(session_id: int, payload: CoachRequest, db: Session = Depends(get_db))
 
 
 @router.post("/{session_id}/submit")
-def submit_session(session_id: int, db: Session = Depends(get_db)) -> dict:
+def submit_session(
+    session_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
     session = _get_session(db, session_id)
+    require_student_access(session.student_id, user)
     if not session.answers:
         raise HTTPException(status_code=400, detail="At least one answer is required")
 
@@ -160,8 +189,13 @@ def submit_session(session_id: int, db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("/{session_id}/result")
-def get_result(session_id: int, db: Session = Depends(get_db)) -> dict:
+def get_result(
+    session_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
     session = _get_session(db, session_id)
+    require_student_access(session.student_id, user)
     if not session.score:
         raise HTTPException(status_code=404, detail="Score not found")
     latest_recommendation = (

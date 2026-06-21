@@ -8,28 +8,30 @@ import type { LucideIcon } from "lucide-react";
 import { CompetencyRadar } from "@/components/CompetencyRadar";
 import { LearningEvidenceCards } from "@/components/LearningEvidenceCards";
 import { LearningGapDiagnosisCard } from "@/components/LearningGapDiagnosisCard";
-import { getStudentDashboard, listStudents, startSession, Student } from "@/lib/api";
+import { getMe, getStudentDashboard, startSession } from "@/lib/api";
 
 type Dashboard = Awaited<ReturnType<typeof getStudentDashboard>>;
 
 export function StudentDashboardClient() {
   const router = useRouter();
-  const [students, setStudents] = useState<Student[]>([]);
-  const [studentId, setStudentId] = useState(1);
+  const [studentId, setStudentId] = useState<number | null>(null);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [busyCaseId, setBusyCaseId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    listStudents()
-      .then((items) => {
-        setStudents(items);
-        if (items[0]) setStudentId(items[0].id);
+    getMe()
+      .then((user) => {
+        if (user.role !== "student" || !user.student_id) {
+          throw new Error("请使用学生账号登录后访问学生端。");
+        }
+        setStudentId(user.student_id);
       })
-      .catch((reason) => setError(reason instanceof Error ? reason.message : "学生列表加载失败"));
+      .catch((reason) => setError(reason instanceof Error ? reason.message : "当前用户加载失败"));
   }, []);
 
   useEffect(() => {
+    if (!studentId) return;
     setError(null);
     getStudentDashboard(studentId)
       .then(setDashboard)
@@ -37,10 +39,11 @@ export function StudentDashboardClient() {
   }, [studentId]);
 
   async function enterCase(caseId: number) {
+    if (!studentId) return;
     setBusyCaseId(caseId);
     try {
-      const session = await startSession(studentId, caseId);
-      router.push(`/student/case/${caseId}?sessionId=${session.session_id}&studentId=${studentId}`);
+      const session = await startSession(null, caseId);
+      router.push(`/student/case/${caseId}?sessionId=${session.session_id}`);
     } finally {
       setBusyCaseId(null);
     }
@@ -78,20 +81,9 @@ export function StudentDashboardClient() {
           <h1 className="text-3xl font-semibold text-ink">ClinPath 学生临床能力成长中心</h1>
           <p className="mt-2 text-slate-600">基于多模块训练数据形成能力画像与个性化学习路径。</p>
         </div>
-        <label className="text-sm">
-          <span className="mr-2 text-slate-500">选择学生</span>
-          <select
-            value={studentId}
-            onChange={(event) => setStudentId(Number(event.target.value))}
-            className="rounded-md border border-slate-300 bg-white px-3 py-2"
-          >
-            {students.map((student) => (
-              <option key={student.id} value={student.id}>
-                {student.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="rounded-full bg-teal-50 px-4 py-2 text-sm font-semibold text-clinic">
+          当前登录学生：{dashboard.student.name}
+        </div>
       </section>
 
       <div className="grid gap-4 md:grid-cols-4">
@@ -106,7 +98,7 @@ export function StudentDashboardClient() {
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="font-semibold">五模块训练入口矩阵</h2>
         <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          {trainingModules(studentId).map((module) => (
+          {trainingModules().map((module) => (
             <button
               key={module.title}
               onClick={() => router.push(module.href)}
@@ -144,7 +136,7 @@ export function StudentDashboardClient() {
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">AI Adaptive Learning Recommendation</h2>
           <button
-            onClick={() => router.push(`/student/pathway?studentId=${studentId}`)}
+            onClick={() => router.push("/student/pathway")}
             className="text-sm text-clinic hover:underline"
           >
             查看学习路径
@@ -195,41 +187,41 @@ function MetricCard({ title, value, note, icon: Icon }: { title: string; value: 
   );
 }
 
-function trainingModules(studentId: number) {
+function trainingModules() {
   return [
     {
       title: "基础知识学习",
       goal: "先补齐关键概念，再进入病例推理训练。",
       ability: "医学知识",
-      href: `/student/knowledge?studentId=${studentId}`,
+      href: "/student/knowledge",
       icon: BookOpen,
     },
     {
       title: "临床技能训练",
       goal: "练习查体和操作流程，获得 OSCE 反馈。",
       ability: "技能操作 / 临床决策",
-      href: `/student/skills?studentId=${studentId}`,
+      href: "/student/skills",
       icon: ClipboardCheck,
     },
     {
       title: "临床思维训练",
       goal: "通过病例分步作答训练鉴别诊断与证据整合。",
       ability: "临床推理 / 鉴别诊断",
-      href: `/student/pathway?studentId=${studentId}`,
+      href: "/student/pathway",
       icon: BrainCircuit,
     },
     {
       title: "循证指南学习",
       goal: "用 PICO 结构解读推荐等级和临床适用性。",
       ability: "循证决策",
-      href: `/student/guidelines?studentId=${studentId}`,
+      href: "/student/guidelines",
       icon: FileText,
     },
     {
       title: "SP模拟考核",
       goal: "与标准化病人对话，训练问诊和沟通。",
       ability: "信息采集 / 医患沟通",
-      href: `/student/sp?studentId=${studentId}`,
+      href: "/student/sp",
       icon: MessagesSquare,
     },
   ];

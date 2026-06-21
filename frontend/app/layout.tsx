@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { GraduationCap, LayoutDashboard, MonitorUp, Stethoscope } from "lucide-react";
+import { GraduationCap, LayoutDashboard, LogIn, MonitorUp, Stethoscope } from "lucide-react";
 
 import "./globals.css";
 
@@ -31,6 +31,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link className="flex items-center gap-1 rounded-md px-3 py-2 hover:bg-slate-100" href="/teacher/dashboard">
                 <LayoutDashboard className="h-4 w-4" />
                 教师端
+              </Link>
+              <Link className="flex items-center gap-1 rounded-md px-3 py-2 hover:bg-slate-100" href="/login">
+                <LogIn className="h-4 w-4" />
+                登录
               </Link>
             </nav>
           </div>

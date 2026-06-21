@@ -16,7 +16,7 @@ def update_competency_from_knowledge(
     quiz_score: float,
     source_id: int,
 ) -> LearningEvidenceEvent:
-    return _update_competency(
+    return _apply_competency_updates(
         db,
         student_id=student_id,
         module_type="knowledge",
@@ -38,7 +38,7 @@ def update_competency_from_skill(
     detail: dict,
     source_id: int,
 ) -> LearningEvidenceEvent:
-    return _update_competency(
+    return _apply_competency_updates(
         db,
         student_id=student_id,
         module_type="skill",
@@ -67,7 +67,7 @@ def update_competency_from_case(
         "clinical_decision": score["clinical_decision"],
         "evidence_based_medicine": score["evidence_based_medicine"],
     }
-    return _update_competency(
+    return _apply_competency_updates(
         db,
         student_id=student_id,
         module_type="case",
@@ -93,7 +93,7 @@ def update_competency_from_guideline(
         (detail.get("clinical_applicability", score) + detail.get("risk_individualization", score)) / 2,
         1,
     )
-    return _update_competency(
+    return _apply_competency_updates(
         db,
         student_id=student_id,
         module_type="guideline",
@@ -114,7 +114,7 @@ def update_competency_from_sp(
     scoring: dict,
     source_id: int,
 ) -> LearningEvidenceEvent:
-    return _update_competency(
+    return _apply_competency_updates(
         db,
         student_id=student_id,
         module_type="sp",
@@ -134,7 +134,7 @@ def update_competency_from_sp(
     )
 
 
-def _update_competency(
+def _apply_competency_updates(
     db: Session,
     *,
     student_id: int,

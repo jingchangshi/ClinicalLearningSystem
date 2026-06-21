@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.auth import require_role
 from app.database import get_db
 from app.models import (
     Case,
@@ -39,7 +40,11 @@ from app.services.serializers import (
     serialize_student,
 )
 
-router = APIRouter(prefix="/api/teacher", tags=["teacher"])
+router = APIRouter(
+    prefix="/api/teacher",
+    tags=["teacher"],
+    dependencies=[Depends(require_role(["teacher"]))],
+)
 
 
 class InterventionCreate(BaseModel):
@@ -75,7 +80,7 @@ def get_teacher_dashboard(db: Session = Depends(get_db)) -> dict:
         )
         if score_rows
         else 0,
-        "average_improvement": 6.8,
+        "average_improvement": _average_improvement(completed),
         "class_competency": {
             **averages,
             "chart_data": [
@@ -241,15 +246,31 @@ def teacher_delete_case(case_id: int, db: Session = Depends(get_db)) -> dict:
 
 
 def _class_averages(students: list[Student]) -> dict:
-    if not students:
+    profiles = [student.competency_profile for student in students if student.competency_profile]
+    if not profiles:
         return {key: 0 for key in ALL_COMPETENCIES}
     return {
         key: round(
-            sum(getattr(student.competency_profile, key) for student in students if student.competency_profile) / len(students),
+            sum(getattr(profile, key) for profile in profiles) / len(profiles),
             1,
         )
         for key in ALL_COMPETENCIES
     }
+
+
+def _average_improvement(completed_sessions: list[CaseSession]) -> float:
+    by_student: dict[int, list[CaseSession]] = {}
+    for session in sorted(completed_sessions, key=lambda item: item.completed_at or item.started_at):
+        if session.score:
+            by_student.setdefault(session.student_id, []).append(session)
+    deltas = []
+    for sessions in by_student.values():
+        if len(sessions) < 2:
+            continue
+        baseline = sessions[0].score.total_score
+        latest = sessions[-1].score.total_score
+        deltas.append(latest - baseline)
+    return round(sum(deltas) / len(deltas), 1) if deltas else 0
 
 
 def _weak_dimensions(averages: dict) -> list[dict]:

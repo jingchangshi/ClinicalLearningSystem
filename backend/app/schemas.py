@@ -56,7 +56,7 @@ class CompetencyRead(BaseModel):
 
 
 class SessionStartRequest(BaseModel):
-    student_id: int
+    student_id: int | None = None
     case_id: int
 
 

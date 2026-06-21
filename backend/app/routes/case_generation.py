@@ -2,12 +2,17 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.auth import require_role
 from app.database import get_db
 from app.models import Case, GeneratedCaseDraft
 from app.services.case_generator import generate_case_payload, validate_case_payload
 from app.services.serializers import dumps_json, loads_json, serialize_case
 
-router = APIRouter(prefix="/api/teacher/case-generator", tags=["case-generator"])
+router = APIRouter(
+    prefix="/api/teacher/case-generator",
+    tags=["case-generator"],
+    dependencies=[Depends(require_role(["teacher"]))],
+)
 
 
 class CaseGenerateRequest(BaseModel):

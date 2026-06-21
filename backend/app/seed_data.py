@@ -2,6 +2,7 @@ import argparse
 
 from sqlalchemy import inspect, text
 
+from app.auth import hash_password
 from app.database import Base, SessionLocal, engine
 from app.models import (
     Case,
@@ -13,6 +14,8 @@ from app.models import (
     LearningRecommendation,
     SPCase,
     Student,
+    Teacher,
+    User,
 )
 from app.services.recommendation_service import determine_pathway_stage
 from app.services.serializers import dumps_json, serialize_case_summary, serialize_profile
@@ -28,6 +31,7 @@ def init_db(reset: bool = False) -> None:
     try:
         if db.query(Student).first():
             _seed_learning_modules(db)
+            _seed_default_users(db)
             db.commit()
             return
 
@@ -107,6 +111,7 @@ def init_db(reset: bool = False) -> None:
                 )
             )
         _seed_learning_modules(db)
+        _seed_default_users(db)
         db.commit()
     finally:
         db.close()
@@ -167,6 +172,44 @@ def _seed_learning_modules(db) -> None:
 
     if not db.query(SPCase).first():
         db.add_all([_make_sp_case(item) for item in _sp_case_payloads()])
+
+
+def _seed_default_users(db) -> None:
+    teacher = db.query(Teacher).filter(Teacher.teacher_no == "T2026001").first()
+    if not teacher:
+        teacher = Teacher(name="张老师", teacher_no="T2026001", department="风湿免疫科")
+        db.add(teacher)
+        db.flush()
+
+    for student in db.query(Student).all():
+        username = f"student{student.id}"
+        if not db.query(User).filter(User.username == username).first():
+            db.add(
+                User(
+                    username=username,
+                    password_hash=hash_password("student123"),
+                    role="student",
+                    student_id=student.id,
+                )
+            )
+
+    if not db.query(User).filter(User.username == "teacher").first():
+        db.add(
+            User(
+                username="teacher",
+                password_hash=hash_password("teacher123"),
+                role="teacher",
+                teacher_id=teacher.id,
+            )
+        )
+    if not db.query(User).filter(User.username == "admin").first():
+        db.add(
+            User(
+                username="admin",
+                password_hash=hash_password("admin123"),
+                role="admin",
+            )
+        )
 
 
 def _make_knowledge_unit(payload: dict) -> KnowledgeUnit:

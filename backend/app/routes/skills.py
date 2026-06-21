@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.auth import get_current_user, require_student_access, student_id_from_user
 from app.database import get_db
-from app.models import ClinicalSkill, SkillSession, Student
+from app.models import ClinicalSkill, SkillSession, Student, User
 from app.services.competency_update_service import update_competency_from_skill
 from app.services.serializers import (
     dumps_json,
@@ -19,7 +20,7 @@ router = APIRouter(prefix="/api", tags=["skills"])
 
 
 class SkillSessionStartRequest(BaseModel):
-    student_id: int
+    student_id: int | None = None
 
 
 class SkillSessionSubmitRequest(BaseModel):
@@ -27,12 +28,12 @@ class SkillSessionSubmitRequest(BaseModel):
 
 
 @router.get("/skills")
-def list_skills(db: Session = Depends(get_db)) -> list[dict]:
+def list_skills(db: Session = Depends(get_db), _user: User = Depends(get_current_user)) -> list[dict]:
     return [serialize_skill_summary(skill) for skill in db.query(ClinicalSkill).all()]
 
 
 @router.get("/skills/{skill_id}")
-def get_skill(skill_id: int, db: Session = Depends(get_db)) -> dict:
+def get_skill(skill_id: int, db: Session = Depends(get_db), _user: User = Depends(get_current_user)) -> dict:
     skill = db.get(ClinicalSkill, skill_id)
     if not skill:
         raise HTTPException(status_code=404, detail="Skill not found")
@@ -44,12 +45,14 @@ def start_skill_session(
     skill_id: int,
     payload: SkillSessionStartRequest,
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> dict:
-    if not db.get(Student, payload.student_id):
+    student_id = student_id_from_user(user, payload.student_id)
+    if not db.get(Student, student_id):
         raise HTTPException(status_code=404, detail="Student not found")
     if not db.get(ClinicalSkill, skill_id):
         raise HTTPException(status_code=404, detail="Skill not found")
-    session = SkillSession(student_id=payload.student_id, skill_id=skill_id)
+    session = SkillSession(student_id=student_id, skill_id=skill_id)
     db.add(session)
     db.commit()
     db.refresh(session)
@@ -61,10 +64,12 @@ def submit_skill_session(
     session_id: int,
     payload: SkillSessionSubmitRequest,
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> dict:
     session = db.get(SkillSession, session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Skill session not found")
+    require_student_access(session.student_id, user)
 
     expected_steps = loads_json(session.skill.steps, [])
     common_errors = loads_json(session.skill.common_errors, [])

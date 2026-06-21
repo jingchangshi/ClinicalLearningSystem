@@ -10,10 +10,8 @@ type SubmitResult = Awaited<ReturnType<typeof submitSkillSession>>;
 
 export function SkillDetailClient({
   skill,
-  initialStudentId,
 }: {
   skill: ClinicalSkill;
-  initialStudentId: number;
 }) {
   const expectedSteps = useMemo(() => skill.steps ?? [], [skill.steps]);
   const [submittedSteps, setSubmittedSteps] = useState<string[]>(
@@ -35,7 +33,7 @@ export function SkillDetailClient({
     setBusy(true);
     setError(null);
     try {
-      const session = await startSkillSession(skill.id, initialStudentId);
+      const session = await startSkillSession(skill.id, null);
       const response = await submitSkillSession(
         session.id,
         submittedSteps.map((step) => step.trim()).filter(Boolean),
@@ -165,7 +163,7 @@ export function SkillDetailClient({
         </section>
       ) : null}
 
-      <Link href={`/student/skills?studentId=${initialStudentId}`} className="inline-flex rounded-md border border-slate-300 px-4 py-2">
+      <Link href="/student/skills" className="inline-flex rounded-md border border-slate-300 px-4 py-2">
         返回技能列表
       </Link>
     </div>

@@ -5,15 +5,14 @@ import { CompetencyRadar } from "@/components/CompetencyRadar";
 import { LearningEvidenceCards } from "@/components/LearningEvidenceCards";
 import { LearningGapDiagnosisCard } from "@/components/LearningGapDiagnosisCard";
 import { RecommendedTaskCard } from "@/components/RecommendedTaskCard";
-import { getPathway } from "@/lib/api";
+import { getMe, getPathway } from "@/lib/api";
 
-export default async function PathwayPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ studentId?: string }>;
-}) {
-  const resolvedSearchParams = await searchParams;
-  const studentId = Number(resolvedSearchParams.studentId ?? 1);
+export default async function PathwayPage() {
+  const me = await getMe();
+  if (me.role !== "student" || !me.student_id) {
+    throw new Error("请使用学生账号登录后访问学习路径。");
+  }
+  const studentId = me.student_id;
   const pathway = await getPathway(studentId);
   const weakAbilities = pathway.weak_abilities.length
     ? pathway.weak_abilities
@@ -52,7 +51,7 @@ export default async function PathwayPage({
           </div>
           <p className="mt-4 text-sm leading-7 text-slate-600">{pathway.next_stage_goal}</p>
           <Link
-            href={`/student/case/${pathway.recommended_case.id}?studentId=${studentId}`}
+            href={`/student/case/${pathway.recommended_case.id}`}
             className="mt-5 inline-flex rounded-md bg-clinic px-4 py-2 text-white"
           >
             开始推荐病例
@@ -101,7 +100,7 @@ export default async function PathwayPage({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-semibold">推荐知识单元</h2>
           <Link
-            href={`/student/knowledge?studentId=${studentId}`}
+            href="/student/knowledge"
             className="rounded-md border border-slate-300 px-3 py-2 text-sm hover:border-clinic"
           >
             查看全部知识
@@ -111,7 +110,7 @@ export default async function PathwayPage({
           {pathway.knowledge_suggestions.map((item) => (
             <Link
               key={item.unit.id}
-              href={`/student/knowledge/${item.unit.id}?studentId=${studentId}`}
+              href={`/student/knowledge/${item.unit.id}`}
               className="rounded-md bg-slate-50 p-4 hover:bg-clinic-soft"
             >
               <div className="font-medium">{item.unit.title}</div>
@@ -148,7 +147,6 @@ function stageTitle(key: string, stages: { key: string; title: string }[]) {
 }
 
 function taskHref(type: string, id: number, studentId: number) {
-  const suffix = `?studentId=${studentId}`;
   const paths: Record<string, string> = {
     knowledge_unit: `/student/knowledge/${id}`,
     clinical_skill: `/student/skills/${id}`,
@@ -156,7 +154,8 @@ function taskHref(type: string, id: number, studentId: number) {
     guideline: `/student/guidelines/${id}`,
     sp_case: `/student/sp/${id}`,
   };
-  return `${paths[type] ?? "/student/dashboard"}${suffix}`;
+  void studentId;
+  return paths[type] ?? "/student/dashboard";
 }
 
 function dimensionKey(label: string) {

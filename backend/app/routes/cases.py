@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.auth import get_current_user
 from app.database import get_db
 from app.models import Case
 from app.services.serializers import dumps_json, serialize_case, serialize_case_summary
@@ -9,12 +10,12 @@ router = APIRouter(prefix="/api/cases", tags=["cases"])
 
 
 @router.get("")
-def list_cases(db: Session = Depends(get_db)) -> list[dict]:
+def list_cases(db: Session = Depends(get_db), _user=Depends(get_current_user)) -> list[dict]:
     return [serialize_case_summary(case) for case in db.query(Case).all()]
 
 
 @router.get("/{case_id}")
-def get_case(case_id: int, db: Session = Depends(get_db)) -> dict:
+def get_case(case_id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)) -> dict:
     case = db.get(Case, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")

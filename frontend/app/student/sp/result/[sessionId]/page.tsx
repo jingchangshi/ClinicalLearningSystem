@@ -61,7 +61,7 @@ export default async function SPResultPage({ params }: { params: Promise<{ sessi
         </div>
       </section>
 
-      <Link href={`/student/sp?studentId=${result.student_id}`} className="inline-flex rounded-md bg-clinic px-4 py-2 text-white">
+      <Link href="/student/sp" className="inline-flex rounded-md bg-clinic px-4 py-2 text-white">
         返回 SP 病例
       </Link>
     </div>

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.auth import get_current_user, require_role, require_student_access
 from app.database import get_db
 from app.models import (
     Case,
@@ -11,6 +12,7 @@ from app.models import (
     LearningRecommendation,
     SPCase,
     Student,
+    User,
 )
 from app.services.recommendation_service import (
     PATHWAY_STAGES,
@@ -35,23 +37,45 @@ router = APIRouter(prefix="/api/students", tags=["students"])
 
 
 @router.get("")
-def list_students(db: Session = Depends(get_db)) -> list[dict]:
+def list_students(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[dict]:
+    if user.role == "student":
+        student = db.get(Student, user.student_id)
+        return [serialize_student(student)] if student else []
+    require_role(["teacher"])(user)
     return [serialize_student(student) for student in db.query(Student).all()]
 
 
 @router.get("/{student_id}")
-def get_student(student_id: int, db: Session = Depends(get_db)) -> dict:
+def get_student(
+    student_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    require_student_access(student_id, user)
     return serialize_student(_get_student(db, student_id))
 
 
 @router.get("/{student_id}/competency")
-def get_competency(student_id: int, db: Session = Depends(get_db)) -> dict:
+def get_competency(
+    student_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    require_student_access(student_id, user)
     student = _get_student(db, student_id)
     return serialize_profile(student.competency_profile)
 
 
 @router.get("/{student_id}/dashboard")
-def get_dashboard(student_id: int, db: Session = Depends(get_db)) -> dict:
+def get_dashboard(
+    student_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    require_student_access(student_id, user)
     student = _get_student(db, student_id)
     profile = serialize_profile(student.competency_profile)
     cases = [serialize_case_summary(case) for case in db.query(Case).all()]
@@ -79,7 +103,12 @@ def get_dashboard(student_id: int, db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("/{student_id}/pathway")
-def get_pathway(student_id: int, db: Session = Depends(get_db)) -> dict:
+def get_pathway(
+    student_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    require_student_access(student_id, user)
     student = _get_student(db, student_id)
     profile = serialize_profile(student.competency_profile)
     cases = [serialize_case_summary(case) for case in db.query(Case).all()]

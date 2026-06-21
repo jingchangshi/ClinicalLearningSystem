@@ -9,10 +9,8 @@ type PicoResult = Awaited<ReturnType<typeof submitGuidelinePico>>;
 
 export function GuidelineDetailClient({
   guideline,
-  initialStudentId,
 }: {
   guideline: GuidelineDocument;
-  initialStudentId: number;
 }) {
   const example = guideline.pico_examples?.[0];
   const [clinicalQuestion, setClinicalQuestion] = useState(
@@ -42,7 +40,7 @@ export function GuidelineDetailClient({
     setError(null);
     try {
       const response = await submitGuidelinePico(guideline.id, {
-        student_id: initialStudentId,
+        student_id: undefined,
         clinical_question: clinicalQuestion,
         pico,
         answer,
@@ -147,7 +145,7 @@ export function GuidelineDetailClient({
         </section>
       ) : null}
 
-      <Link href={`/student/guidelines?studentId=${initialStudentId}`} className="inline-flex rounded-md border border-slate-300 px-4 py-2">
+      <Link href="/student/guidelines" className="inline-flex rounded-md border border-slate-300 px-4 py-2">
         返回指南列表
       </Link>
     </div>

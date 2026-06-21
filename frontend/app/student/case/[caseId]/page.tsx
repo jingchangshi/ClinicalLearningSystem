@@ -7,7 +7,7 @@ export default async function CaseTrainingPage({
   searchParams,
 }: {
   params: Promise<{ caseId: string }>;
-  searchParams: Promise<{ sessionId?: string; studentId?: string }>;
+  searchParams: Promise<{ sessionId?: string }>;
 }) {
   const resolvedParams = await params;
   const resolvedSearchParams = await searchParams;
@@ -19,7 +19,6 @@ export default async function CaseTrainingPage({
     <CaseTrainingClient
       caseData={caseData}
       initialSession={session}
-      initialStudentId={Number(resolvedSearchParams.studentId ?? session?.student.id ?? 1)}
     />
   );
 }

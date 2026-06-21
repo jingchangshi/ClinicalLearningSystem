@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.auth import get_current_user, require_student_access, student_id_from_user
 from app.database import get_db
-from app.models import SPCase, SPSession, Student
+from app.models import SPCase, SPSession, Student, User
 from app.services.competency_update_service import update_competency_from_sp
 from app.services.serializers import (
     dumps_json,
@@ -20,7 +21,7 @@ router = APIRouter(prefix="/api", tags=["sp"])
 
 
 class SPSessionStartRequest(BaseModel):
-    student_id: int
+    student_id: int | None = None
     sp_case_id: int
 
 
@@ -33,12 +34,16 @@ class SPSubmitRequest(BaseModel):
 
 
 @router.get("/sp-cases")
-def list_sp_cases(db: Session = Depends(get_db)) -> list[dict]:
+def list_sp_cases(db: Session = Depends(get_db), _user: User = Depends(get_current_user)) -> list[dict]:
     return [serialize_sp_case_summary(sp_case) for sp_case in db.query(SPCase).all()]
 
 
 @router.get("/sp-cases/{sp_case_id}")
-def get_sp_case(sp_case_id: int, db: Session = Depends(get_db)) -> dict:
+def get_sp_case(
+    sp_case_id: int,
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+) -> dict:
     sp_case = db.get(SPCase, sp_case_id)
     if not sp_case:
         raise HTTPException(status_code=404, detail="SP case not found")
@@ -46,8 +51,13 @@ def get_sp_case(sp_case_id: int, db: Session = Depends(get_db)) -> dict:
 
 
 @router.post("/sp-sessions/start")
-def start_sp_session(payload: SPSessionStartRequest, db: Session = Depends(get_db)) -> dict:
-    if not db.get(Student, payload.student_id):
+def start_sp_session(
+    payload: SPSessionStartRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    student_id = student_id_from_user(user, payload.student_id)
+    if not db.get(Student, student_id):
         raise HTTPException(status_code=404, detail="Student not found")
     sp_case = db.get(SPCase, payload.sp_case_id)
     if not sp_case:
@@ -55,7 +65,7 @@ def start_sp_session(payload: SPSessionStartRequest, db: Session = Depends(get_d
 
     transcript = [{"role": "patient", "message": sp_case.opening_statement}]
     session = SPSession(
-        student_id=payload.student_id,
+        student_id=student_id,
         sp_case_id=payload.sp_case_id,
         transcript=dumps_json(transcript),
     )
@@ -74,8 +84,10 @@ def send_sp_message(
     session_id: int,
     payload: SPMessageRequest,
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> dict:
     session = _get_sp_session(db, session_id)
+    require_student_access(session.student_id, user)
     if session.status == "completed":
         raise HTTPException(status_code=400, detail="SP session already completed")
     transcript = loads_json(session.transcript, [])
@@ -101,8 +113,10 @@ def submit_sp_session(
     session_id: int,
     payload: SPSubmitRequest,
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> dict:
     session = _get_sp_session(db, session_id)
+    require_student_access(session.student_id, user)
     transcript = loads_json(session.transcript, [])
     scoring = score_sp_session(
         load_sp_case_payload(session.sp_case),
@@ -129,8 +143,14 @@ def submit_sp_session(
 
 
 @router.get("/sp-sessions/{session_id}/result")
-def get_sp_result(session_id: int, db: Session = Depends(get_db)) -> dict:
-    return serialize_sp_session(_get_sp_session(db, session_id))
+def get_sp_result(
+    session_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    session = _get_sp_session(db, session_id)
+    require_student_access(session.student_id, user)
+    return serialize_sp_session(session)
 
 
 def _get_sp_session(db: Session, session_id: int) -> SPSession:

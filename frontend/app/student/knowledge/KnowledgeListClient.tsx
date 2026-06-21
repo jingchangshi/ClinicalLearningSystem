@@ -2,39 +2,36 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { BookOpen, CheckCircle2 } from "lucide-react";
 
 import {
+  getMe,
   getKnowledgeProgress,
   KnowledgeProgress,
   KnowledgeUnit,
   listKnowledge,
-  listStudents,
-  Student,
 } from "@/lib/api";
 
 export function KnowledgeListClient() {
-  const searchParams = useSearchParams();
-  const [students, setStudents] = useState<Student[]>([]);
-  const [studentId, setStudentId] = useState(Number(searchParams.get("studentId") ?? 1));
+  const [studentId, setStudentId] = useState<number | null>(null);
   const [units, setUnits] = useState<KnowledgeUnit[]>([]);
   const [progress, setProgress] = useState<KnowledgeProgress[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([listStudents(), listKnowledge()])
-      .then(([studentRows, unitRows]) => {
-        setStudents(studentRows);
-        setUnits(unitRows);
-        if (!studentRows.some((student) => student.id === studentId) && studentRows[0]) {
-          setStudentId(studentRows[0].id);
+    Promise.all([getMe(), listKnowledge()])
+      .then(([user, unitRows]) => {
+        if (user.role !== "student" || !user.student_id) {
+          throw new Error("请使用学生账号登录后访问知识学习。");
         }
+        setStudentId(user.student_id);
+        setUnits(unitRows);
       })
       .catch((reason) => setError(reason instanceof Error ? reason.message : "知识单元加载失败"));
-  }, [studentId]);
+  }, []);
 
   useEffect(() => {
+    if (!studentId) return;
     getKnowledgeProgress(studentId)
       .then(setProgress)
       .catch((reason) => setError(reason instanceof Error ? reason.message : "学习进度加载失败"));
@@ -56,20 +53,7 @@ export function KnowledgeListClient() {
           <p className="text-sm text-slate-500">基础知识学习</p>
           <h1 className="text-2xl font-semibold text-ink">风湿免疫核心知识单元</h1>
         </div>
-        <label className="text-sm">
-          <span className="mr-2 text-slate-500">选择学生</span>
-          <select
-            value={studentId}
-            onChange={(event) => setStudentId(Number(event.target.value))}
-            className="rounded-md border border-slate-300 bg-white px-3 py-2"
-          >
-            {students.map((student) => (
-              <option key={student.id} value={student.id}>
-                {student.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <span className="rounded-full bg-teal-50 px-4 py-2 text-sm font-semibold text-clinic">当前登录学生</span>
       </section>
 
       <section className="grid gap-4 md:grid-cols-3">
@@ -78,7 +62,7 @@ export function KnowledgeListClient() {
           return (
             <Link
               key={unit.id}
-              href={`/student/knowledge/${unit.id}?studentId=${studentId}`}
+              href={`/student/knowledge/${unit.id}`}
               className="rounded-lg border border-slate-200 bg-white p-5 hover:border-clinic"
             >
               <div className="flex items-start justify-between gap-3">

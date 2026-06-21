@@ -24,11 +24,9 @@ const steps = [
 export function CaseTrainingClient({
   caseData,
   initialSession,
-  initialStudentId,
 }: {
   caseData: CaseDetail;
   initialSession: SessionDetail | null;
-  initialStudentId: number;
 }) {
   const router = useRouter();
   const [sessionId, setSessionId] = useState<number | null>(initialSession?.id ?? null);
@@ -53,9 +51,9 @@ export function CaseTrainingClient({
 
   async function ensureSession() {
     if (sessionId) return sessionId;
-    const session = await startSession(initialStudentId, caseData.id);
+    const session = await startSession(null, caseData.id);
     setSessionId(session.session_id);
-    window.history.replaceState(null, "", `?sessionId=${session.session_id}&studentId=${initialStudentId}`);
+    window.history.replaceState(null, "", `?sessionId=${session.session_id}`);
     return session.session_id;
   }
 

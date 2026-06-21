@@ -4,10 +4,12 @@ const API_BASE =
     : process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const authHeader = await authHeaders();
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...authHeader,
       ...(init?.headers ?? {}),
     },
     cache: "no-store",
@@ -19,6 +21,40 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json();
 }
 
+async function authHeaders(): Promise<Record<string, string>> {
+  const token = await getStoredToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function getStoredToken(): Promise<string | null> {
+  if (typeof window !== "undefined") {
+    return localStorage.getItem("clinpath_token") ?? readCookie("clinpath_token");
+  }
+  try {
+    const { cookies } = await import("next/headers");
+    return (await cookies()).get("clinpath_token")?.value ?? process.env.INTERNAL_API_AUTH_TOKEN ?? null;
+  } catch {
+    return process.env.INTERNAL_API_AUTH_TOKEN ?? null;
+  }
+}
+
+function readCookie(name: string): string | null {
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+export function saveAuthToken(token: string) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem("clinpath_token", token);
+  document.cookie = `clinpath_token=${encodeURIComponent(token)}; path=/; max-age=43200; samesite=lax`;
+}
+
+export function clearAuthToken() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem("clinpath_token");
+  document.cookie = "clinpath_token=; path=/; max-age=0; samesite=lax";
+}
+
 export type ChartPoint = { dimension: string; score: number };
 export type Student = {
   id: number;
@@ -26,6 +62,14 @@ export type Student = {
   student_no: string;
   class_name: string;
   current_stage: string;
+};
+export type User = {
+  id: number;
+  username: string;
+  role: "student" | "teacher" | "admin";
+  student_id: number | null;
+  teacher_id: number | null;
+  created_at: string;
 };
 export type Competency = {
   medical_knowledge: number;
@@ -195,11 +239,11 @@ export type RecommendedTask = {
   title: string;
   reason: string;
   priority: number;
-  target_abilities?: string[];
-  source_evidence?: string;
-  expected_lift?: string;
-  difficulty_label?: string;
-  next_step_label?: string;
+  target_abilities: string[];
+  source_evidence: string;
+  expected_lift: string;
+  difficulty_label: string;
+  next_step_label: string;
 };
 export type LearningEvidence = {
   module: "knowledge" | "skill" | "case" | "guideline" | "sp";
@@ -207,6 +251,30 @@ export type LearningEvidence = {
   completed: number;
   latest_score: number | null;
 };
+
+export function login(username: string, password: string) {
+  return request<{ access_token: string; token_type: string; user: User }>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+}
+
+export function register(payload: {
+  username: string;
+  password: string;
+  role: "student" | "teacher" | "admin";
+  student_id?: number;
+  teacher_id?: number;
+}) {
+  return request<{ access_token: string; token_type: string; user: User }>("/auth/register", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getMe() {
+  return request<User>("/auth/me");
+}
 
 export function listStudents() {
   return request<Student[]>("/api/students");
@@ -232,10 +300,10 @@ export function listCases() {
   return request<CaseSummary[]>("/api/cases");
 }
 
-export function startSession(studentId: number, caseId: number) {
+export function startSession(studentId: number | null, caseId: number) {
   return request<{ id: number; session_id: number; status: string }>("/api/sessions/start", {
     method: "POST",
-    body: JSON.stringify({ student_id: studentId, case_id: caseId }),
+    body: JSON.stringify({ ...(studentId ? { student_id: studentId } : {}), case_id: caseId }),
   });
 }
 
@@ -304,7 +372,7 @@ export function getKnowledgeProgress(studentId: number) {
   return request<KnowledgeProgress[]>(`/api/students/${studentId}/knowledge-progress`);
 }
 
-export function submitKnowledgeQuiz(unitId: number, studentId: number, answers: string[]) {
+export function submitKnowledgeQuiz(unitId: number, studentId: number | null, answers: string[]) {
   return request<{
     quiz_score: number;
     mastery_score: number;
@@ -312,7 +380,7 @@ export function submitKnowledgeQuiz(unitId: number, studentId: number, answers: 
     updated_progress: KnowledgeProgress;
   }>(`/api/knowledge/${unitId}/quiz`, {
     method: "POST",
-    body: JSON.stringify({ student_id: studentId, answers }),
+    body: JSON.stringify({ ...(studentId ? { student_id: studentId } : {}), answers }),
   });
 }
 
@@ -324,10 +392,10 @@ export function getSkill(skillId: string | number) {
   return request<ClinicalSkill>(`/api/skills/${skillId}`);
 }
 
-export function startSkillSession(skillId: number, studentId: number) {
+export function startSkillSession(skillId: number, studentId: number | null) {
   return request<SkillSession>(`/api/skills/${skillId}/sessions/start`, {
     method: "POST",
-    body: JSON.stringify({ student_id: studentId }),
+    body: JSON.stringify(studentId ? { student_id: studentId } : {}),
   });
 }
 
@@ -360,7 +428,7 @@ export function getGuideline(guidelineId: string | number) {
 export function submitGuidelinePico(
   guidelineId: number,
   payload: {
-    student_id: number;
+    student_id?: number;
     clinical_question: string;
     pico: string;
     answer: string;
@@ -392,10 +460,10 @@ export function getSPCase(spCaseId: string | number) {
   return request<SPCase>(`/api/sp-cases/${spCaseId}`);
 }
 
-export function startSPSession(studentId: number, spCaseId: number) {
+export function startSPSession(studentId: number | null, spCaseId: number) {
   return request<{ session_id: number; opening_statement: string; session: SPSession }>("/api/sp-sessions/start", {
     method: "POST",
-    body: JSON.stringify({ student_id: studentId, sp_case_id: spCaseId }),
+    body: JSON.stringify({ ...(studentId ? { student_id: studentId } : {}), sp_case_id: spCaseId }),
   });
 }
 
