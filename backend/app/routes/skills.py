@@ -15,7 +15,7 @@ from app.services.serializers import (
     serialize_skill_session,
     serialize_skill_summary,
 )
-from app.services.llm_client import chat_text
+from app.services.llm_service import llm_service
 
 router = APIRouter(prefix="/api", tags=["skills"])
 
@@ -194,7 +194,7 @@ def _skill_feedback(score: float, missed_steps: list[str], safety_score: float, 
 
 def _skill_feedback_with_llm(score: float, missed_steps: list[str], safety_score: float, errors: list[str]) -> str:
     fallback = _skill_feedback(score, missed_steps, safety_score, errors)
-    return chat_text(
+    return llm_service.chat_completion(
         "你是OSCE技能站教师，请生成结构化技能训练反馈。",
         (
             f"总分：{score}\n安全性得分：{safety_score}\n遗漏步骤：{missed_steps}\n常见错误：{errors}\n"

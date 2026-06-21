@@ -12,13 +12,13 @@ os.environ.pop("LLM_API_KEY", None)
 
 from app.services.case_generator import generate_case_payload, validate_case_payload
 from app.services.guideline_scoring import score_guideline_pico
-from app.services.llm_client import chat_json, chat_text
+from app.services.llm_service import llm_service
 from app.services.sp_patient import generate_patient_reply, score_sp_session
 
 
 def main() -> None:
-    assert chat_text("system", "user", fallback="fallback-text") == "fallback-text"
-    assert chat_json("system", "user", fallback={"ok": True}) == {"ok": True}
+    assert llm_service.chat_completion("system", "user", fallback="fallback-text") == "fallback-text"
+    assert llm_service.chat_json("system", "user", fallback={"ok": True}) == {"ok": True}
 
     case_payload = generate_case_payload(
         {

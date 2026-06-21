@@ -17,7 +17,7 @@ from app.models import (
 )
 from app.services.competency_update_service import update_competency_from_case
 from app.schemas import AnswerCreate, CoachRequest, SessionStartRequest
-from app.services.llm_client import (
+from app.services.llm_service import (
     generate_learning_recommendation,
     generate_reasoning_question,
     score_student_answer,

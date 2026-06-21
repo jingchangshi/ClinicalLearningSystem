@@ -1,6 +1,6 @@
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -24,12 +24,21 @@ class LoginRequest(BaseModel):
     password: str
 
 
-def _auth_response(user: User) -> dict:
-    return {"access_token": create_access_token(user), "token_type": "bearer", "user": serialize_user(user)}
+def _auth_response(response: Response, user: User) -> dict:
+    token = create_access_token(user)
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,
+        samesite="lax",
+        path="/",
+        max_age=60 * 60 * 12,
+    )
+    return {"access_token": token, "token_type": "bearer", "user": serialize_user(user)}
 
 
 @router.post("/register")
-def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> dict:
+def register(payload: RegisterRequest, response: Response, db: Session = Depends(get_db)) -> dict:
     if db.query(User).filter(User.username == payload.username).first():
         raise HTTPException(status_code=409, detail="Username already exists")
     if payload.role == "student":
@@ -55,15 +64,15 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> dict:
     db.add(user)
     db.commit()
     db.refresh(user)
-    return _auth_response(user)
+    return _auth_response(response, user)
 
 
 @router.post("/login")
-def login(payload: LoginRequest, db: Session = Depends(get_db)) -> dict:
+def login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)) -> dict:
     user = db.query(User).filter(User.username == payload.username).first()
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid username or password")
-    return _auth_response(user)
+    return _auth_response(response, user)
 
 
 @router.get("/me")

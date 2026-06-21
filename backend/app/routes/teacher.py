@@ -22,6 +22,7 @@ from app.services.learning_evidence_service import (
     build_student_evidence_events,
     build_student_evidence_summary,
 )
+from app.services.llm_service import llm_service
 from app.services.recommendation_service import build_learning_pathway
 from app.services.serializers import (
     ABILITY_LABELS,
@@ -71,6 +72,11 @@ def get_teacher_dashboard(db: Session = Depends(get_db)) -> dict:
     weak_dimensions = _weak_dimensions(averages)
     training_summary = build_class_training_summary(db)
     teaching_interventions = _teaching_interventions(weak_dimensions)
+    teaching_insight_summary = llm_service.generate_teacher_insight(
+        weak_dimensions,
+        training_summary,
+        _teaching_insight_fallback(weak_dimensions, training_summary),
+    )
     return {
         "student_count": len(students),
         "completed_session_count": len(completed),
@@ -94,6 +100,7 @@ def get_teacher_dashboard(db: Session = Depends(get_db)) -> dict:
         "current_common_weakness": weak_dimensions[0]["label"] if weak_dimensions else "暂无明显短板",
         "class_heatmap": build_class_heatmap(db),
         "teaching_interventions": teaching_interventions,
+        "teaching_insight_summary": teaching_insight_summary,
         "teaching_focus": _teaching_focus(weak_dimensions),
         "students": [_student_row(student) for student in students],
         "recent_sessions": [
@@ -315,6 +322,14 @@ def _teaching_interventions(weak_dimensions: list[dict]) -> list[str]:
     }
     suggestions = [mapping[row["key"]] for row in weak_dimensions if row["key"] in mapping]
     return suggestions or [f"围绕{weak_dimensions[0]['label']}设计结构化病例复盘。"]
+
+
+def _teaching_insight_fallback(weak_dimensions: list[dict], training_summary: dict) -> str:
+    total = training_summary.get("training_total_count", 0)
+    if not weak_dimensions:
+        return f"当前累计训练 {total} 次，班级暂无明显共性短板，可提高复杂病例和循证训练比例。"
+    weak_text = "、".join(row["label"] for row in weak_dimensions[:2])
+    return f"当前累计训练 {total} 次，班级主要短板集中在{weak_text}。建议围绕这些维度安排小课、病例复盘和再训练评价。"
 
 
 def _student_row(student: Student) -> dict:

@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from app.models import CompetencyProfile
-from app.services.llm_client import chat_text
+from app.services.llm_service import llm_service
 
 
 def score_guideline_pico(
@@ -125,7 +125,7 @@ def _feedback(scoring: dict) -> str:
 
 def _feedback_with_llm(guideline: dict, payload: dict, scoring: dict) -> str:
     fallback = _feedback(scoring)
-    return chat_text(
+    return llm_service.chat_completion(
         "你是循证医学课程导师，请基于PICO作答评分生成结构化形成性反馈。",
         (
             f"指南：{guideline.get('title')}\n"
@@ -144,16 +144,7 @@ def _scoring_rationale(guideline: dict, payload: dict, scoring: dict) -> str:
         f"系统依据PICO完整性、指南推荐匹配、推荐等级理解、临床适用性和风险个体化五项计算，"
         f"综合得分为{scoring['score']}。"
     )
-    return chat_text(
-        "你是医学教育测评专家，请解释循证作答评分依据。",
-        (
-            f"指南：{guideline.get('title')}\n"
-            f"学生作答：{payload}\n"
-            f"评分细项：{scoring['detail']}\n"
-            "请用2句话说明评分理由，避免夸大。"
-        ),
-        fallback,
-    )
+    return llm_service.generate_guideline_rationale(guideline, payload, scoring, fallback)
 
 
 def _normalize(value: str) -> str:

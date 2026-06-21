@@ -4,7 +4,7 @@ import { FormEvent, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ShieldCheck } from "lucide-react";
 
-import { login, saveAuthToken } from "@/lib/api";
+import { login } from "@/lib/api";
 
 const demoAccounts = [
   { label: "学生账号", username: "student1", password: "student123" },
@@ -26,7 +26,6 @@ export function LoginClient() {
     setError(null);
     try {
       const response = await login(username, password);
-      saveAuthToken(response.access_token);
       const next = searchParams.get("next");
       if (next?.startsWith("/")) {
         router.push(next);

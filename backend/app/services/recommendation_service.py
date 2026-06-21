@@ -1,4 +1,4 @@
-from app.services.llm_client import chat_text
+from app.services.llm_service import llm_service
 from app.services.serializers import ALL_COMPETENCIES, ABILITY_LABELS, CORE_ABILITIES
 
 PATHWAY_STAGES = [
@@ -55,14 +55,10 @@ def choose_recommendation(profile: dict, recent_scores: list[dict], cases: list[
 def explain_recommendation_with_llm(profile: dict, latest_scores: dict, task: dict, fallback: str) -> str:
     weak_keys = weakest_abilities(profile, limit=3, use_expanded=True) if profile else []
     weak_text = "、".join(f"{ABILITY_LABELS.get(key, key)}={profile.get(key)}" for key in weak_keys) or "由当前任务优先级和训练类型判断"
-    return chat_text(
-        "你是医学教育研究者，请生成可用于教学研究报告的学习路径推荐解释。要求具体、克制、可验证。",
-        (
-            f"学生主要能力缺口：{weak_text}\n"
-            f"最近训练得分：{latest_scores}\n"
-            f"推荐任务：{task.get('title')}，难度：{task.get('difficulty')}\n"
-            "请用2-3句话说明为什么推荐、对应能力缺口、下一步学习策略。"
-        ),
+    return llm_service.explain_recommendation(
+        {"主要能力缺口": weak_text, **profile},
+        latest_scores,
+        task,
         fallback,
     )
 

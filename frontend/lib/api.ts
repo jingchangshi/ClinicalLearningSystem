@@ -4,13 +4,14 @@ const API_BASE =
     : process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const authHeader = await authHeaders();
+  const forwardedCookie = await cookieHeader();
   const requestUrl = `${API_BASE}${normalizeApiPath(path)}`;
   const response = await fetch(requestUrl, {
     ...init,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...authHeader,
+      ...forwardedCookie,
       ...(init?.headers ?? {}),
     },
     cache: "no-store",
@@ -28,45 +29,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json();
 }
 
+async function cookieHeader(): Promise<Record<string, string>> {
+  if (typeof window !== "undefined") return {};
+  try {
+    const { cookies } = await import("next/headers");
+    const token = (await cookies()).get("access_token")?.value;
+    return token ? { Cookie: `access_token=${encodeURIComponent(token)}` } : {};
+  } catch {
+    return {};
+  }
+}
+
 function normalizeApiPath(path: string): string {
   if (API_BASE.endsWith("/api") && path.startsWith("/api/")) {
     return path.slice(4);
   }
   return path;
-}
-
-async function authHeaders(): Promise<Record<string, string>> {
-  const token = await getStoredToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
-async function getStoredToken(): Promise<string | null> {
-  if (typeof window !== "undefined") {
-    return localStorage.getItem("clinpath_token") ?? readCookie("clinpath_token");
-  }
-  try {
-    const { cookies } = await import("next/headers");
-    return (await cookies()).get("clinpath_token")?.value ?? process.env.INTERNAL_API_AUTH_TOKEN ?? null;
-  } catch {
-    return process.env.INTERNAL_API_AUTH_TOKEN ?? null;
-  }
-}
-
-function readCookie(name: string): string | null {
-  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
-  return match ? decodeURIComponent(match[1]) : null;
-}
-
-export function saveAuthToken(token: string) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem("clinpath_token", token);
-  document.cookie = `clinpath_token=${encodeURIComponent(token)}; path=/; max-age=43200; samesite=lax`;
-}
-
-export function clearAuthToken() {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem("clinpath_token");
-  document.cookie = "clinpath_token=; path=/; max-age=0; samesite=lax";
 }
 
 export type ChartPoint = { dimension: string; score: number };
@@ -539,6 +517,7 @@ export function getTeacherDashboard() {
       humanistic_care: number;
     }[];
     teaching_interventions: string[];
+    teaching_insight_summary: string;
     teaching_focus: string[];
     students: {
       id: number;

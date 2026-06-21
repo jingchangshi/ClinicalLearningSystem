@@ -1,7 +1,7 @@
 import json
 from typing import Any
 
-from app.services.llm_client import chat_json, chat_text
+from app.services.llm_service import llm_service
 from app.services.serializers import loads_json
 
 
@@ -12,19 +12,12 @@ def generate_patient_reply(sp_case: dict, transcript: list[dict], student_messag
         {"transcript": transcript, "student_message": student_message},
         ensure_ascii=False,
     )
-    return chat_text(system_prompt, user_prompt, fallback)
+    return llm_service.chat_completion(system_prompt, user_prompt, fallback)
 
 
 def score_sp_session(sp_case: dict, transcript: list[dict], diagnosis_summary: str) -> dict:
     fallback = _rule_score_session(sp_case, transcript, diagnosis_summary)
-    payload = chat_json(
-        _sp_scoring_prompt(sp_case),
-        json.dumps(
-            {"transcript": transcript, "diagnosis_summary": diagnosis_summary},
-            ensure_ascii=False,
-        ),
-        fallback,
-    )
+    payload = llm_service.generate_sp_feedback(sp_case, transcript, diagnosis_summary, fallback)
     return _validated_score(payload, fallback)
 
 
@@ -34,17 +27,6 @@ def _sp_system_prompt(sp_case: dict) -> str:
         "只能以患者身份回答，不要主动透露所有病史，不要直接告诉学生最终诊断，"
         "不要评价学生表现。每次回复不超过120字。\n"
         f"病例设定：{json.dumps(sp_case, ensure_ascii=False)}"
-    )
-
-
-def _sp_scoring_prompt(sp_case: dict) -> str:
-    return (
-        "你是临床医学 OSCE 标准化病人考核评分员。"
-        "请根据 SP 病例、学生问诊对话和最后总结评分。"
-        "必须只输出 JSON，字段包括 history_taking_score, communication_score, "
-        "reasoning_score, humanistic_care_score, total_score, feedback。"
-        "所有分数为0-100数字。\n"
-        f"SP病例：{json.dumps(sp_case, ensure_ascii=False)}"
     )
 
 

@@ -1,7 +1,7 @@
 import json
 from typing import Any
 
-from app.services.llm_client import chat_json
+from app.services.llm_service import llm_service
 
 REQUIRED_CASE_FIELDS = [
     "title",
@@ -33,7 +33,7 @@ evidence_integration, clinical_decision, evidence_based_medicine。
 
 def generate_case_payload(prompt: dict) -> dict:
     fallback = fallback_rule_case(prompt)
-    payload = chat_json(CASE_GENERATION_SYSTEM_PROMPT, _case_user_prompt(prompt), fallback)
+    payload = llm_service.generate_case(CASE_GENERATION_SYSTEM_PROMPT, _case_user_prompt(prompt), fallback)
     try:
         return validate_case_payload(payload)
     except ValueError:
