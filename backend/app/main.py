@@ -1,6 +1,7 @@
 import os
+import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routes import auth, case_generation, cases, guidelines, knowledge, sessions, skills, sp, students, teacher
@@ -9,6 +10,7 @@ from app.seed_data import init_db
 init_db()
 
 app = FastAPI(title="ClinPath：AI辅助临床教学与自适应学习路径系统")
+logger = logging.getLogger("clinpath.requests")
 
 default_origins = [
     "http://localhost:3000",
@@ -31,8 +33,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def log_request_paths(request: Request, call_next):
+    response = await call_next(request)
+    route = request.scope.get("route")
+    route_path = getattr(route, "path", None)
+    message = "%s %s -> %s matched=%s"
+    if response.status_code == 404:
+        logger.warning(message, request.method, request.url.path, response.status_code, route_path or "unmatched")
+    else:
+        logger.info(message, request.method, request.url.path, response.status_code, route_path or "unmatched")
+    return response
+
 app.include_router(auth.router)
 app.include_router(students.router)
+app.include_router(students.student_router)
 app.include_router(cases.router)
 app.include_router(sessions.router)
 app.include_router(teacher.router)

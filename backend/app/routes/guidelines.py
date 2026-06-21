@@ -84,6 +84,7 @@ def submit_pico(
         "score": result["score"],
         "feedback": result["feedback"],
         "recommended_answer": result["recommended_answer"],
+        "scoring_rationale": result["scoring_rationale"],
         "detail": result["detail"],
         "session": serialize_guideline_session(session),
     }

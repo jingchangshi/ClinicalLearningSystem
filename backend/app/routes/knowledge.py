@@ -47,6 +47,10 @@ def get_student_knowledge_progress(
     user: User = Depends(get_current_user),
 ) -> list[dict]:
     require_student_access(student_id, user)
+    return knowledge_progress_payload(db, student_id)
+
+
+def knowledge_progress_payload(db: Session, student_id: int) -> list[dict]:
     if not db.get(Student, student_id):
         raise HTTPException(status_code=404, detail="Student not found")
     _ensure_progress_rows(db, student_id)

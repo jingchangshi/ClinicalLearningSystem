@@ -34,6 +34,56 @@ from app.services.serializers import (
 )
 
 router = APIRouter(prefix="/api/students", tags=["students"])
+student_router = APIRouter(prefix="/api/student", tags=["student"])
+
+
+def _current_student_id(user: User) -> int:
+    if user.role != "student" or user.student_id is None:
+        raise HTTPException(status_code=403, detail="Student account is required")
+    return user.student_id
+
+
+@student_router.get("/me")
+def get_current_student(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    return serialize_student(_get_student(db, _current_student_id(user)))
+
+
+@student_router.get("/competency")
+def get_current_competency(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    student = _get_student(db, _current_student_id(user))
+    return serialize_profile(student.competency_profile)
+
+
+@student_router.get("/dashboard")
+def get_current_dashboard(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    return _dashboard_payload(db, _current_student_id(user))
+
+
+@student_router.get("/pathway")
+def get_current_pathway(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    return _pathway_payload(db, _current_student_id(user))
+
+
+@student_router.get("/knowledge-progress")
+def get_current_knowledge_progress(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> list[dict]:
+    from app.routes.knowledge import knowledge_progress_payload
+
+    return knowledge_progress_payload(db, _current_student_id(user))
 
 
 @router.get("")
@@ -76,6 +126,10 @@ def get_dashboard(
     user: User = Depends(get_current_user),
 ) -> dict:
     require_student_access(student_id, user)
+    return _dashboard_payload(db, student_id)
+
+
+def _dashboard_payload(db: Session, student_id: int) -> dict:
     student = _get_student(db, student_id)
     profile = serialize_profile(student.competency_profile)
     cases = [serialize_case_summary(case) for case in db.query(Case).all()]
@@ -109,6 +163,10 @@ def get_pathway(
     user: User = Depends(get_current_user),
 ) -> dict:
     require_student_access(student_id, user)
+    return _pathway_payload(db, student_id)
+
+
+def _pathway_payload(db: Session, student_id: int) -> dict:
     student = _get_student(db, student_id)
     profile = serialize_profile(student.competency_profile)
     cases = [serialize_case_summary(case) for case in db.query(Case).all()]

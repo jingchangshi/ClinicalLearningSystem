@@ -1,11 +1,12 @@
 const API_BASE =
   typeof window === "undefined"
-    ? process.env.INTERNAL_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8100"
-    : process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
+    ? process.env.INTERNAL_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8100/api"
+    : process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const authHeader = await authHeaders();
-  const response = await fetch(`${API_BASE}${path}`, {
+  const requestUrl = `${API_BASE}${normalizeApiPath(path)}`;
+  const response = await fetch(requestUrl, {
     ...init,
     headers: {
       "Content-Type": "application/json",
@@ -16,9 +17,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
+    const responseBody = await response.text();
+    console.error("API request failed", {
+      url: requestUrl,
+      status: response.status,
+      body: responseBody,
+    });
     throw new Error(`API request failed: ${response.status}`);
   }
   return response.json();
+}
+
+function normalizeApiPath(path: string): string {
+  if (API_BASE.endsWith("/api") && path.startsWith("/api/")) {
+    return path.slice(4);
+  }
+  return path;
 }
 
 async function authHeaders(): Promise<Record<string, string>> {
@@ -281,6 +295,7 @@ export function listStudents() {
 }
 
 export function getStudentDashboard(studentId: number) {
+  void studentId;
   return request<{
     student: Student;
     competency: Competency;
@@ -289,7 +304,7 @@ export function getStudentDashboard(studentId: number) {
     recent_advice: string;
     learning_evidence: LearningEvidence[];
     progress: { completed_cases: number; in_progress_cases: number; average_score: number };
-  }>(`/api/students/${studentId}/dashboard`);
+  }>("/student/dashboard");
 }
 
 export function getCase(caseId: string | number) {
@@ -344,6 +359,7 @@ export function getResult(sessionId: string | number) {
 }
 
 export function getPathway(studentId: number) {
+  void studentId;
   return request<{
     student: Student;
     competency: Competency;
@@ -357,7 +373,7 @@ export function getPathway(studentId: number) {
     learning_evidence: LearningEvidence[];
     knowledge_suggestions: { unit: KnowledgeUnit; reason: string }[];
     next_stage_goal: string;
-  }>(`/api/students/${studentId}/pathway`);
+  }>("/student/pathway");
 }
 
 export function listKnowledge() {
@@ -369,7 +385,8 @@ export function getKnowledgeUnit(unitId: string | number) {
 }
 
 export function getKnowledgeProgress(studentId: number) {
-  return request<KnowledgeProgress[]>(`/api/students/${studentId}/knowledge-progress`);
+  void studentId;
+  return request<KnowledgeProgress[]>("/student/knowledge-progress");
 }
 
 export function submitKnowledgeQuiz(unitId: number, studentId: number | null, answers: string[]) {
@@ -438,6 +455,7 @@ export function submitGuidelinePico(
     score: number;
     feedback: string;
     recommended_answer: string;
+    scoring_rationale: string;
     detail: {
       pico_completeness: number;
       guideline_match: number;

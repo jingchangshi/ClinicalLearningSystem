@@ -8,7 +8,7 @@ from app.auth import create_access_token, get_current_user, hash_password, seria
 from app.database import get_db
 from app.models import Student, Teacher, User
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 class RegisterRequest(BaseModel):

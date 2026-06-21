@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from app.models import CompetencyProfile
+from app.services.llm_client import chat_text
 
 
 def score_guideline_pico(
@@ -13,8 +14,9 @@ def score_guideline_pico(
     return {
         "score": scoring["score"],
         "detail": scoring["detail"],
-        "feedback": _feedback(scoring),
+        "feedback": _feedback_with_llm(guideline, payload, scoring),
         "recommended_answer": _recommended_answer(guideline, recommendations, pico_examples),
+        "scoring_rationale": _scoring_rationale(guideline, payload, scoring),
     }
 
 
@@ -119,6 +121,39 @@ def _feedback(scoring: dict) -> str:
     if detail["risk_individualization"] < 80:
         messages.append("需补充感染、不良反应、禁忌证和随访监测。")
     return "".join(messages)
+
+
+def _feedback_with_llm(guideline: dict, payload: dict, scoring: dict) -> str:
+    fallback = _feedback(scoring)
+    return chat_text(
+        "你是循证医学课程导师，请基于PICO作答评分生成结构化形成性反馈。",
+        (
+            f"指南：{guideline.get('title')}\n"
+            f"学生临床问题：{payload.get('clinical_question')}\n"
+            f"学生PICO：{payload.get('pico')}\n"
+            f"学生回答：{payload.get('answer')}\n"
+            f"评分细项：{scoring['detail']}\n"
+            "请输出不超过120字，包含优点、主要缺口和下一步修改建议。"
+        ),
+        fallback,
+    )
+
+
+def _scoring_rationale(guideline: dict, payload: dict, scoring: dict) -> str:
+    fallback = (
+        f"系统依据PICO完整性、指南推荐匹配、推荐等级理解、临床适用性和风险个体化五项计算，"
+        f"综合得分为{scoring['score']}。"
+    )
+    return chat_text(
+        "你是医学教育测评专家，请解释循证作答评分依据。",
+        (
+            f"指南：{guideline.get('title')}\n"
+            f"学生作答：{payload}\n"
+            f"评分细项：{scoring['detail']}\n"
+            "请用2句话说明评分理由，避免夸大。"
+        ),
+        fallback,
+    )
 
 
 def _normalize(value: str) -> str:

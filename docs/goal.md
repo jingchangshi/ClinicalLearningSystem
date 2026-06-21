@@ -1,162 +1,370 @@
-目标：在 jingchangshi/ClinicalLearningSystem 当前 commit 5fe8bbf8ce5d72542dfe8593911b995c50491948 基础上，完成“账户系统 + 权限系统 + 安全重构 + 一致性修复”，将系统升级为可真实部署的 AI 辅助医学教育平台。
+目标：
+在当前仓库 jingchangshi/ClinicalLearningSystem（commit 84e02ad06e70a665ae1cf81e780b3ef1f6fb3063）基础上，
+修复登录接口 404 问题，统一前后端 API 路由体系，确保认证系统完全可用，并在系统中规范接入 LLM 服务（通过环境变量配置 API Key），用于关键教学智能模块。
 
 ---
 
-一、核心新增目标：账户系统（必须实现）
+# 一、核心问题修复：登录 404（最高优先级）
 
-1. 新增 User 模型：
-
-- id
-- username（唯一）
-- password_hash（bcrypt）
-- role: student / teacher / admin
-- student_id（nullable）
-- teacher_id（nullable）
-- created_at
-
-2. 新增认证系统：
-
-- POST /auth/register
-- POST /auth/login
-- GET /auth/me
-
-使用 JWT Token。
-
-3. 登录后行为：
-
-学生：
-- 只能访问自己的 student dashboard / pathway / sessions
-
-教师：
-- 可访问 teacher dashboard / students / research
-
-admin：
-- 可访问全部 API
+## 当前现象
+- 页面：http://129.153.118.58:8101/login?next=/student/dashboard
+- 登录时报错：API request failed: 404
 
 ---
 
-二、权限系统（必须实现）
+## 需要系统性排查并修复以下问题：
 
-1. 新增 auth dependency：
+### 1. 前端 API 路径错误（高概率根因）
 
-- get_current_user()
-- require_role(["student"])
-- require_role(["teacher", "admin"])
+检查前端登录请求：
 
-2. 所有 API 必须加权限：
+- login request 是否为：
+  ❌ /auth/login
+  ❌ /api/auth/login
+  ❌ /v1/auth/login
 
-学生接口：
-- /api/students/*
-必须验证 user.student_id 与 path student_id 一致
+必须与后端实际路由完全一致。
 
-教师接口：
-- /api/teacher/*
-必须 teacher or admin
-
----
-
-三、修复当前系统安全问题
-
-1. 禁止前端传 student_id 直接访问数据
-→ 改为 token 推导 student_id
-
-2. teacher dashboard API 增加权限保护
-
-3. sessions / pathway / dashboard 全部校验 user identity
+👉 要求：
+- 统一 API baseURL 管理（axios/fetch封装）
+- 检查是否缺少 `/api` 前缀
 
 ---
 
-四、修复数据一致性问题
+### 2. 后端路由挂载路径不一致
 
-1. weak_abilities：
-- 必须 use_expanded=True
-- 纳入八维能力模型
+检查 FastAPI：
 
-2. class_heatmap：
-- 扩展为八维（新增 communication, humanistic_care, skill_operation）
+- auth router 是否为：
+  ```python
+  app.include_router(auth_router, prefix="/auth")
+````
 
-3. average_improvement：
-- 改为真实计算：
-  - 最近 session score vs 历史 baseline
+或是否被挂载为：
 
----
+❌ /api/auth
+❌ /auth
+❌ /api/v1/auth
 
-五、统一学习证据系统（必须严格执行）
+👉 必须统一为：
 
-1. 所有模块必须写入 LearningEvidenceEvent：
-
-- knowledge quiz submit
-- skill session submit
-- case submit
-- guideline submit
-- SP submit
-
-2. competency_update_service 必须统一调用：
-
-- update_competency_from_knowledge
-- update_competency_from_skill
-- update_competency_from_case
-- update_competency_from_guideline
-- update_competency_from_sp
-
-3. 禁止任何旧 _update_competency 逻辑残留
+* 标准方案（推荐）：
+  /api/auth/login
+  /api/auth/register
+  /api/auth/me
 
 ---
 
-六、推荐系统修复
+### 3. Nginx / 反向代理路径丢失问题（非常关键）
 
-1. recommended_tasks 必须全部后端生成
+如果存在 nginx 或 proxy：
 
-2. 返回字段必须包括：
+检查是否存在：
 
-- type
-- id
-- title
-- reason
-- priority
-- target_abilities
-- source_evidence
-- expected_lift
-- difficulty_label
-- next_step_label
+* /api 被 rewrite 掉
+* /auth 被直接转发到 frontend
 
-3. 前端不得再根据 type 推断能力
+👉 修复规则：
+
+确保：
+
+* /api/* → backend
+* /* → frontend
 
 ---
 
-七、账户系统与Student模型解耦（重要）
+### 4. 前端 API client 统一重构（必须做）
 
-1. Student 不再代表用户身份
-2. User 表是唯一登录实体
-3. Student = 学习数据实体
+新增或修复：
 
-关系：
+/frontend/src/lib/api.ts 或 axios instance：
 
-User 1—1 Student
-User 1—1 Teacher
+```ts
+baseURL = process.env.NEXT_PUBLIC_API_BASE_URL || "/api"
+```
+
+所有请求必须使用统一 client：
+
+* login
+* register
+* me
+* student APIs
+* teacher APIs
+
+禁止硬编码路径。
 
 ---
 
-八、前端适配修改
+### 5. 增加后端调试能力（用于避免未来问题）
 
-1. 登录后保存 token
-2. 所有 API 自动带 Authorization header
-3. 移除 studentId query-based trust
-4. 改为 /me 获取 student context
+新增 middleware：
+
+* log all incoming request paths
+* log 404 routes
+
+输出：
+
+* request path
+* method
+* matched route or not
 
 ---
 
-九、验收标准
+### 6. 增加 health check endpoint（用于验证部署）
+
+新增：
+
+GET /api/health
+
+返回：
+
+```json
+{ "status": "ok" }
+```
+
+---
+
+# 二、认证系统完整性校验（必须复查）
+
+确保以下逻辑完全正确：
+
+## 1. login response 必须统一格式
+
+```json
+{
+  "access_token": "...",
+  "token_type": "bearer",
+  "user": {
+    "id": 1,
+    "role": "student"
+  }
+}
+```
+
+---
+
+## 2. 前端 token 存储一致性
+
+检查：
+
+* localStorage
+* cookie
+* memory state
+
+必须统一：
+
+* Authorization: Bearer <token>
+
+---
+
+## 3. /auth/me 必须可用
+
+用于前端刷新态：
+
+* 页面刷新 → 自动恢复用户身份
+
+---
+
+## 4. student_id 不得再从 query 获取
+
+必须全部改为：
+
+* token → user → student_id
+
+---
+
+# 三、LLM 模型接入系统设计（新增核心能力）
+
+## 目标
+
+在系统中引入 LLM 能力，用于：
+
+* 病例生成
+* 学习路径解释
+* 推荐理由生成
+* guideline 分析
+* 教学反馈生成
+
+---
+
+## 1. 新增 LLM Config（必须）
+
+新增文件：
+
+/app/core/llm_config.py
+
+```python
+import os
+
+LLM_API_KEY = os.getenv("LLM_API_KEY")
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.openai.com/v1")
+LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
+```
+
+---
+
+## 2. 新增统一 LLM Client
+
+/ app/services/llm_client.py
+
+必须支持：
+
+* chat completion
+* retry机制
+* timeout
+* fallback（key不存在时返回 mock）
+
+---
+
+## 3. 环境变量要求
+
+新增：
+
+```
+LLM_API_KEY=xxx
+LLM_BASE_URL=optional
+LLM_MODEL=optional
+```
+
+---
+
+## 4. LLM 接入模块清单（必须改造）
+
+### （1）病例生成
+
+* case_generator_service
+
+👉 用 LLM 优化 case complexity & realism
+
+---
+
+### （2）学习路径解释（关键）
+
+* recommendation_service
+
+新增：
+
+* explain_recommendation_with_llm()
+
+输出：
+
+* 为什么推荐该任务
+* 对应能力缺口解释
+* 下一步学习策略
+
+---
+
+### （3）guideline scoring解释
+
+* guideline_scoring.py
+
+增加：
+
+* LLM生成 scoring rationale
+
+---
+
+### （4）SP / skill反馈增强
+
+* SP feedback
+* skill session feedback
+
+增加：
+
+* structured narrative feedback
+
+---
+
+## 5. LLM 使用规则（重要）
+
+必须遵守：
+
+* 无 API Key → fallback deterministic logic
+* 有 API Key → LLM增强输出
+* 不允许阻塞主流程（必须 async-safe 或 degrade gracefully）
+
+---
+
+# 四、系统一致性修复（必须执行）
+
+## 1. API路径统一
+
+必须统一为：
+
+```
+/api/auth/*
+/api/student/*
+/api/teacher/*
+```
+
+---
+
+## 2. 前端 API 调用统一入口
+
+禁止：
+
+* fetch("/auth/login")
+* fetch("/login")
+
+必须：
+
+* apiClient.post("/auth/login")
+
+---
+
+## 3. 登录错误必须可追踪
+
+前端必须打印：
+
+* request URL
+* status code
+* response body
+
+---
+
+# 五、验收标准
 
 必须满足：
 
-1. 用户可以注册/登录
-2. student 只能访问自己的数据
-3. teacher 可以查看所有学生
-4. admin 可访问全部系统
-5. 所有 competency 更新写入 event
-6. 八维能力画像稳定更新
-7. 推荐路径一致且可解释
-8. npm run build 通过
-9. 后端可启动无权限漏洞
+## 登录系统
+
+* [ ] login 不再 404
+* [ ] register 正常
+* [ ] me 正常
+* [ ] token 可持久化
+
+## 权限系统
+
+* [ ] student 不能访问 teacher API
+* [ ] teacher 可访问 dashboard
+* [ ] admin 全权限
+
+## 路由一致性
+
+* [ ] API prefix 全部统一
+* [ ] 无 /auth vs /api/auth 混乱
+
+## LLM系统
+
+* [ ] API Key 可配置
+* [ ] 至少3个模块接入 LLM
+* [ ] 无 Key 时系统可运行
+
+## 稳定性
+
+* [ ] npm run build 通过
+* [ ] backend 无 404 hidden route
+* [ ] 前后端路径完全一致
+
+---
+
+# 六、最终目标状态
+
+系统必须达到：
+
+1. 登录系统稳定可用（无 404）
+2. 权限系统完全隔离
+3. API 路由完全统一
+4. LLM 成为增强层（非核心依赖）
+5. 教学路径解释具备“可发表论文级文本生成能力”
 

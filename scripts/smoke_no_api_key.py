@@ -8,6 +8,7 @@ if BACKEND not in sys.path:
     sys.path.insert(0, BACKEND)
 
 os.environ.pop("OPENAI_API_KEY", None)
+os.environ.pop("LLM_API_KEY", None)
 
 from app.services.case_generator import generate_case_payload, validate_case_payload
 from app.services.guideline_scoring import score_guideline_pico
@@ -63,6 +64,7 @@ def main() -> None:
         [{"p": "活动性SLE患者", "i": "羟氯喹", "c": "不用羟氯喹", "o": "复发率"}],
     )
     assert 0 <= guideline_score["score"] <= 100
+    assert guideline_score["scoring_rationale"]
     print("no-api-key smoke ok")
 
 

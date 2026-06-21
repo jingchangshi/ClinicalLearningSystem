@@ -1,57 +1,31 @@
-import os
 import json
 from typing import Any
 
 from openai import OpenAI
 
+from app.core.llm_config import (
+    LLM_API_KEY,
+    LLM_BASE_URL,
+    LLM_MAX_RETRIES,
+    LLM_MODEL,
+    LLM_TIMEOUT_SECONDS,
+)
+
 
 def chat_text(system_prompt: str, user_prompt: str, fallback: str) -> str:
-    if not os.getenv("OPENAI_API_KEY"):
+    if not LLM_API_KEY:
         return fallback
-    try:
-        client = _client()
-        response = client.chat.completions.create(
-            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.3,
-        )
-        content = response.choices[0].message.content
-        return content.strip() if content and content.strip() else fallback
-    except Exception:
-        return fallback
+    return _with_retries(lambda: _chat_text_once(system_prompt, user_prompt), fallback)
 
 
 def chat_json(system_prompt: str, user_prompt: str, fallback: Any) -> Any:
-    if not os.getenv("OPENAI_API_KEY"):
+    if not LLM_API_KEY:
         return fallback
-    try:
-        client = _client()
-        response = client.chat.completions.create(
-            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
-            messages=[
-                {
-                    "role": "system",
-                    "content": f"{system_prompt}\n必须只输出合法 JSON，不要输出 markdown 或解释。",
-                },
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.2,
-            response_format={"type": "json_object"},
-        )
-        content = response.choices[0].message.content or ""
-        parsed = json.loads(content)
-        if isinstance(parsed, (dict, list)):
-            return parsed
-    except Exception:
-        return fallback
-    return fallback
+    return _with_retries(lambda: _chat_json_once(system_prompt, user_prompt, fallback), fallback)
 
 
 def generate_reasoning_question(case: dict, step: str, student_answer: str) -> str:
-    if os.getenv("OPENAI_API_KEY"):
+    if LLM_API_KEY:
         return _openai_reasoning_question(case, step, student_answer)
     return _rule_reasoning_question(step, student_answer)
 
@@ -106,8 +80,56 @@ def normalize_openai_payload(value: Any) -> Any:
     return value
 
 
+def _chat_text_once(system_prompt: str, user_prompt: str) -> str:
+    response = _client().chat.completions.create(
+        model=LLM_MODEL,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.3,
+        timeout=LLM_TIMEOUT_SECONDS,
+    )
+    content = response.choices[0].message.content
+    return content.strip() if content and content.strip() else ""
+
+
+def _chat_json_once(system_prompt: str, user_prompt: str, fallback: Any) -> Any:
+    response = _client().chat.completions.create(
+        model=LLM_MODEL,
+        messages=[
+            {
+                "role": "system",
+                "content": f"{system_prompt}\n必须只输出合法 JSON，不要输出 markdown 或解释。",
+            },
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.2,
+        response_format={"type": "json_object"},
+        timeout=LLM_TIMEOUT_SECONDS,
+    )
+    content = response.choices[0].message.content or ""
+    parsed = json.loads(content)
+    if isinstance(parsed, (dict, list)):
+        return parsed
+    return fallback
+
+
+def _with_retries(operation, fallback: Any) -> Any:
+    for _ in range(max(1, LLM_MAX_RETRIES + 1)):
+        try:
+            result = operation()
+            if result:
+                return result
+        except Exception:
+            continue
+    return fallback
+
+
 def _client() -> OpenAI:
     return OpenAI(
-        api_key=os.getenv("OPENAI_API_KEY"),
-        base_url=os.getenv("OPENAI_BASE_URL") or None,
+        api_key=LLM_API_KEY,
+        base_url=LLM_BASE_URL,
+        timeout=LLM_TIMEOUT_SECONDS,
+        max_retries=0,
     )
