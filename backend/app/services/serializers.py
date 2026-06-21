@@ -18,11 +18,14 @@ from app.models import (
 
 ABILITY_LABELS = {
     "medical_knowledge": "医学知识",
+    "skill_operation": "技能操作",
     "key_information": "关键信息提取",
     "differential_diagnosis": "鉴别诊断",
     "evidence_integration": "证据整合",
     "clinical_decision": "临床决策",
     "evidence_based_medicine": "循证医学",
+    "communication": "医患沟通",
+    "humanistic_care": "人文关怀",
     "learning_engagement": "学习投入",
 }
 
@@ -33,6 +36,17 @@ CORE_ABILITIES = [
     "evidence_integration",
     "clinical_decision",
     "evidence_based_medicine",
+]
+
+DISPLAY_ABILITIES = [
+    "medical_knowledge",
+    "skill_operation",
+    "key_information",
+    "differential_diagnosis",
+    "evidence_integration",
+    "evidence_based_medicine",
+    "communication",
+    "humanistic_care",
 ]
 
 
@@ -87,19 +101,44 @@ def serialize_case_summary(case: Case) -> dict:
     }
 
 
-def serialize_profile(profile: CompetencyProfile) -> dict:
-    return {
+def serialize_profile(
+    profile: CompetencyProfile,
+    *,
+    communication: float | None = None,
+    humanistic_care: float | None = None,
+) -> dict:
+    skill_operation = round((profile.clinical_decision + profile.key_information) / 2, 1)
+    communication_score = round(communication if communication is not None else 75, 1)
+    humanistic_care_score = round(humanistic_care if humanistic_care is not None else 75, 1)
+    values = {
         "medical_knowledge": profile.medical_knowledge,
+        "skill_operation": skill_operation,
         "key_information": profile.key_information,
         "differential_diagnosis": profile.differential_diagnosis,
         "evidence_integration": profile.evidence_integration,
         "clinical_decision": profile.clinical_decision,
         "evidence_based_medicine": profile.evidence_based_medicine,
+        "communication": communication_score,
+        "humanistic_care": humanistic_care_score,
+    }
+    return {
+        "medical_knowledge": profile.medical_knowledge,
+        "skill_operation": skill_operation,
+        "key_information": profile.key_information,
+        "differential_diagnosis": profile.differential_diagnosis,
+        "evidence_integration": profile.evidence_integration,
+        "clinical_decision": profile.clinical_decision,
+        "evidence_based_medicine": profile.evidence_based_medicine,
+        "communication": communication_score,
+        "humanistic_care": humanistic_care_score,
         "learning_engagement": profile.learning_engagement,
         "updated_at": profile.updated_at,
         "chart_data": [
             {"dimension": ABILITY_LABELS[key], "score": getattr(profile, key)}
             for key in CORE_ABILITIES
+        ],
+        "expanded_chart_data": [
+            {"dimension": ABILITY_LABELS[key], "score": values[key]} for key in DISPLAY_ABILITIES
         ],
     }
 

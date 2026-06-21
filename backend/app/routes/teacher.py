@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Case, CaseSession, Student
 from app.routes.cases import create_case_from_payload, update_case_from_payload
+from app.services.learning_evidence_service import build_class_heatmap, build_class_training_summary
 from app.services.serializers import (
     ABILITY_LABELS,
     CORE_ABILITIES,
@@ -22,9 +23,12 @@ def get_teacher_dashboard(db: Session = Depends(get_db)) -> dict:
     score_rows = [session.score for session in completed if session.score]
     averages = _class_averages(students)
     weak_dimensions = _weak_dimensions(averages)
+    training_summary = build_class_training_summary(db)
+    teaching_interventions = _teaching_interventions(weak_dimensions)
     return {
         "student_count": len(students),
         "completed_session_count": len(completed),
+        **training_summary,
         "class_average_total_score": round(
             sum(score.total_score for score in score_rows) / len(score_rows), 1
         )
@@ -38,6 +42,9 @@ def get_teacher_dashboard(db: Session = Depends(get_db)) -> dict:
             ],
         },
         "weak_dimensions": weak_dimensions,
+        "current_common_weakness": weak_dimensions[0]["label"] if weak_dimensions else "暂无明显短板",
+        "class_heatmap": build_class_heatmap(db),
+        "teaching_interventions": teaching_interventions,
         "teaching_focus": _teaching_focus(weak_dimensions),
         "students": [_student_row(student) for student in students],
         "recent_sessions": [
@@ -121,6 +128,20 @@ def _teaching_focus(weak_dimensions: list[dict]) -> list[str]:
         else:
             suggestions.append(f"建议围绕{row['label']}开展结构化病例复盘。")
     return suggestions
+
+
+def _teaching_interventions(weak_dimensions: list[dict]) -> list[str]:
+    if not weak_dimensions:
+        return ["班级整体表现较稳定，可增加高阶循证医学和复杂治疗决策训练。"]
+    mapping = {
+        "evidence_based_medicine": "下周增加“指南推荐等级与PICO构建”小课。",
+        "differential_diagnosis": "安排“SLE活动与感染鉴别”病例讨论。",
+        "clinical_decision": "增加“免疫抑制治疗安全监测”专题。",
+        "medical_knowledge": "向基础薄弱学生推送基础知识单元。",
+        "key_information": "加强SP问诊训练，提升关键信息采集完整性。",
+    }
+    suggestions = [mapping[row["key"]] for row in weak_dimensions if row["key"] in mapping]
+    return suggestions or [f"围绕{weak_dimensions[0]['label']}设计结构化病例复盘。"]
 
 
 def _student_row(student: Student) -> dict:

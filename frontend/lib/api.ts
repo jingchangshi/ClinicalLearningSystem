@@ -29,13 +29,17 @@ export type Student = {
 };
 export type Competency = {
   medical_knowledge: number;
+  skill_operation: number;
   key_information: number;
   differential_diagnosis: number;
   evidence_integration: number;
   clinical_decision: number;
   evidence_based_medicine: number;
+  communication: number;
+  humanistic_care: number;
   learning_engagement: number;
   chart_data: ChartPoint[];
+  expanded_chart_data: ChartPoint[];
 };
 export type CaseSummary = {
   id: number;
@@ -192,6 +196,12 @@ export type RecommendedTask = {
   reason: string;
   priority: number;
 };
+export type LearningEvidence = {
+  module: "knowledge" | "skill" | "case" | "guideline" | "sp";
+  label: string;
+  completed: number;
+  latest_score: number | null;
+};
 
 export function listStudents() {
   return request<Student[]>("/api/students");
@@ -202,7 +212,9 @@ export function getStudentDashboard(studentId: number) {
     student: Student;
     competency: Competency;
     recommended_cases: CaseSummary[];
+    recommendation_details: { case: CaseSummary; recommendation_reason: string; pathway_stage: string }[];
     recent_advice: string;
+    learning_evidence: LearningEvidence[];
     progress: { completed_cases: number; in_progress_cases: number; average_score: number };
   }>(`/api/students/${studentId}/dashboard`);
 }
@@ -269,6 +281,7 @@ export function getPathway(studentId: number) {
     recommendation_reason: string;
     weak_abilities: { key: string; label: string; score: number }[];
     recommended_tasks: RecommendedTask[];
+    learning_evidence: LearningEvidence[];
     knowledge_suggestions: { unit: KnowledgeUnit; reason: string }[];
     next_stage_goal: string;
   }>(`/api/students/${studentId}/pathway`);
@@ -414,10 +427,24 @@ export function getTeacherDashboard() {
   return request<{
     student_count: number;
     completed_session_count: number;
+    training_total_count: number;
+    module_counts: { knowledge: number; skill: number; case: number; guideline: number; sp: number };
     class_average_total_score: number;
     average_improvement: number;
     class_competency: { chart_data: ChartPoint[] };
     weak_dimensions: { key: string; label: string; score: number; level: string }[];
+    current_common_weakness: string;
+    class_heatmap: {
+      student_id: number;
+      student_name: string;
+      medical_knowledge: number;
+      key_information: number;
+      differential_diagnosis: number;
+      evidence_integration: number;
+      clinical_decision: number;
+      evidence_based_medicine: number;
+    }[];
+    teaching_interventions: string[];
     teaching_focus: string[];
     students: {
       id: number;

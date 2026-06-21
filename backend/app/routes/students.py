@@ -19,6 +19,7 @@ from app.services.recommendation_service import (
     determine_pathway_stage,
     weakest_abilities,
 )
+from app.services.learning_evidence_service import build_student_evidence_summary, latest_sp_scores
 from app.services.serializers import (
     ABILITY_LABELS,
     serialize_case_summary,
@@ -46,13 +47,13 @@ def get_student(student_id: int, db: Session = Depends(get_db)) -> dict:
 @router.get("/{student_id}/competency")
 def get_competency(student_id: int, db: Session = Depends(get_db)) -> dict:
     student = _get_student(db, student_id)
-    return serialize_profile(student.competency_profile)
+    return serialize_profile(student.competency_profile, **latest_sp_scores(db, student_id))
 
 
 @router.get("/{student_id}/dashboard")
 def get_dashboard(student_id: int, db: Session = Depends(get_db)) -> dict:
     student = _get_student(db, student_id)
-    profile = serialize_profile(student.competency_profile)
+    profile = serialize_profile(student.competency_profile, **latest_sp_scores(db, student_id))
     cases = [serialize_case_summary(case) for case in db.query(Case).all()]
     recommendations = _recommendations_for_student(db, student_id, profile, cases)
     completed = [session for session in student.sessions if session.status == "completed"]
@@ -61,7 +62,9 @@ def get_dashboard(student_id: int, db: Session = Depends(get_db)) -> dict:
         "student": serialize_student(student),
         "competency": profile,
         "recommended_cases": [item["case"] for item in recommendations[:3]],
+        "recommendation_details": recommendations[:3],
         "recent_advice": recent["recommendation_reason"] if recent else "请先完成推荐病例训练。",
+        "learning_evidence": build_student_evidence_summary(db, student_id)["evidence_summary"],
         "progress": {
             "completed_cases": len(completed),
             "in_progress_cases": len(student.sessions) - len(completed),
@@ -78,7 +81,7 @@ def get_dashboard(student_id: int, db: Session = Depends(get_db)) -> dict:
 @router.get("/{student_id}/pathway")
 def get_pathway(student_id: int, db: Session = Depends(get_db)) -> dict:
     student = _get_student(db, student_id)
-    profile = serialize_profile(student.competency_profile)
+    profile = serialize_profile(student.competency_profile, **latest_sp_scores(db, student_id))
     cases = [serialize_case_summary(case) for case in db.query(Case).all()]
     completed = [
         {
@@ -129,6 +132,7 @@ def get_pathway(student_id: int, db: Session = Depends(get_db)) -> dict:
             for key in learning_pathway["weak_abilities"]
         ],
         "recommended_tasks": learning_pathway["recommended_tasks"],
+        "learning_evidence": build_student_evidence_summary(db, student_id)["evidence_summary"],
         "knowledge_suggestions": knowledge_suggestions,
         "next_stage_goal": _next_stage_goal(learning_pathway["current_stage"]),
     }
