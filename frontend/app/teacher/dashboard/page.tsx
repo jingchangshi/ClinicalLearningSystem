@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ClipboardList, Target, TrendingUp, Users } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 import { ClassHeatmap } from "@/components/ClassHeatmap";
 import { CompetencyRadar } from "@/components/CompetencyRadar";
@@ -43,7 +44,7 @@ export default async function TeacherDashboard() {
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="font-semibold">班级能力画像</h2>
-          <CompetencyRadar data={data.class_competency.chart_data} />
+          <CompetencyRadar data={data.class_competency.expanded_chart_data ?? data.class_competency.chart_data} />
           <div className="mt-4 space-y-3">
             {data.weak_dimensions.length ? (
               data.weak_dimensions.map((item) => (
@@ -67,6 +68,21 @@ export default async function TeacherDashboard() {
       </div>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="font-semibold">研究数据入口</h2>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <Link href="/teacher/research-export" className="rounded-md bg-clinic px-4 py-2 text-white">
+            导出研究数据
+          </Link>
+          <Link href="/teacher/score-review" className="rounded-md border border-slate-300 px-4 py-2 hover:border-clinic">
+            教师评分复核
+          </Link>
+          <Link href="/teacher/interventions" className="rounded-md border border-slate-300 px-4 py-2 hover:border-clinic">
+            教学干预记录
+          </Link>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="font-semibold">学生表现</h2>
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[760px] text-left text-sm">
@@ -88,7 +104,11 @@ export default async function TeacherDashboard() {
                   <td className="px-3 py-3">{student.recent_score ?? "待评分"}</td>
                   <td className="px-3 py-3">{student.weakest_ability}</td>
                   <td className="px-3 py-3">{student.recommended_training}</td>
-                  <td className="px-3 py-3 text-slate-400">查看详情</td>
+                  <td className="px-3 py-3">
+                    <Link href={`/teacher/students/${student.id}`} className="text-clinic hover:underline">
+                      查看详情
+                    </Link>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -115,7 +135,7 @@ export default async function TeacherDashboard() {
   );
 }
 
-function MetricCard({ title, value, note, icon: Icon }: { title: string; value: string; note: string; icon: typeof Users }) {
+function MetricCard({ title, value, note, icon: Icon }: { title: string; value: string; note: string; icon: LucideIcon }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-4">

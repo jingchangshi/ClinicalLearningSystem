@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import GuidelineDocument, GuidelineLearningSession, Student
-from app.services.guideline_scoring import score_guideline_pico, update_evidence_profile
+from app.services.competency_update_service import update_competency_from_guideline
+from app.services.guideline_scoring import score_guideline_pico
 from app.services.serializers import (
     loads_json,
     serialize_guideline,
@@ -67,7 +68,8 @@ def submit_pico(
         feedback=result["feedback"],
     )
     db.add(session)
-    update_evidence_profile(student.competency_profile, result["score"])
+    db.flush()
+    update_competency_from_guideline(db, payload.student_id, result["score"], result["detail"], session.id)
     db.commit()
     db.refresh(session)
 

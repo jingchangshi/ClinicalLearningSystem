@@ -131,11 +131,14 @@ class CompetencyProfile(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), nullable=False)
     medical_knowledge: Mapped[float] = mapped_column(Float, nullable=False)
+    skill_operation: Mapped[float] = mapped_column(Float, default=75, nullable=False)
     key_information: Mapped[float] = mapped_column(Float, nullable=False)
     differential_diagnosis: Mapped[float] = mapped_column(Float, nullable=False)
     evidence_integration: Mapped[float] = mapped_column(Float, nullable=False)
     clinical_decision: Mapped[float] = mapped_column(Float, nullable=False)
     evidence_based_medicine: Mapped[float] = mapped_column(Float, nullable=False)
+    communication: Mapped[float] = mapped_column(Float, default=75, nullable=False)
+    humanistic_care: Mapped[float] = mapped_column(Float, default=75, nullable=False)
     learning_engagement: Mapped[float] = mapped_column(Float, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -311,4 +314,45 @@ class GeneratedCaseDraft(Base):
     teacher_prompt: Mapped[str] = mapped_column(Text, nullable=False)
     generated_payload: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="draft")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class LearningEvidenceEvent(Base):
+    __tablename__ = "learning_evidence_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    student_id: Mapped[int] = mapped_column(ForeignKey("students.id"), nullable=False)
+    module_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    module_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    session_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    event_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    source_table: Mapped[str] = mapped_column(String(100), nullable=False)
+    source_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    competency_updates_json: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_payload_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class TeachingIntervention(Base):
+    __tablename__ = "teaching_interventions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    target_ability: Mapped[str] = mapped_column(String(100), nullable=False)
+    target_students_json: Mapped[str] = mapped_column(Text, nullable=False)
+    intervention_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class TeacherScoreReview(Base):
+    __tablename__ = "teacher_score_reviews"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    evidence_event_id: Mapped[int] = mapped_column(ForeignKey("learning_evidence_events.id"), nullable=False)
+    ai_score: Mapped[float] = mapped_column(Float, nullable=False)
+    teacher_score: Mapped[float] = mapped_column(Float, nullable=False)
+    comment: Mapped[str] = mapped_column(Text, nullable=False)
+    agreement_delta: Mapped[float] = mapped_column(Float, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

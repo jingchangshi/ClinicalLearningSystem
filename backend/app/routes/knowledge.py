@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import KnowledgeProgress, KnowledgeUnit, Student
+from app.services.competency_update_service import update_competency_from_knowledge
 from app.services.serializers import (
     loads_json,
     serialize_knowledge_progress,
@@ -63,6 +64,8 @@ def submit_quiz(unit_id: int, payload: QuizSubmitRequest, db: Session = Depends(
     progress.mastery_score = mastery_score
     progress.status = "completed" if mastery_score >= 80 else "in_progress"
     progress.updated_at = datetime.utcnow()
+    db.flush()
+    update_competency_from_knowledge(db, payload.student_id, quiz_score, progress.id)
     db.commit()
     db.refresh(progress)
 

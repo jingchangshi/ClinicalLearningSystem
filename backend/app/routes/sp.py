@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import SPCase, SPSession, Student
+from app.services.competency_update_service import update_competency_from_sp
 from app.services.serializers import (
     dumps_json,
     loads_json,
@@ -117,6 +118,8 @@ def submit_sp_session(
     session.feedback = scoring["feedback"]
     session.status = "completed"
     session.completed_at = datetime.utcnow()
+    db.flush()
+    update_competency_from_sp(db, session.student_id, scoring, session.id)
     db.commit()
     db.refresh(session)
     return {

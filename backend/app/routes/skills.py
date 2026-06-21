@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import ClinicalSkill, SkillSession, Student
+from app.services.competency_update_service import update_competency_from_skill
 from app.services.serializers import (
     dumps_json,
     loads_json,
@@ -73,6 +74,8 @@ def submit_skill_session(
     session.feedback = result["feedback"]
     session.status = "completed"
     session.completed_at = datetime.utcnow()
+    db.flush()
+    update_competency_from_skill(db, session.student_id, result["score"], result["detail"], session.id)
     db.commit()
     db.refresh(session)
 

@@ -4,10 +4,12 @@ from app.models import (
     CaseSession,
     GuidelineLearningSession,
     KnowledgeProgress,
+    LearningEvidenceEvent,
     SkillSession,
     SPSession,
     Student,
 )
+from app.services.serializers import loads_json
 
 
 def build_student_evidence_summary(db: Session, student_id: int) -> dict:
@@ -107,14 +109,72 @@ def build_class_heatmap(db: Session) -> list[dict]:
                 "student_id": student.id,
                 "student_name": student.name,
                 "medical_knowledge": profile.medical_knowledge,
+                "skill_operation": profile.skill_operation,
                 "key_information": profile.key_information,
                 "differential_diagnosis": profile.differential_diagnosis,
                 "evidence_integration": profile.evidence_integration,
                 "clinical_decision": profile.clinical_decision,
                 "evidence_based_medicine": profile.evidence_based_medicine,
+                "communication": profile.communication,
+                "humanistic_care": profile.humanistic_care,
             }
         )
     return rows
+
+
+def build_student_evidence_events(db: Session, student_id: int) -> list[dict]:
+    rows = (
+        db.query(LearningEvidenceEvent)
+        .filter(LearningEvidenceEvent.student_id == student_id)
+        .order_by(LearningEvidenceEvent.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    return [_serialize_event(row) for row in rows]
+
+
+def build_growth_trend(db: Session, student_id: int) -> list[dict]:
+    events = (
+        db.query(LearningEvidenceEvent)
+        .filter(LearningEvidenceEvent.student_id == student_id)
+        .order_by(LearningEvidenceEvent.created_at.asc())
+        .all()
+    )
+    trend = []
+    for event in events:
+        updates = loads_json(event.competency_updates_json, {})
+        if not updates:
+            continue
+        trend.append(
+            {
+                "event_id": event.id,
+                "module_type": event.module_type,
+                "score": event.score,
+                "created_at": event.created_at,
+                "average_after": round(
+                    sum(item.get("after", 0) for item in updates.values()) / len(updates),
+                    1,
+                ),
+            }
+        )
+    return trend
+
+
+def _serialize_event(event: LearningEvidenceEvent) -> dict:
+    return {
+        "id": event.id,
+        "student_id": event.student_id,
+        "module_type": event.module_type,
+        "module_id": event.module_id,
+        "session_id": event.session_id,
+        "event_type": event.event_type,
+        "source_table": event.source_table,
+        "source_id": event.source_id,
+        "score": event.score,
+        "competency_updates": loads_json(event.competency_updates_json, {}),
+        "evidence_payload": loads_json(event.evidence_payload_json, {}),
+        "created_at": event.created_at,
+    }
 
 
 def latest_sp_scores(db: Session, student_id: int) -> dict:

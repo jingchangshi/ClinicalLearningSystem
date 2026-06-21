@@ -27,6 +27,7 @@ export function expectedLift(priority: number) {
 }
 
 export function RecommendedTaskCard({ task, href }: { task: RecommendedTask; href: string }) {
+  const target = task.target_abilities?.join(" / ") ?? targetAbilities[task.type];
   return (
     <Link href={href} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:border-clinic">
       <div className="flex items-center justify-between gap-3">
@@ -34,10 +35,13 @@ export function RecommendedTaskCard({ task, href }: { task: RecommendedTask; hre
         <span className="text-xs text-slate-400">优先级 {task.priority}</span>
       </div>
       <h3 className="mt-4 font-semibold text-ink">{task.title}</h3>
+      <p className="mt-2 text-xs font-semibold text-slate-500">{task.difficulty_label ?? "自适应"}</p>
       <p className="mt-3 text-sm leading-6 text-slate-600">推荐原因：{task.reason}</p>
-      <p className="mt-2 text-sm text-slate-600">目标能力：{targetAbilities[task.type]}</p>
+      <p className="mt-2 text-sm text-slate-600">目标能力：{target}</p>
+      <p className="mt-2 text-sm text-slate-600">证据来源：{task.source_evidence ?? "能力画像与最近训练表现"}</p>
       <div className="mt-4 flex items-center justify-between">
-        <span className="rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-700">预计提升：{expectedLift(task.priority)}</span>
+        <span className="rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-700">预计提升：{task.expected_lift ?? expectedLift(task.priority)}</span>
+        <span className="text-sm font-semibold text-clinic">{task.next_step_label ?? "进入训练"}</span>
         <ArrowRight className="h-4 w-4 text-clinic" />
       </div>
     </Link>

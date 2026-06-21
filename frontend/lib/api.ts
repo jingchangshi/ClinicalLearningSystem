@@ -195,6 +195,11 @@ export type RecommendedTask = {
   title: string;
   reason: string;
   priority: number;
+  target_abilities?: string[];
+  source_evidence?: string;
+  expected_lift?: string;
+  difficulty_label?: string;
+  next_step_label?: string;
 };
 export type LearningEvidence = {
   module: "knowledge" | "skill" | "case" | "guideline" | "sp";
@@ -431,18 +436,21 @@ export function getTeacherDashboard() {
     module_counts: { knowledge: number; skill: number; case: number; guideline: number; sp: number };
     class_average_total_score: number;
     average_improvement: number;
-    class_competency: { chart_data: ChartPoint[] };
+    class_competency: { chart_data: ChartPoint[]; expanded_chart_data: ChartPoint[] };
     weak_dimensions: { key: string; label: string; score: number; level: string }[];
     current_common_weakness: string;
     class_heatmap: {
       student_id: number;
       student_name: string;
       medical_knowledge: number;
+      skill_operation: number;
       key_information: number;
       differential_diagnosis: number;
       evidence_integration: number;
       clinical_decision: number;
       evidence_based_medicine: number;
+      communication: number;
+      humanistic_care: number;
     }[];
     teaching_interventions: string[];
     teaching_focus: string[];
@@ -462,6 +470,70 @@ export function getTeacherDashboard() {
       completed_at: string | null;
     }[];
   }>("/api/teacher/dashboard");
+}
+
+export function getTeacherStudentProfile(studentId: string | number) {
+  return request<{
+    student: Student;
+    competency: Competency;
+    learning_evidence: LearningEvidence[];
+    evidence_events: {
+      id: number;
+      module_type: string;
+      score: number | null;
+      competency_updates: Record<string, { before: number; after: number; delta: number; module_score: number }>;
+      created_at: string;
+    }[];
+    recommended_tasks: RecommendedTask[];
+    completed_sessions: { session_id: number; case: CaseSummary; score: number | null; completed_at: string | null }[];
+    latest_sp: SPSession | null;
+    latest_guideline: GuidelineLearningSession | null;
+    growth_trend: { event_id: number; module_type: string; score: number | null; average_after: number; created_at: string }[];
+  }>(`/api/teacher/students/${studentId}/learning-profile`);
+}
+
+export function exportResearchData() {
+  return request<{
+    format: string;
+    anonymous: boolean;
+    rows: {
+      student_code: string;
+      class_name: string;
+      module_type: string;
+      score: number | null;
+      competency_before: Record<string, number>;
+      competency_after: Record<string, number>;
+      created_at: string;
+    }[];
+  }>("/api/teacher/export/research-data");
+}
+
+export function listTeachingInterventions() {
+  return request<
+    {
+      id: number;
+      title: string;
+      target_ability: string;
+      target_students: number[];
+      intervention_type: string;
+      description: string;
+      created_at: string;
+    }[]
+  >("/api/teacher/interventions");
+}
+
+export function listTeacherScoreReviews() {
+  return request<
+    {
+      id: number;
+      evidence_event_id: number;
+      ai_score: number;
+      teacher_score: number;
+      comment: string;
+      agreement_delta: number;
+      created_at: string;
+    }[]
+  >("/api/teacher/reviews");
 }
 
 export function teacherListCases() {

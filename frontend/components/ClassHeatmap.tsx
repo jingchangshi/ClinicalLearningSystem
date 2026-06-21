@@ -2,20 +2,26 @@ type ClassHeatmapRow = {
   student_id: number;
   student_name: string;
   medical_knowledge: number;
+  skill_operation: number;
   key_information: number;
   differential_diagnosis: number;
   evidence_integration: number;
   clinical_decision: number;
   evidence_based_medicine: number;
+  communication: number;
+  humanistic_care: number;
 };
 
 const columns = [
   ["medical_knowledge", "医学知识"],
+  ["skill_operation", "技能操作"],
   ["key_information", "关键信息"],
   ["differential_diagnosis", "鉴别诊断"],
   ["evidence_integration", "证据整合"],
   ["clinical_decision", "临床决策"],
   ["evidence_based_medicine", "循证医学"],
+  ["communication", "医患沟通"],
+  ["humanistic_care", "人文关怀"],
 ] as const;
 
 function heatClass(value: number) {

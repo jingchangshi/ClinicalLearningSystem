@@ -38,12 +38,13 @@ CORE_ABILITIES = [
     "evidence_based_medicine",
 ]
 
-DISPLAY_ABILITIES = [
+ALL_COMPETENCIES = [
     "medical_knowledge",
     "skill_operation",
     "key_information",
     "differential_diagnosis",
     "evidence_integration",
+    "clinical_decision",
     "evidence_based_medicine",
     "communication",
     "humanistic_care",
@@ -101,15 +102,14 @@ def serialize_case_summary(case: Case) -> dict:
     }
 
 
-def serialize_profile(
-    profile: CompetencyProfile,
-    *,
-    communication: float | None = None,
-    humanistic_care: float | None = None,
-) -> dict:
-    skill_operation = round((profile.clinical_decision + profile.key_information) / 2, 1)
-    communication_score = round(communication if communication is not None else 75, 1)
-    humanistic_care_score = round(humanistic_care if humanistic_care is not None else 75, 1)
+def serialize_profile(profile: CompetencyProfile) -> dict:
+    skill_operation = _profile_value(
+        profile,
+        "skill_operation",
+        round((profile.clinical_decision + profile.key_information) / 2, 1),
+    )
+    communication_score = _profile_value(profile, "communication", 75)
+    humanistic_care_score = _profile_value(profile, "humanistic_care", 75)
     values = {
         "medical_knowledge": profile.medical_knowledge,
         "skill_operation": skill_operation,
@@ -138,9 +138,14 @@ def serialize_profile(
             for key in CORE_ABILITIES
         ],
         "expanded_chart_data": [
-            {"dimension": ABILITY_LABELS[key], "score": values[key]} for key in DISPLAY_ABILITIES
+            {"dimension": ABILITY_LABELS[key], "score": values[key]} for key in ALL_COMPETENCIES
         ],
     }
+
+
+def _profile_value(profile: CompetencyProfile, key: str, fallback: float) -> float:
+    value = getattr(profile, key, None)
+    return round(value if value is not None else fallback, 1)
 
 
 def serialize_score(score: Score) -> dict:

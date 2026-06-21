@@ -8,12 +8,12 @@ from app.models import (
     AIMessage,
     Case,
     CaseSession,
-    CompetencyProfile,
     LearningRecommendation,
     Score,
     Student,
     StudentAnswer,
 )
+from app.services.competency_update_service import update_competency_from_case
 from app.schemas import AnswerCreate, CoachRequest, SessionStartRequest
 from app.services.llm_client import (
     generate_learning_recommendation,
@@ -22,7 +22,6 @@ from app.services.llm_client import (
 )
 from app.services.recommendation_service import determine_pathway_stage
 from app.services.serializers import (
-    CORE_ABILITIES,
     dumps_json,
     serialize_case,
     serialize_case_summary,
@@ -129,7 +128,7 @@ def submit_session(session_id: int, db: Session = Depends(get_db)) -> dict:
         weaknesses=score_payload["weaknesses"],
     )
     db.add(score)
-    _update_competency(session.student.competency_profile, score_payload)
+    update_competency_from_case(db, session.student_id, score_payload, session.id)
     profile_dict = serialize_profile(session.student.competency_profile)
     session.student.current_stage = determine_pathway_stage(profile_dict)
     session.status = "completed"
@@ -230,10 +229,3 @@ def _serialize_session(session: CaseSession) -> dict:
             for message in session.ai_messages
         ],
     }
-
-
-def _update_competency(profile: CompetencyProfile, score_payload: dict) -> None:
-    for key in CORE_ABILITIES:
-        setattr(profile, key, round(getattr(profile, key) * 0.7 + score_payload[key] * 0.3, 1))
-    profile.learning_engagement = min(100, round(profile.learning_engagement + 3, 1))
-    profile.updated_at = datetime.utcnow()

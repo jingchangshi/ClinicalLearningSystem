@@ -1,19 +1,60 @@
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Case, CaseSession, Student
+from app.models import (
+    Case,
+    CaseSession,
+    GuidelineLearningSession,
+    LearningEvidenceEvent,
+    SPSession,
+    Student,
+    TeacherScoreReview,
+    TeachingIntervention,
+)
 from app.routes.cases import create_case_from_payload, update_case_from_payload
-from app.services.learning_evidence_service import build_class_heatmap, build_class_training_summary
+from app.services.learning_evidence_service import (
+    build_class_heatmap,
+    build_class_training_summary,
+    build_growth_trend,
+    build_student_evidence_events,
+    build_student_evidence_summary,
+)
+from app.services.recommendation_service import build_learning_pathway
 from app.services.serializers import (
     ABILITY_LABELS,
+    ALL_COMPETENCIES,
     CORE_ABILITIES,
+    dumps_json,
+    loads_json,
     serialize_case,
     serialize_case_summary,
+    serialize_guideline_session,
+    serialize_knowledge_summary,
     serialize_profile,
+    serialize_skill_summary,
+    serialize_sp_case_summary,
+    serialize_sp_session,
+    serialize_student,
 )
 
 router = APIRouter(prefix="/api/teacher", tags=["teacher"])
+
+
+class InterventionCreate(BaseModel):
+    title: str
+    target_ability: str
+    target_students: list[int]
+    intervention_type: str
+    description: str
+
+
+class ReviewCreate(BaseModel):
+    evidence_event_id: int
+    ai_score: float
+    teacher_score: float
+    comment: str
 
 
 @router.get("/dashboard")
@@ -40,6 +81,9 @@ def get_teacher_dashboard(db: Session = Depends(get_db)) -> dict:
             "chart_data": [
                 {"dimension": ABILITY_LABELS[key], "score": averages[key]} for key in CORE_ABILITIES
             ],
+            "expanded_chart_data": [
+                {"dimension": ABILITY_LABELS[key], "score": averages[key]} for key in ALL_COMPETENCIES
+            ],
         },
         "weak_dimensions": weak_dimensions,
         "current_common_weakness": weak_dimensions[0]["label"] if weak_dimensions else "暂无明显短板",
@@ -58,6 +102,114 @@ def get_teacher_dashboard(db: Session = Depends(get_db)) -> dict:
             for session in completed[-8:]
         ],
     }
+
+
+@router.get("/students/{student_id}/learning-profile")
+def get_student_learning_profile(student_id: int, db: Session = Depends(get_db)) -> dict:
+    student = db.get(Student, student_id)
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    profile = serialize_profile(student.competency_profile)
+    recent_activity = _recent_activity(db)
+    learning_pathway = build_learning_pathway(profile, recent_activity)
+    completed_sessions = [
+        {
+            "session_id": session.id,
+            "case": serialize_case_summary(session.case),
+            "score": session.score.total_score if session.score else None,
+            "completed_at": session.completed_at,
+        }
+        for session in student.sessions
+        if session.status == "completed"
+    ]
+    latest_sp = (
+        db.query(SPSession)
+        .filter(SPSession.student_id == student_id, SPSession.status == "completed")
+        .order_by(SPSession.completed_at.desc())
+        .first()
+    )
+    latest_guideline = (
+        db.query(GuidelineLearningSession)
+        .filter(GuidelineLearningSession.student_id == student_id)
+        .order_by(GuidelineLearningSession.created_at.desc())
+        .first()
+    )
+    return {
+        "student": serialize_student(student),
+        "competency": profile,
+        "learning_evidence": build_student_evidence_summary(db, student_id)["evidence_summary"],
+        "evidence_events": build_student_evidence_events(db, student_id),
+        "recommended_tasks": learning_pathway["recommended_tasks"],
+        "completed_sessions": completed_sessions,
+        "latest_sp": serialize_sp_session(latest_sp) if latest_sp else None,
+        "latest_guideline": serialize_guideline_session(latest_guideline) if latest_guideline else None,
+        "growth_trend": build_growth_trend(db, student_id),
+    }
+
+
+@router.get("/export/research-data")
+def export_research_data(db: Session = Depends(get_db)) -> dict:
+    rows = []
+    events = db.query(LearningEvidenceEvent).order_by(LearningEvidenceEvent.created_at.asc()).all()
+    for event in events:
+        student = db.get(Student, event.student_id)
+        updates = loads_json(event.competency_updates_json, {})
+        rows.append(
+            {
+                "student_code": f"S{event.student_id:04d}",
+                "class_name": student.class_name if student else "",
+                "module_type": event.module_type,
+                "score": event.score,
+                "competency_before": {key: value.get("before") for key, value in updates.items()},
+                "competency_after": {key: value.get("after") for key, value in updates.items()},
+                "created_at": event.created_at,
+            }
+        )
+    return {"format": "json", "anonymous": True, "rows": rows}
+
+
+@router.post("/interventions")
+def create_intervention(payload: InterventionCreate, db: Session = Depends(get_db)) -> dict:
+    intervention = TeachingIntervention(
+        title=payload.title,
+        target_ability=payload.target_ability,
+        target_students_json=dumps_json(payload.target_students),
+        intervention_type=payload.intervention_type,
+        description=payload.description,
+    )
+    db.add(intervention)
+    db.commit()
+    db.refresh(intervention)
+    return _serialize_intervention(intervention)
+
+
+@router.get("/interventions")
+def list_interventions(db: Session = Depends(get_db)) -> list[dict]:
+    rows = db.query(TeachingIntervention).order_by(TeachingIntervention.created_at.desc()).all()
+    return [_serialize_intervention(row) for row in rows]
+
+
+@router.post("/reviews")
+def create_score_review(payload: ReviewCreate, db: Session = Depends(get_db)) -> dict:
+    if not db.get(LearningEvidenceEvent, payload.evidence_event_id):
+        raise HTTPException(status_code=404, detail="Evidence event not found")
+    review = TeacherScoreReview(
+        evidence_event_id=payload.evidence_event_id,
+        ai_score=payload.ai_score,
+        teacher_score=payload.teacher_score,
+        comment=payload.comment,
+        agreement_delta=round(payload.teacher_score - payload.ai_score, 1),
+    )
+    db.add(review)
+    db.commit()
+    db.refresh(review)
+    return _serialize_review(review)
+
+
+@router.get("/reviews")
+def list_score_reviews(db: Session = Depends(get_db)) -> list[dict]:
+    rows = db.query(TeacherScoreReview).order_by(TeacherScoreReview.created_at.desc()).all()
+    return [_serialize_review(row) for row in rows]
 
 
 @router.get("/cases")
@@ -90,19 +242,19 @@ def teacher_delete_case(case_id: int, db: Session = Depends(get_db)) -> dict:
 
 def _class_averages(students: list[Student]) -> dict:
     if not students:
-        return {key: 0 for key in CORE_ABILITIES}
+        return {key: 0 for key in ALL_COMPETENCIES}
     return {
         key: round(
-            sum(getattr(student.competency_profile, key) for student in students) / len(students),
+            sum(getattr(student.competency_profile, key) for student in students if student.competency_profile) / len(students),
             1,
         )
-        for key in CORE_ABILITIES
+        for key in ALL_COMPETENCIES
     }
 
 
 def _weak_dimensions(averages: dict) -> list[dict]:
     rows = []
-    for key in CORE_ABILITIES:
+    for key in ALL_COMPETENCIES:
         score = averages[key]
         if score < 60:
             level = "明显短板"
@@ -166,5 +318,51 @@ def _training_direction(weakest: str) -> str:
         "evidence_integration": "支持证据与反证整合训练",
         "clinical_decision": "治疗决策与监测计划训练",
         "evidence_based_medicine": "指南证据阅读训练",
+        "skill_operation": "临床技能步骤训练",
+        "communication": "SP沟通表达训练",
+        "humanistic_care": "SP人文关怀训练",
     }
     return mapping[weakest]
+
+
+def _recent_activity(db: Session) -> dict:
+    from app.models import ClinicalSkill, GuidelineDocument, KnowledgeUnit, SPCase
+
+    return {
+        "cases": [serialize_case_summary(case) for case in db.query(Case).all()],
+        "knowledge_units": [serialize_knowledge_summary(unit) for unit in db.query(KnowledgeUnit).all()],
+        "clinical_skills": [serialize_skill_summary(skill) for skill in db.query(ClinicalSkill).all()],
+        "guidelines": [
+            {
+                "id": guideline.id,
+                "title": guideline.title,
+                "difficulty": "指南",
+            }
+            for guideline in db.query(GuidelineDocument).all()
+        ],
+        "sp_cases": [serialize_sp_case_summary(sp_case) for sp_case in db.query(SPCase).all()],
+    }
+
+
+def _serialize_intervention(intervention: TeachingIntervention) -> dict:
+    return {
+        "id": intervention.id,
+        "title": intervention.title,
+        "target_ability": intervention.target_ability,
+        "target_students": loads_json(intervention.target_students_json, []),
+        "intervention_type": intervention.intervention_type,
+        "description": intervention.description,
+        "created_at": intervention.created_at,
+    }
+
+
+def _serialize_review(review: TeacherScoreReview) -> dict:
+    return {
+        "id": review.id,
+        "evidence_event_id": review.evidence_event_id,
+        "ai_score": review.ai_score,
+        "teacher_score": review.teacher_score,
+        "comment": review.comment,
+        "agreement_delta": review.agreement_delta,
+        "created_at": review.created_at,
+    }

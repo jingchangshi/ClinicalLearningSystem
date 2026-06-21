@@ -1,368 +1,427 @@
-目标：读取并理解当前仓库 jingchangshi/ClinicalLearningSystem 在 commit 95d6a9156fe57705cea558b76b5b33dda7d5e0eb 的架构，将主业务系统的学生端和教师端逐步升级到 /demo 展示模式所体现的“多模块、多模态、形成性评价、自适应路径、教师精准干预”的表达效果。注意：/demo 是申请书图版系统，保留不破坏；本次目标是让真实学生端和教师端也尽量接近 demo 的视觉逻辑和教育研究表达。
+目标：继续完善 jingchangshi/ClinicalLearningSystem 仓库，在 commit fbf140b3891e22be99f42e0b122590df98864a78 的基础上，将 ClinPath 从“可展示原型系统”进一步升级为能够支撑课题申请、教学试点、形成性评价研究和后续结题数据产出的 AI 辅助临床教学系统。
 
-一、当前已知架构
+当前课题申请书主题：
+《基于多模态学习证据的人工智能辅助医学生个性化学习与自适应教学路径构建研究》
 
-1. /demo 页面已经存在，入口文件为：
-   frontend/app/demo/page.tsx
+系统目标：
+ClinPath 应支撑“基础知识学习、临床技能训练、临床思维训练、循证指南学习、SP-OSCE标准化病人考核”五大模块，形成“多模态学习证据采集 → 多维度能力画像 → AI短板诊断 → 自适应学习路径推荐 → 教师精准干预 → 再训练评价”的医学教育闭环。
 
-2. /demo 使用：
-   frontend/components/demo/DemoShell.tsx
+一、当前系统状态
 
-3. /demo 支持六个 view：
-   - overview
-   - competency
-   - pathway
-   - multimodal
-   - osce
-   - teacher
+当前已经完成：
 
-4. 对应组件：
-   - SystemOverviewDemo
-   - CompetencyAssessmentDemo
-   - AdaptivePathwayDemo
-   - MultimodalMatrixDemo
-   - SPOSCEDemo
-   - TeacherDashboardDemo
+1. /demo 作为独立图版系统，用于课题申请书截图。
+2. /student/dashboard 已升级为“ClinPath 学生临床能力成长中心”。
+3. /student/pathway 已升级为真实版 AI 个性化学习路径页面。
+4. /teacher/dashboard 已升级为教师精准教学驾驶舱。
+5. 后端已新增 learning_evidence_service.py，可统计知识、技能、病例、指南、SP五类学习证据。
+6. serializers.py 已支持 expanded_chart_data，前端可显示八维能力画像。
+7. 教师端已支持 training_total_count、module_counts、class_heatmap、teaching_interventions 等字段。
 
-5. 主业务学生端已有：
-   - /student/dashboard
-   - /student/pathway
-   - /student/knowledge
-   - /student/skills
-   - /student/guidelines
-   - /student/sp
-   - /student/case
-   - /student/result
+二、总体开发原则
 
-6. 主业务教师端已有：
-   - /teacher/dashboard
-   - /teacher/cases
-   - /teacher/case-generator
+1. 保留 /demo，不破坏任何 demo view。
+2. 不破坏现有 API 和前端页面。
+3. 所有新功能必须服务课题申请书中提出的“多模态学习证据、形成性评价、能力画像、自适应路径、教师干预”。
+4. 真实业务页面必须使用后端真实数据，不使用硬编码 demo 数据。
+5. 兼容现有 SQLite 数据库，新增字段时提供自动补齐或 fallback。
+6. 使用现有技术栈：FastAPI、SQLAlchemy、Next.js、React、Tailwind、Recharts、lucide-react。
+7. 不引入大型新依赖。
+8. 完成后确保后端可启动、前端 npm run typecheck 和 npm run build 通过。
 
-7. 后端已有模块：
-   - knowledge
-   - skills
-   - guidelines
-   - sp
-   - cases
-   - sessions
-   - students
-   - teacher
-   - case_generation
+三、第一阶段：把八维能力画像从“显示层”做成“真实能力模型”
 
-二、总体要求
+当前问题：
+expanded_chart_data 中的 skill_operation 是由 clinical_decision 和 key_information 均值估算；communication 和 humanistic_care 来自最近一次 SP 或默认值。这适合展示，但不足以支撑研究。
 
-1. 不破坏 /demo。
-2. 不破坏现有 API。
-3. 不删除现有功能。
-4. 优先复用 demo 组件的设计语言，但主业务页面必须使用真实 API 数据。
-5. 主业务页面要从“功能页”升级为“临床能力成长与教学闭环页面”。
-6. 使用现有 Next.js、React、Tailwind、Recharts、lucide-react。
-7. 不新增大型依赖。
-8. 完成后 npm run typecheck 和 npm run build 必须通过。
-9. 后端 Python 代码应保持 FastAPI + SQLAlchemy 当前风格。
-10. 如果需要新增字段，优先以兼容方式处理，避免旧数据库启动失败。
-
-三、第一阶段：学生 dashboard 视觉与信息架构升级
-
-修改：
-frontend/app/student/dashboard/StudentDashboardClient.tsx
-
-目标：
-将学生首页从“临床推理训练首页”升级为：
-“ClinPath 学生临床能力成长中心”
-
-新增或调整内容：
-
-1. 顶部标题：
-   ClinPath 学生临床能力成长中心
-   副标题：基于多模块训练数据形成能力画像与个性化学习路径。
-
-2. 顶部四个指标卡：
-   - 综合胜任力指数：从 dashboard.competency 中六维平均值计算
-   - 已完成训练：先用 completed_cases + 可用的其他模块统计，如果无其他模块统计先显示病例数并标注“病例训练”
-   - 当前主要短板：从 competency 最低维度计算
-   - AI推荐下一任务：显示 recent_advice 或 pathway 第一条任务
-
-3. 增加“五模块训练入口矩阵”：
-   - 基础知识学习
-   - 临床技能训练
-   - 临床思维训练
-   - 循证指南学习
-   - SP模拟考核
-   每张卡显示：
-   - 模块名称
-   - 训练目标
-   - 对应能力维度
-   - 进入按钮
-
-4. 增加“AI Learning Gap Diagnosis”卡：
-   从 competency 中取最低2个维度。
-   显示：
-   - 当前短板
-   - 推荐训练模块
-   - 推荐理由
-
-5. 当前能力画像区域改为更接近 demo 的布局：
-   - 左侧：学生信息与综合胜任力指数
-   - 中间：雷达图
-   - 右侧：AI短板诊断和下一步建议
-
-6. 推荐病例区域改为“AI Adaptive Learning Recommendation”
-   每个推荐病例显示：
-   - 病例名称
-   - 推荐原因
-   - 目标能力
-   - 开始训练按钮
-
-四、第二阶段：学生 pathway 页面升级为真实版 AdaptivePathwayDemo
-
-修改：
-frontend/app/student/pathway/page.tsx
-
-目标：
-让真实 pathway 页面更像 /demo?view=pathway，但使用真实数据。
-
-新增布局：
-
-1. 页面标题：
-   AI个性化学习路径
-   副标题：基于能力画像、训练表现与模块完成情况生成下一阶段学习任务。
-
-2. 顶部区域：
-   左侧：当前学生能力画像
-   中间：当前阶段与下一阶段目标
-   右侧：AI Learning Gap Diagnosis
-
-3. 中间增加 Adaptive Recommendation Engine 流程：
-   - 采集学习数据
-   - 计算能力画像
-   - 识别最低能力维度
-   - 匹配训练模块
-   - 生成下一阶段任务
-
-4. recommended_tasks 卡片升级：
-   每张卡显示：
-   - 任务类型
-   - 任务名称
-   - 推荐原因
-   - 目标能力
-   - 优先级
-   - 预计提升
-   - 进入任务按钮
-
-5. 预计提升规则：
-   priority >= 95: +12%
-   priority >= 90: +10%
-   priority >= 85: +8%
-   else: +5%
-
-6. 目标能力规则：
-   - knowledge_unit → 医学知识
-   - clinical_skill → 技能操作 / 临床决策
-   - case → 临床推理 / 鉴别诊断
-   - guideline → 循证决策
-   - sp_case → 信息采集 / 医患沟通
-
-7. 保留 pathway_stages 和 completed_cases，但视觉弱化，放到页面下部。
-
-五、第三阶段：教师 dashboard 升级为真实版 TeacherDashboardDemo
-
-修改：
-frontend/app/teacher/dashboard/page.tsx
-backend/app/routes/teacher.py
-frontend/lib/api.ts
-
-目标：
-让教师端从“班级病例表现”升级为：
-“教师精准教学驾驶舱”
-
-前端新增内容：
-
-1. 标题：
-   教师精准教学驾驶舱
-   副标题：基于班级多模块训练数据进行教学诊断与干预建议。
-
-2. 顶部四个指标卡：
-   - 参与学生
-   - 完成训练总次数
-   - 平均能力提升
-   - 当前共性短板
-
-3. 将“完成病例数”改为“完成训练总次数”
-   如果后端暂时无法统计五模块，先显示 case + guideline + sp + skill + knowledge 的总和。
-
-4. 增加班级能力热力图：
-   行：学生
-   列：医学知识、关键信息、鉴别诊断、证据整合、临床决策、循证医学
-   单元格按分数上色。
-   可复用 demo 的 HeatmapGrid 组件。
-
-5. 增加“AI Teaching Intervention Suggestions”区块：
-   根据 weak_dimensions 生成教学建议。
-   如果循证医学低：建议增加“指南推荐等级与PICO构建”小课。
-   如果鉴别诊断低：建议安排“SLE活动与感染鉴别”病例讨论。
-   如果临床决策低：建议增加“免疫抑制治疗安全监测”专题。
-   如果医学知识低：建议推送基础知识单元。
-   如果关键信息低：建议加强SP问诊训练。
-
-6. 增加“教学闭环”流程：
-   学生训练数据 → 班级短板识别 → 教师教学调整 → 再训练 → 效果评价
+开发目标：
+让八维能力画像真实进入 CompetencyProfile 和路径推荐逻辑。
 
 后端修改：
-在 /api/teacher/dashboard 返回中增加字段：
 
-training_total_count
-module_counts: {
-  knowledge: number,
-  skill: number,
-  case: number,
-  guideline: number,
-  sp: number
-}
-class_heatmap: [
-  {
-    student_id,
-    student_name,
-    medical_knowledge,
-    key_information,
-    differential_diagnosis,
-    evidence_integration,
-    clinical_decision,
-    evidence_based_medicine
-  }
-]
-current_common_weakness
-teaching_interventions
+1. 修改 backend/app/models.py 中 CompetencyProfile：
+   新增字段：
 
-如果某些模块表尚未导入 teacher.py，需要从 models 引入：
-KnowledgeProgress, SkillSession, GuidelineLearningSession, SPSession
+* skill_operation: Float，默认 75
+* communication: Float，默认 75
+* humanistic_care: Float，默认 75
 
-统计规则：
-- knowledge: KnowledgeProgress.status == "completed"
-- skill: SkillSession.status == "completed"
-- case: CaseSession.status == "completed"
-- guideline: count(GuidelineLearningSession)
-- sp: SPSession.status == "completed"
+2. 兼容旧数据库：
+   在应用启动或 seed/init 阶段检查 SQLite 是否缺少这些列。
+   如果缺少，则执行 ALTER TABLE 自动增加列，避免旧数据库报错。
+   或提供明确的迁移脚本 backend/scripts/migrate_competency_profile.py。
 
-六、第四阶段：新增学习证据服务
+3. 修改 backend/app/services/serializers.py：
 
-新增：
-backend/app/services/learning_evidence_service.py
+* 保留 ABILITY_LABELS。
+* 新增 ALL_COMPETENCIES：
+  medical_knowledge
+  skill_operation
+  key_information
+  differential_diagnosis
+  evidence_integration
+  clinical_decision
+  evidence_based_medicine
+  communication
+  humanistic_care
+* chart_data 可继续保留六维，用于旧页面兼容。
+* expanded_chart_data 使用数据库真实八维，不再用估算值。
+* 如果数据库字段为空，才使用 fallback。
 
-功能：
-1. build_student_evidence_summary(db, student_id)
-返回：
+4. 修改 backend/app/services/recommendation_service.py：
+   当前 weakest_abilities 只看 CORE_ABILITIES 六维。
+   新增参数 use_expanded=True。
+   路径推荐应纳入：
+
+* skill_operation
+* communication
+* humanistic_care
+
+推荐规则：
+
+* skill_operation 低：推荐 clinical_skill
+* communication 低：推荐 sp_case
+* humanistic_care 低：推荐 sp_case
+* evidence_based_medicine 低：推荐 guideline
+* differential_diagnosis 低：推荐 case
+* medical_knowledge 低：推荐 knowledge_unit
+
+5. 修改 /api/students/{student_id}/pathway：
+   weak_abilities 返回八维中的最低维度。
+   recommended_tasks 使用八维规则生成。
+
+四、第二阶段：建立统一学习证据事件表
+
+当前问题：
+learning_evidence_service.py 只是从各模块表里统计完成次数和最新分数，尚未形成统一“多模态学习证据库”。
+
+开发目标：
+新增 LearningEvidenceEvent 表，记录每次学习活动如何影响能力画像。
+
+后端新增模型：
+LearningEvidenceEvent
+字段：
+
+* id
+* student_id
+* module_type: knowledge / skill / case / guideline / sp
+* module_id
+* session_id
+* event_type
+* source_table
+* source_id
+* score
+* competency_updates_json
+* evidence_payload_json
+* created_at
+
+新增服务：
+backend/app/services/competency_update_service.py
+
+函数：
+
+1. update_competency_from_knowledge(db, student_id, quiz_score, source_id)
+   更新：
+
+* medical_knowledge
+
+2. update_competency_from_skill(db, student_id, score, detail, source_id)
+   更新：
+
+* skill_operation
+* clinical_decision
+
+3. update_competency_from_case(db, student_id, score, source_id)
+   更新：
+
+* medical_knowledge
+* key_information
+* differential_diagnosis
+* evidence_integration
+* clinical_decision
+* evidence_based_medicine
+
+4. update_competency_from_guideline(db, student_id, score, detail, source_id)
+   更新：
+
+* evidence_based_medicine
+* clinical_decision
+
+5. update_competency_from_sp(db, student_id, scoring, source_id)
+   更新：
+
+* key_information
+* differential_diagnosis
+* communication
+* humanistic_care
+
+统一更新公式：
+new_score = old_score * 0.7 + module_score * 0.3
+
+每次更新都写入 LearningEvidenceEvent：
+competency_updates_json 记录更新前、更新后和变化值。
+evidence_payload_json 记录原始评分 detail。
+
+五、第三阶段：五大模块提交后全部反哺能力画像
+
+修改以下路由：
+
+1. backend/app/routes/knowledge.py
+   在 submit_quiz 成功后调用：
+   update_competency_from_knowledge()
+
+2. backend/app/routes/skills.py
+   在 submit_skill_session 成功后调用：
+   update_competency_from_skill()
+
+3. backend/app/routes/sessions.py
+   病例提交评分后调用：
+   update_competency_from_case()
+   如果已有能力更新逻辑，改为统一走 competency_update_service。
+
+4. backend/app/routes/guidelines.py
+   在 submit_pico 成功后调用：
+   update_competency_from_guideline()
+   替代或整合现有 update_evidence_profile。
+
+5. backend/app/routes/sp.py
+   在 submit_sp_session 成功后调用：
+   update_competency_from_sp()
+
+验收：
+任意一个模块完成后，学生 /dashboard 的八维雷达图应发生合理变化。
+
+六、第四阶段：升级学习路径推荐返回结构
+
+当前问题：
+RecommendedTask 前端根据 type 推断目标能力和预计提升，后端推荐解释还不够研究化。
+
+修改 backend/app/services/recommendation_service.py：
+recommended_tasks 每项返回：
+
+* type
+* id
+* title
+* reason
+* priority
+* target_abilities: string[]
+* source_evidence: string
+* expected_lift: string
+* difficulty_label: string
+* next_step_label: string
+
+示例：
 {
-  student_id,
-  evidence_summary: [
-    {module: "knowledge", label: "知识测验", completed: n, latest_score: score},
-    {module: "skill", label: "技能步骤", completed: n, latest_score: score},
-    {module: "case", label: "病例推理", completed: n, latest_score: score},
-    {module: "guideline", label: "指南PICO", completed: n, latest_score: score},
-    {module: "sp", label: "SP问诊", completed: n, latest_score: score}
-  ]
+type: "guideline",
+id: 1,
+title: "SLE治疗指南PICO训练",
+reason: "循证医学得分58，为当前最低能力维度",
+priority: 96,
+target_abilities: ["循证医学", "临床决策"],
+source_evidence: "最近指南PICO得分低于70，且病例治疗方案缺少推荐等级说明",
+expected_lift: "+12%",
+difficulty_label: "进阶",
+next_step_label: "进入指南PICO训练"
 }
 
-2. build_class_training_summary(db)
-返回全班五模块训练次数。
+修改 frontend/lib/api.ts 中 RecommendedTask 类型。
+修改 frontend/components/RecommendedTaskCard.tsx：
+优先使用后端返回的 target_abilities、expected_lift、source_evidence、difficulty_label、next_step_label。
+如果后端没有，保留前端 fallback。
 
-3. build_class_heatmap(db)
-返回每个学生的能力画像分数。
+七、第五阶段：教师端升级为研究数据平台
 
-然后在：
-backend/app/routes/students.py
-backend/app/routes/teacher.py
-中调用这些服务，避免在路由中写太多统计逻辑。
+当前问题：
+教师端已接近 demo，但缺少学生详情、研究导出、教师复核和教学干预记录。
 
-七、第五阶段：能力画像模型升级，先做兼容设计
+新增后端 API：
 
-当前 CompetencyProfile 主要是六维：
-medical_knowledge
-key_information
-differential_diagnosis
-evidence_integration
-clinical_decision
-evidence_based_medicine
+1. GET /api/teacher/students/{student_id}/learning-profile
+   返回：
 
-未来希望扩展到：
-skill_operation
-communication
-humanistic_care
+* student
+* competency
+* learning_evidence
+* evidence_events
+* recommended_tasks
+* completed_sessions
+* latest_sp
+* latest_guideline
+* growth_trend
 
-本阶段不要强制改数据库，以免破坏旧库。
-先在 serializer 中提供兼容字段：
-- skill_operation：如果数据库没有字段，则用 clinical_decision 与 key_information 的均值估算
-- communication：如果数据库没有字段，则从最近SP session communication_score 估算，否则默认 75
-- humanistic_care：如果数据库没有字段，则从最近SP session humanistic_care_score 估算，否则默认 75
+2. GET /api/teacher/export/research-data
+   返回 CSV 或 JSON：
 
-前端 radar 支持显示八维：
-医学知识
-技能操作
-关键信息提取
-鉴别诊断
-证据整合
-循证决策
-医患沟通
-人文关怀
+* 匿名 student_code
+* module_type
+* score
+* competency_before
+* competency_after
+* created_at
+* class_name
 
-等确认稳定后，再做正式数据库迁移。
+3. POST /api/teacher/interventions
+   记录教师教学干预：
+   字段：
 
-八、第六阶段：统一组件
+* title
+* target_ability
+* target_students_json
+* intervention_type
+* description
+* created_at
 
-新增或复用：
-frontend/components/
-- LearningEvidenceCards.tsx
-- LearningGapDiagnosisCard.tsx
-- AdaptiveRecommendationEngine.tsx
-- RecommendedTaskCard.tsx
-- ClassHeatmap.tsx
-- TeachingInterventionPanel.tsx
-- TrainingLoopFlow.tsx
+4. GET /api/teacher/interventions
+   返回教学干预记录。
 
-要求：
-1. demo 页面可继续使用自己的静态组件。
-2. 主业务页面使用这些真实数据组件。
-3. 组件样式接近 demo：白底、蓝绿医学色、圆角卡片、清晰图表。
-4. 不要引入过度动画。
+5. POST /api/teacher/reviews
+   教师复核 AI 评分：
+   字段：
 
-九、验收标准
+* evidence_event_id
+* ai_score
+* teacher_score
+* comment
+* agreement_delta
+* created_at
 
-1. /demo 所有 view 保持可用：
-   /demo?view=overview
-   /demo?view=competency
-   /demo?view=pathway
-   /demo?view=multimodal
-   /demo?view=osce
-   /demo?view=teacher
+新增模型：
 
-2. /student/dashboard 显著接近 demo 的“能力评估 + AI短板诊断 + 多模块训练”表达。
+* TeachingIntervention
+* TeacherScoreReview
 
-3. /student/pathway 显著接近 demo 的“个性化路径 + 推荐引擎 + 任务卡”表达。
+前端新增页面：
 
-4. /teacher/dashboard 显著接近 demo 的“班级热力图 + 教学干预建议 + 教学闭环”表达。
+* /teacher/students/[studentId]
+* /teacher/research-export
+* /teacher/interventions
+* /teacher/score-review
 
-5. 真实业务页面必须使用后端 API，不使用硬编码 demo 数据。
+八、第六阶段：教师 dashboard 继续完善
 
-6. 不破坏：
-   - 知识学习
-   - 临床技能
-   - 病例训练
-   - 循证指南
-   - SP考核
-   - AI生成病例
-   - 病例管理
+修改 /teacher/dashboard：
 
-7. 后端启动正常。
-8. 前端 npm run typecheck 通过。
-9. 前端 npm run build 通过。
+1. class_heatmap 升级为八维。
+2. class_competency 雷达图使用 expanded 八维。
+3. 增加模块完成分布图：
 
-十、完成后输出
+* 知识测验
+* 技能训练
+* 病例推理
+* 指南PICO
+* SP问诊
 
-请输出：
-1. 修改了哪些文件。
-2. 新增了哪些组件和服务。
-3. 学生端对齐 demo 的点。
-4. 教师端对齐 demo 的点。
-5. 当前仍未完成但建议下一阶段做的事项。
+4. 增加“研究数据入口”按钮：
+
+* 导出研究数据
+* 教师评分复核
+* 教学干预记录
+
+5. 学生表现表中“查看详情”改为可点击，进入 /teacher/students/[studentId]。
+
+九、第七阶段：学生模块详情页提升为评价型教学页面
+
+逐步优化：
+
+1. /student/knowledge
+   增加：
+
+* 掌握度趋势
+* 错因分析
+* 关联病例推荐
+* 完成后进入下一任务按钮
+
+2. /student/skills
+   增加：
+
+* OSCE式评分卡
+* 完整性、顺序、安全性三维评分条
+* 常见错误高亮
+* 反哺能力画像提示
+
+3. /student/case
+   增加：
+
+* 关键信息提取面板
+* 鉴别诊断表
+* 支持证据 / 反证
+* AI追问轨迹
+* 结构化评分卡
+
+4. /student/guidelines
+   增加：
+
+* PICO分项评分
+* 推荐等级理解评分
+* 临床适用性评分
+* 风险个体化评分
+
+5. /student/sp
+   增加：
+
+* 实时信息提取面板
+* 待补充信息
+* OSCE评分卡
+* 能力画像更新提示
+
+十、第八阶段：研究与结题支持
+
+新增页面：
+
+* /teacher/research-dashboard
+
+展示：
+
+1. 前后测能力变化
+2. 各模块完成率
+3. 学生能力成长曲线
+4. AI评分与教师评分一致性
+5. 班级共性短板变化
+6. 教学干预前后对比
+
+新增导出：
+
+* research_dataset.csv
+* competency_growth.csv
+* ai_teacher_agreement.csv
+* module_completion.csv
+
+导出数据必须匿名化：
+
+* 不导出学生姓名
+* 使用 student_code
+* 保留 class_name 或 group_name
+
+十一、质量与安全要求
+
+1. 所有 AI 评分结果必须标注“AI形成性评价，仅供教学参考，最终评价由教师确认”。
+2. 教师端增加复核入口，避免 AI 评分直接替代教师。
+3. 研究数据导出默认匿名化。
+4. 不记录真实敏感病人信息；病例库数据必须为教学病例或匿名化病例。
+5. 前后端错误提示清楚，不因某模块暂无数据导致页面崩溃。
+
+十二、验收标准
+
+1. /demo 六个视图保持可用。
+2. /student/dashboard 显示真实八维能力画像、五模块学习证据、AI短板诊断和推荐任务。
+3. /student/pathway 推荐任务由后端返回 target_abilities、source_evidence、expected_lift。
+4. 任一模块完成后，能力画像有对应维度更新，并写入 LearningEvidenceEvent。
+5. /teacher/dashboard 显示八维班级热力图、五模块训练总数、教学干预建议和研究入口。
+6. 教师可查看单个学生学习画像。
+7. 教师可导出匿名化研究数据。
+8. 教师可复核 AI 评分。
+9. npm run typecheck 通过。
+10. npm run build 通过。
+11. 后端启动正常，核心 API smoke test 通过。
+
+十三、完成后请输出
+
+1. 修改文件清单。
+2. 新增模型清单。
+3. 新增 API 清单。
+4. 五模块如何反哺能力画像。
+5. 推荐算法升级说明。
+6. 教师端研究支持功能说明。
+7. 仍待下一阶段完善的问题。
+
 

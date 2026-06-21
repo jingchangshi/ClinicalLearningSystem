@@ -1,5 +1,7 @@
 import argparse
 
+from sqlalchemy import inspect, text
+
 from app.database import Base, SessionLocal, engine
 from app.models import (
     Case,
@@ -20,6 +22,7 @@ def init_db(reset: bool = False) -> None:
     if reset:
         Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
+    _ensure_compatible_schema()
 
     db = SessionLocal()
     try:
@@ -217,6 +220,25 @@ def _make_sp_case(payload: dict) -> SPCase:
         expected_tasks=dumps_json(payload["expected_tasks"]),
         scoring_rubric=dumps_json(payload["scoring_rubric"]),
     )
+
+
+def _ensure_compatible_schema() -> None:
+    inspector = inspect(engine)
+    table_names = set(inspector.get_table_names())
+    if "competency_profiles" not in table_names:
+        return
+    existing_columns = {column["name"] for column in inspector.get_columns("competency_profiles")}
+    required_columns = {
+        "skill_operation": "FLOAT DEFAULT 75 NOT NULL",
+        "communication": "FLOAT DEFAULT 75 NOT NULL",
+        "humanistic_care": "FLOAT DEFAULT 75 NOT NULL",
+    }
+    missing = [(name, ddl) for name, ddl in required_columns.items() if name not in existing_columns]
+    if not missing:
+        return
+    with engine.begin() as connection:
+        for name, ddl in missing:
+            connection.execute(text(f"ALTER TABLE competency_profiles ADD COLUMN {name} {ddl}"))
 
 
 def _knowledge_payloads() -> list[dict]:

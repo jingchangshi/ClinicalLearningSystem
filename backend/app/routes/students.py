@@ -19,7 +19,7 @@ from app.services.recommendation_service import (
     determine_pathway_stage,
     weakest_abilities,
 )
-from app.services.learning_evidence_service import build_student_evidence_summary, latest_sp_scores
+from app.services.learning_evidence_service import build_student_evidence_summary
 from app.services.serializers import (
     ABILITY_LABELS,
     serialize_case_summary,
@@ -47,13 +47,13 @@ def get_student(student_id: int, db: Session = Depends(get_db)) -> dict:
 @router.get("/{student_id}/competency")
 def get_competency(student_id: int, db: Session = Depends(get_db)) -> dict:
     student = _get_student(db, student_id)
-    return serialize_profile(student.competency_profile, **latest_sp_scores(db, student_id))
+    return serialize_profile(student.competency_profile)
 
 
 @router.get("/{student_id}/dashboard")
 def get_dashboard(student_id: int, db: Session = Depends(get_db)) -> dict:
     student = _get_student(db, student_id)
-    profile = serialize_profile(student.competency_profile, **latest_sp_scores(db, student_id))
+    profile = serialize_profile(student.competency_profile)
     cases = [serialize_case_summary(case) for case in db.query(Case).all()]
     recommendations = _recommendations_for_student(db, student_id, profile, cases)
     completed = [session for session in student.sessions if session.status == "completed"]
@@ -81,7 +81,7 @@ def get_dashboard(student_id: int, db: Session = Depends(get_db)) -> dict:
 @router.get("/{student_id}/pathway")
 def get_pathway(student_id: int, db: Session = Depends(get_db)) -> dict:
     student = _get_student(db, student_id)
-    profile = serialize_profile(student.competency_profile, **latest_sp_scores(db, student_id))
+    profile = serialize_profile(student.competency_profile)
     cases = [serialize_case_summary(case) for case in db.query(Case).all()]
     completed = [
         {
@@ -107,7 +107,7 @@ def get_pathway(student_id: int, db: Session = Depends(get_db)) -> dict:
         if session.score
     ]
     recommendation = choose_recommendation(profile, recent_scores, cases)
-    weak_keys = weakest_abilities(profile, limit=3)
+    weak_keys = weakest_abilities(profile, limit=4, use_expanded=True)
     knowledge_suggestions = _knowledge_suggestions(db, weak_keys)
     learning_pathway = build_learning_pathway(
         profile,
