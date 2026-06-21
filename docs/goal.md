@@ -1,304 +1,481 @@
-目标：将当前系统品牌名从“诊途”统一改为“ClinPath”，并新增一个“展示模式 /demo”，用于课题申报截图展示。展示模式不影响现有学生端、教师端和后端功能，只作为高质量静态/半动态展示页，集中呈现系统的教育学价值、AI个性化学习、自适应路径、数字画像、SP考核和教师驾驶舱。
+目标：彻底重构 /demo 展示模式，使其服务于课题申报截图，而不是普通产品功能展示。展示模式要突出“AI辅助临床教学系统”的研究价值：多模块、多模态训练，多维度能力评估，AI识别短板，个性化学习路径，教师精准干预，形成完整医学教育闭环。
 
-仓库：jingchangshi/ClinicalLearningSystem
-基于当前最新版本实现。
+当前系统主题：
+ClinPath：AI辅助临床教学与自适应学习路径系统
 
-总体要求：
-1. 全站中文名称统一改为“ClinPath”。
-2. 页面副标题可使用：“AI辅助临床教学与自适应学习路径系统”。
-3. 保留原系统所有功能和 API。
-4. 新增 /demo 展示模式，用于申请书截图。
-5. /demo 中提供多个可选择展示方案，每个方案都要有独立截图友好的页面或标签。
-6. 风格要偏医学教育研究平台，不要互联网娱乐化。
-7. 重点突出：
-   - AI Learning Profile
-   - Learner Digital Twin
-   - Competency Growth Map
-   - AI Adaptive Learning Recommendation
-   - SP OSCE Assessment
-   - Teacher Analytics Dashboard
-8. 所有页面需要适配 1440px 宽度截图。
-9. 使用现有 Next.js、React、Tailwind、lucide-react、Recharts。
-10. 不新增复杂依赖。
-11. 最终确保 npm run build、npm run typecheck 通过。
+课题申报建议主题：
+“AI辅助临床能力形成性评价与个性化学习路径构建及应用研究”
 
-第一部分：品牌名统一替换
-- 将 README、首页、导航、页面标题、FastAPI title、文案中的“诊途”替换为“ClinPath”。
-- 中文描述统一为：
-  ClinPath：AI辅助临床教学与自适应学习路径系统
-- 若原来写“临床推理与自适应学习系统”，可改为：
-  AI辅助临床教学与自适应学习路径系统
-- 不要改数据库表名。
-- 不要破坏 API 路径。
+展示模式必须围绕该主题重新设计。
 
-第二部分：新增展示模式入口
-新增页面：
-- frontend/app/demo/page.tsx
-- 可拆分组件到 frontend/components/demo/
+一、总体设计原则
 
-在首页 / 增加一个入口卡片：
-标题：展示模式
-副标题：用于课题申报、教学汇报和系统截图展示
-按钮：进入 ClinPath 展示模式
-链接：/demo
+1. /demo 不再只是几个普通 view，而是申请书截图专用“图版系统”。
+2. 每个 view 都必须能单独截图放入申请书。
+3. 每张截图必须有明确标题、研究价值、教育闭环和关键数据。
+4. 页面重点从“功能模块罗列”改为：
+   - 多维度能力评估
+   - 个性化学习路径
+   - 多模块训练闭环
+   - AI干预逻辑
+   - 教师精准教学决策
+5. 每个页面都要让评委一眼看到：
+   “这个系统已经开发出来，且能支撑课题研究。”
+6. 数据可以使用静态模拟数据，不依赖后端 API。
+7. 页面适配 1440px 宽度截图。
+8. 保持医学教育研究平台风格：白底、蓝绿医学色、卡片化、图表化、流程化。
+9. 使用现有 Next.js、Tailwind、Recharts、lucide-react，不新增大型依赖。
+10. npm run build 和 npm run typecheck 必须通过。
 
-第三部分：/demo 总览页结构
-/demo 页面顶部：
-- ClinPath
-- AI辅助临床教学与自适应学习路径系统
-- 标签：Prototype v2 / Medical Education AI / Adaptive Learning / OSCE-ready
+二、重构 /demo 信息架构
 
-顶部右侧放一个“截图模式”提示：
-“建议浏览器宽度 1440px，适合申请书截图。”
+将 /demo 的展示 view 改为以下 6 个：
 
-/demo 下方提供 5 个展示方案卡片或 tab：
-1. Academic Medicine Dashboard
-2. Learner Digital Twin
-3. Bloom 2-Sigma Adaptive Pathway
-4. Competency Growth Map
-5. Grant Screenshot Storyboard
+1. /demo?view=overview
+   系统研究总览图：AI辅助临床教学闭环
 
-用户点击不同方案时，在同一页面下方切换展示内容即可。也可以使用 query 参数：
-/demo?view=academic
-/demo?view=digital-twin
-/demo?view=bloom
-/demo?view=growth-map
-/demo?view=storyboard
+2. /demo?view=competency
+   多维度能力评估中心：形成性评价与能力画像
 
-第四部分：方案一 Academic Medicine Dashboard
-做成适合截图的医学教育研究平台首页。
+3. /demo?view=pathway
+   个性化学习路径：AI识别短板并推荐任务
 
-布局：
-- 顶部：ClinPath 学生学习驾驶舱
-- 左上：学生信息卡
-  - 学生：李明
-  - 年级：临床医学本科三年级
-  - 当前阶段：基础疾病识别 → 复杂症状鉴别
-- 顶部四个指标卡：
-  1. Clinical Reasoning Index：78，+12%
-  2. Evidence-Based Decision：72，+8%
-  3. History Taking：81，+15%
-  4. Learning Maturity：74，+10%
-- 中部左侧：能力雷达图，使用 Recharts
-  维度：
-  医学知识 72
-  关键信息提取 68
-  鉴别诊断 61
-  证据整合 70
-  临床决策 66
-  循证医学 58
-- 中部右侧：AI Learning Profile
-  显示：
-  知识掌握 Level B
-  临床推理 Level C+
-  循证决策 Level C
-  沟通问诊 Level B+
-- 底部：AI Adaptive Learning Recommendation
-  三张推荐任务卡：
-  1. SLE与感染鉴别病例
-     原因：鉴别诊断能力低于同年级均值
-     预计提升：+12%
-  2. EULAR风湿免疫指南PICO训练
-     原因：循证医学能力为当前最低维度
-     预计提升：+10%
-  3. 标准化病人问诊训练
-     原因：需加强病史采集与共情表达
-     预计提升：+9%
+4. /demo?view=multimodal
+   多模块多模态训练矩阵：知识、技能、病例、指南、SP
 
-视觉：
-- 白底
-- 蓝绿色医学色
-- 轻微阴影
-- 卡片化
-- 数据标签醒目
-- 适合截图，不要太拥挤。
+5. /demo?view=osce
+   SP-OSCE综合考核：问诊、沟通、推理、人文关怀
 
-第五部分：方案二 Learner Digital Twin
-目标：突出“学习者数字画像”。
+6. /demo?view=teacher
+   教师精准教学驾驶舱：班级短板与教学干预
 
-布局：
-标题：Learner Digital Twin 学习者数字画像
+默认进入 /demo 时展示 overview。
+
+三、/demo?view=overview 页面设计
+
+页面标题：
+ClinPath 系统研究总览
+副标题：
+AI辅助临床能力形成性评价与个性化学习路径构建
+
+页面中心做一个大闭环流程图，必须突出：
+
+输入层：
+- 学生基础水平
+- 学习行为数据
+- 病例作答数据
+- SP问诊数据
+- 指南PICO作答
+
+训练层：
+五个模块横向排列：
+1. 基础知识学习
+2. 临床技能训练
+3. 临床思维训练
+4. 循证指南学习
+5. 标准化病人考核
+
+评价层：
+六维能力画像：
+1. 医学知识
+2. 关键信息提取
+3. 鉴别诊断
+4. 证据整合
+5. 临床决策
+6. 医患沟通
+
+AI层：
+- 短板识别
+- 难度分层
+- 下一任务推荐
+- 形成性反馈
+
+输出层：
+- 个性化学习路径
+- 教师精准干预
+- 胜任力成长曲线
+- 教学质量改进
+
+页面右侧放一个“研究创新点”卡片：
+- 从单次考试转向全过程形成性评价
+- 从统一教学转向个性化路径
+- 从单一病例训练转向多模块综合训练
+- 从经验反馈转向数据驱动反馈
+
+视觉要求：
+- 中央闭环要非常醒目。
+- 五个训练模块用不同但协调的图标。
+- AI引擎作为中心节点。
+- 适合作为申请书“技术路线图”。
+
+四、/demo?view=competency 页面设计
+
+页面标题：
+多维度能力评估中心
+副标题：
+从知识、技能、思维、循证到沟通的形成性评价
+
+页面布局：
 
 左侧：
-- 学生头像占位圆形
-- 学生：王佳
-- 学习阶段：复杂症状鉴别
-- 系统判定：
-  - 知识掌握：Level B
-  - 临床推理：Level C
-  - 循证能力：Level C
-  - 沟通能力：Level B+
+学生能力画像卡：
+- 学生：临床医学本科生 A
+- 当前阶段：复杂症状鉴别训练
+- 综合胜任力指数：76
+- 较上次提升：+11%
 
 中间：
-- 大雷达图或六边形能力图
-- 显示六大能力维度
+大雷达图，占页面视觉中心。
+维度：
+- 医学知识 78
+- 技能操作 72
+- 关键信息提取 68
+- 鉴别诊断 61
+- 证据整合 70
+- 循证决策 58
+- 医患沟通 82
+- 人文关怀 80
 
 右侧：
-- AI Diagnostic Summary
-  文案：
-  系统识别该学生在“鉴别诊断”和“循证医学”维度存在短板，建议优先完成复杂症状群病例、指南PICO训练和SP问诊任务。
-- Next Best Action
-  1. 完成“成人Still病与感染鉴别”病例
-  2. 完成“免疫抑制治疗安全监测”知识单元
-  3. 完成“发热皮疹患者SP问诊”
+AI短板诊断卡：
+标题：AI Learning Gap Diagnosis
+内容：
+系统识别该学生当前主要短板为“循证决策”和“鉴别诊断”。建议优先完成指南PICO训练、复杂症状群病例和SP问诊任务。
 
 底部：
-- Learning Evidence Timeline
-  用横向时间线展示：
-  知识测验 → 病例推理 → 指南PICO → SP考核 → 能力画像更新
+形成性评价证据来源表：
+列：
+- 能力维度
+- 数据来源
+- 当前分数
+- 推荐干预
 
-第六部分：方案三 Bloom 2-Sigma Adaptive Pathway
-目标：突出“AI一对一导师”和“自适应学习路径”。
+示例：
+医学知识 | 知识测验 + 病例作答 | 78 | 高阶知识迁移
+技能操作 | 技能步骤评分 | 72 | 关节查体训练
+鉴别诊断 | 病例推理 | 61 | 发热皮疹鉴别病例
+循证决策 | 指南PICO | 58 | EULAR/ACR指南训练
+医患沟通 | SP问诊 | 82 | 综合OSCE
 
-标题：
-Bloom 2-Sigma Inspired AI Tutor
+视觉要求：
+- 雷达图要大。
+- 能力短板用 amber 或 rose 高亮。
+- 页面看起来像“研究量表 + AI画像”。
+
+五、/demo?view=pathway 页面设计
+
+页面标题：
+AI个性化学习路径
 副标题：
-从统一教学走向一对一个性化临床能力训练
+基于能力短板的动态任务推荐与分层训练
+
+页面重点：
+展示“不同学生不是同一条路径”。
 
 布局：
-左侧一列：传统教学模式
-- 同样课程
-- 同样病例
-- 同样考试
-- 反馈滞后
+顶部放两个学生对比卡：
 
-中间箭头：
-AI Adaptive Engine
+学生A：基础薄弱型
+能力特点：
+- 医学知识 58
+- 关键信息提取 62
+- 鉴别诊断 55
+AI推荐路径：
+基础知识单元
+→ SLE基础病例
+→ 结构化问诊SP
+→ 标准病例
+→ 形成性反馈
 
-右侧两条学生路径：
-学生A：基础薄弱
-路径：
-基础知识单元 → SLE基础病例 → 结构化问诊SP → 标准病例 → 阶段反馈
+学生B：高阶提升型
+能力特点：
+- 医学知识 82
+- 临床推理 78
+- 循证决策 60
+AI推荐路径：
+复杂病例
+→ 鉴别诊断训练
+→ 指南PICO
+→ 高阶SP考核
+→ 文献阅读任务
 
-学生B：基础较好
-路径：
-复杂病例 → 鉴别诊断训练 → 指南PICO → 高阶SP考核 → 科研文献训练
+中部：
+Adaptive Recommendation Engine 卡片
+显示推荐逻辑：
+1. 采集学习数据
+2. 计算能力画像
+3. 识别最低能力维度
+4. 匹配训练模块
+5. 生成下一阶段任务
 
 底部：
-- One-to-One Learning Loop
-  Assessment → Diagnosis of Learning Gap → Adaptive Task → AI Feedback → Competency Update
+推荐任务卡片：
+- 任务类型
+- 推荐原因
+- 目标能力
+- 预计提升
 
-视觉：
-- 用流程图卡片
-- 箭头清晰
-- 适合放在申请书“技术路线图”或“研究思路图”。
+示例：
+指南PICO训练
+推荐原因：循证医学得分低于70
+目标能力：循证决策
+预计提升：+10%
 
-第七部分：方案四 Competency Growth Map
-目标：突出胜任力成长路径。
+视觉要求：
+- 路径箭头要清晰。
+- 两个学生路径要形成强烈对比。
+- 个性化是本页最核心视觉重点。
 
-标题：
-Competency Growth Map 医学生胜任力成长地图
+六、/demo?view=multimodal 页面设计
+
+页面标题：
+多模块多模态临床训练矩阵
+副标题：
+知识、技能、临床思维、循证指南与SP考核一体化
+
+这是最重要的页面之一，要突出你的系统综合性。
 
 布局：
-横向成长地图或阶梯式路径：
-Level 1 基础知识识别
-Level 2 标准病例推理
-Level 3 复杂症状鉴别
-Level 4 循证决策训练
-Level 5 SP-OSCE 综合考核
+做一个 5 × 6 矩阵。
 
-每个 level 用卡片展示：
-- 当前状态：已完成 / 进行中 / 待解锁
-- 对应能力：
-  医学知识、病史采集、体格检查、鉴别诊断、循证决策、医患沟通
-- 对应任务：
-  知识单元、病例、技能、指南、SP
+横轴：五大训练模块
+1. 基础知识
+2. 临床技能
+3. 临床思维
+4. 循证指南
+5. SP考核
+
+纵轴：六大能力维度
+1. 医学知识
+2. 技能操作
+3. 信息采集
+4. 鉴别诊断
+5. 临床决策
+6. 医患沟通
+
+矩阵格子中用不同强度显示该模块对能力的贡献：
+- 强关联：深色
+- 中关联：浅色
+- 弱关联：灰色
+
+例如：
+基础知识 → 医学知识：强
+临床技能 → 技能操作：强
+临床思维 → 鉴别诊断：强
+循证指南 → 临床决策/循证决策：强
+SP考核 → 信息采集/医患沟通/临床推理：强
+
+右侧放“多模态数据来源”：
+- 文本作答
+- 操作步骤
+- 多轮问诊对话
+- PICO结构化回答
+- 评分轨迹
+- 学习时序数据
+
+底部放一句醒目结论：
+ClinPath 不是单一问答工具，而是覆盖临床胜任力培养全过程的多模块 AI 教学系统。
+
+视觉要求：
+- 矩阵必须足够醒目。
+- 强调“综合系统”是亮点。
+- 适合申请书中“系统功能架构”截图。
+
+七、/demo?view=osce 页面设计
+
+页面标题：
+SP-OSCE标准化病人综合考核
+副标题：
+评估问诊、沟通、临床推理与人文关怀
+
+布局：
+左侧：
+SP聊天界面，模拟真实问诊：
+患者：
+医生，我最近反复发热，还有皮疹和关节痛，很担心是不是严重疾病。
+学生：
+我理解您的担心。请问发热持续多久？皮疹是否与日晒有关？有没有口腔溃疡或尿液异常？
+患者：
+大概一个月了，晒太阳后脸上的红斑会加重，也有口腔溃疡，最近尿里泡沫多。
+
+中间：
+实时信息提取面板：
+已识别关键线索：
+- 发热
+- 日晒后皮疹
+- 口腔溃疡
+- 泡沫尿
+- 关节痛
+
+待补充信息：
+- 用药史
+- 感染线索
+- 妊娠情况
+- 肾功能和尿蛋白
 
 右侧：
-- Competency Matrix
-  表格展示能力维度与训练模块的映射：
-  基础知识学习
-  临床技能训练
-  临床思维训练
-  循证指南学习
-  SP考核
+OSCE评分卡：
+- 病史采集 84
+- 沟通表达 88
+- 临床推理 76
+- 人文关怀 90
+- 总分 84.5
 
-第八部分：方案五 Grant Screenshot Storyboard
-目标：专门用于申请书截图，像产品宣传板一样展示 6 张“系统截图缩略图”。
+底部：
+AI形成性反馈：
+本次问诊能较好体现共情表达和核心症状采集，但对感染鉴别、用药史和危险因素询问仍不足。建议进入“发热皮疹鉴别诊断病例”和“指南PICO训练”。
 
-标题：
-ClinPath Grant Screenshot Storyboard
+视觉要求：
+- 聊天界面要真实。
+- 评分卡要醒目。
+- 突出 SP 不只是聊天，而是 OSCE 能力评价。
+
+八、/demo?view=teacher 页面设计
+
+页面标题：
+教师精准教学驾驶舱
 副标题：
-用于课题申报书的系统原型展示图组
+基于班级学习数据的教学诊断与干预建议
 
-六个大卡片：
-1. 系统总架构
-   知识 → 技能 → 病例 → 指南 → SP → 能力画像 → AI推荐
-2. 学生首页
-   展示能力画像与推荐任务
-3. 临床推理训练
-   展示病例分步推理与AI追问
-4. 循证指南学习
-   展示PICO、推荐等级、临床适用性
-5. SP标准化病人考核
-   展示问诊对话和OSCE评分
+布局：
+顶部四个班级指标：
+- 参与学生：48
+- 完成训练：326次
+- 平均能力提升：+13.2%
+- 当前共性短板：循证决策
+
+中部左侧：
+班级能力热力图
+行：学生A-E
+列：医学知识、技能操作、鉴别诊断、循证决策、沟通能力
+用颜色显示分数高低。
+
+中部右侧：
+班级雷达图 + 共性短板：
+- 循证决策 61
+- 鉴别诊断 66
+- 临床决策 70
+
+底部：
+AI Teaching Intervention Suggestions
+三条教学建议：
+1. 下周增加“指南推荐等级与PICO构建”小课
+2. 安排“SLE活动与感染鉴别”病例讨论
+3. 对循证能力低于60分学生推送个性化指南任务
+
+右下：
+教学闭环：
+学生训练数据
+→ 班级短板识别
+→ 教师教学调整
+→ 再训练
+→ 效果评价
+
+视觉要求：
+- 像教育数据驾驶舱。
+- 评委要能看出教师端价值。
+- 不要只是学生端系统。
+
+九、替换当前 /demo 的导航
+
+/demo 顶部导航不再使用原来的英文 view 名称，改为：
+
+1. 系统总览
+2. 能力评价
+3. 个性化路径
+4. 多模态训练
+5. SP考核
 6. 教师驾驶舱
-   展示班级短板、教学重点、训练记录
 
-每个卡片要像缩略截图：
-- 有小标题
-- 有简化 UI 框
-- 有数据
-- 有图表或流程
-- 不需要真实路由截图，只需要高质量展示化界面。
+每个 tab 下方加一句说明：
+“本页适合用于申请书：技术路线 / 研究内容 / 系统功能 / 评价体系 / 教学应用场景。”
 
-第九部分：新增组件建议
-建议创建：
-frontend/components/demo/DemoShell.tsx
-frontend/components/demo/MetricCard.tsx
-frontend/components/demo/DemoRadar.tsx
-frontend/components/demo/AcademicDashboardDemo.tsx
-frontend/components/demo/LearnerDigitalTwinDemo.tsx
-frontend/components/demo/BloomPathwayDemo.tsx
-frontend/components/demo/CompetencyGrowthMapDemo.tsx
-frontend/components/demo/GrantStoryboardDemo.tsx
+十、设计语言统一
 
-要求：
-- 组件数据先写死，专用于截图。
-- 不要依赖后端 API，避免截图时数据加载失败。
-- 使用 Tailwind 实现医学教育风格。
-- 使用 lucide-react 图标增强质感。
-- 使用 Recharts 绘制雷达图或折线/柱状图。
-- 所有展示方案都必须在 /demo 可切换。
+统一标题结构：
+- 中文主标题
+- 英文小标题
+- 研究价值说明
 
-第十部分：UI细节要求
-统一色系：
-- 主色：teal / cyan / blue
-- 背景：slate-50
-- 卡片：white
-- 强调：emerald / clinic teal
-- 风险提示：rose / amber 少量使用
+例如：
+多维度能力评估中心
+Multidimensional Competency Assessment
+基于知识测验、病例推理、技能步骤、指南PICO和SP问诊数据形成学生能力画像。
 
-统一文案：
-- 不要写“测试页面”
-- 不要写“假数据”
-- 使用“展示模式”“原型演示”“课题申报截图模式”
-- 页面中可以出现：
-  - AI Learning Profile
-  - Learner Digital Twin
-  - Adaptive Pathway
-  - Competency Growth Map
-  - SP-OSCE
-  - Teacher Analytics
+统一视觉元素：
+- 能力雷达图
+- 任务路径箭头
+- 模块矩阵
+- OSCE评分卡
+- 教师热力图
+- AI推荐理由卡
 
-第十一部分：验收标准
-完成后请确认：
-1. 全站可搜索到的“诊途”已替换为“ClinPath”，除非 README 中作为历史说明出现。
-2. /demo 页面可访问。
-3. /demo 的五个方案可切换展示。
-4. / 页面有展示模式入口。
-5. 不破坏现有学生端、教师端、病例训练、知识、技能、指南、SP、病例生成器。
-6. npm run typecheck 通过。
-7. npm run build 通过。
-8. 如有 lint 错误一并修复。
+统一关键词：
+- 形成性评价
+- 多维度能力画像
+- 个性化学习路径
+- 多模块多模态训练
+- AI短板识别
+- 教师精准干预
+- 临床胜任力
 
-最后输出：
+十一、删除或弱化原 demo 中不够聚焦的内容
+
+如果当前 demo 里有：
+- 过多英文营销词
+- 普通指标卡堆砌
+- 没有教育学逻辑的图表
+- 与申请书无关的装饰
+- 只展示单个学生而没有教学闭环
+
+请重构或删除。
+
+十二、组件建议
+
+建议重建组件：
+
+frontend/components/demo/
+- DemoShell.tsx
+- DemoTabNav.tsx
+- DemoMetricCard.tsx
+- CompetencyRadarLarge.tsx
+- SystemOverviewDemo.tsx
+- CompetencyAssessmentDemo.tsx
+- AdaptivePathwayDemo.tsx
+- MultimodalMatrixDemo.tsx
+- SPOSCEDemo.tsx
+- TeacherDashboardDemo.tsx
+- FlowArrow.tsx
+- HeatmapGrid.tsx
+
+十三、验收标准
+
+完成后请确保：
+
+1. /demo 默认展示系统总览。
+2. /demo?view=overview 展示 AI 教学闭环。
+3. /demo?view=competency 强突出多维度能力评价。
+4. /demo?view=pathway 强突出个性化学习路径。
+5. /demo?view=multimodal 强突出五大训练模块和多模态数据。
+6. /demo?view=osce 强突出 SP-OSCE 评价。
+7. /demo?view=teacher 强突出教师端教学干预。
+8. 每个页面在 1440px 宽度下截图完整、美观、有说服力。
+9. 不依赖后端 API。
+10. 不影响现有业务页面。
+11. npm run typecheck 通过。
+12. npm run build 通过。
+
+十四、最终输出
+
+完成后输出：
 - 修改了哪些文件
-- 新增了哪些 demo 组件
-- 如何启动
-- 推荐截图路径：
-  /demo?view=academic
-  /demo?view=digital-twin
-  /demo?view=bloom
-  /demo?view=growth-map
-  /demo?view=storyboard
+- 每个 demo view 的截图用途
+- 推荐放入申请书的位置：
+
+overview：技术路线图
+competency：评价体系
+pathway：个性化学习路径
+multimodal：系统功能架构
+osce：标准化病人考核模块
+teacher：教学应用与质量改进
+
