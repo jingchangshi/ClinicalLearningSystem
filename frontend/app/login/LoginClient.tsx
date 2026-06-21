@@ -27,11 +27,11 @@ export function LoginClient() {
       const user = await login(username, password);
       const next = searchParams.get("next");
       if (next?.startsWith("/")) {
-        router.push(next);
+        router.replace(next);
       } else if (user.role === "student") {
-        router.push("/student/dashboard");
+        router.replace("/student/dashboard");
       } else {
-        router.push("/teacher/dashboard");
+        router.replace("/teacher/dashboard");
       }
       router.refresh();
     } catch (reason) {

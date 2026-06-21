@@ -1,273 +1,167 @@
-# ✅ Codex Goal Prompt（最终修复 + 账户系统完整闭环）
+# ✅ CODEx PROMPT（端到端认证闭环修复）
 
-## 🎯 项目目标
+## 🎯 目标
 
-对 `ClinicalLearningSystem` 当前版本进行**账户系统最终收敛修复与UI闭环重构**，确保：
+修复 ClinicalLearningSystem 当前“登录后不跳转 / UI 不刷新 / 状态不一致”问题，并完成完整：
 
-> 登录系统不仅“API正确”，而且“用户体验完整一致”。
+> Authentication Lifecycle + UI State + Routing 三位一体闭环
 
 ---
 
-# 🧠 一、必须先做的系统级诊断（强制）
+# 🧠 Step 1：必须做完整登录链路追踪（禁止猜测）
 
-Codex 必须执行以下分析并输出报告：
-
-## 1. 登录失败路径分析（重点 teacher/admin）
-
-检查：
-
-* frontend login request payload
-* login role 参数是否传递
-* backend login route 是否正确解析 role
-* teacher/admin 用户数据库字段
-* JWT/cookie 是否正确写入 role
-* proxy.ts 是否误判 role
-
-输出：
+Codex 必须打印：
 
 ```
-- student login success chain
-- teacher login failure point
-- admin login failure point
+LOGIN FLOW TRACE:
+1. request sent
+2. backend response
+3. cookie set check
+4. /api/auth/me result
+5. auth state update
+6. router transition
+7. navbar rerender trigger
 ```
 
 ---
 
-## 2. UI 状态未更新原因分析
+# 🔧 Step 2：强制修复 Auth Lifecycle（核心）
 
-检查：
+## 必须统一为以下流程：
 
-* auth context / global state
-* cookie → frontend state hydration
-* /api/auth/me 是否在登录后触发
-* navbar 是否依赖 stale state
-* 是否存在 hardcoded menu（student/teacher按钮）
+```ts id="auth-flow"
+login() {
+  setLoading(true)
 
----
+  await POST /api/auth/login
 
-## 3. 登录“卡住2秒恢复”的原因分析
+  if success:
+    await fetch("/api/auth/me")   ← 必须
+    setAuth(user)                 ← 必须
+    router.replace(role dashboard)← 必须
 
-重点检查：
-
-* login loading state未正确 reset
-* promise reject未 catch
-* router push 未执行
-* middleware redirect loop
-* role mismatch silent fail
-
----
-
-# 🔧 二、必须修复的问题（强制执行）
-
----
-
-## ❗Fix 1：统一登录角色系统（核心修复）
-
-### 要求：
-
-backend login 必须：
-
-```ts
-return {
-  id,
-  username,
-  role: "student" | "teacher" | "admin"
+  setLoading(false)
 }
 ```
 
-cookie 必须包含：
+---
 
+# 🔧 Step 3：修复 AuthProvider（关键）
+
+必须保证：
+
+```ts id="auth-provider"
+onMount:
+  fetch("/api/auth/me")
+    → setUser()
+    → setLoading(false)
 ```
-access_token (JWT with role embedded)
-```
+
+并且：
+
+* cookie 是唯一来源
+* local state 必须可恢复
 
 ---
 
-## ❗Fix 2：修复 teacher/admin 登录失败
+# 🔧 Step 4：修复 Navbar 状态源（关键UI bug）
 
-必须检查并修复：
+Navbar 必须：
 
-* 用户表 role 字段映射错误
-* login service 忽略 role
-* JWT encode 未包含 role
-* frontend login 未传 role 或 selector
+❌ 不允许：
 
-👉 要求：
+* 静态判断路由
+* 静态按钮
+* 不依赖 auth state
 
-✔ teacher login 必须成功
-✔ admin login 必须成功
-✔ student 不受影响
-
----
-
-## ❗Fix 3：统一 Auth State（关键UI问题）
-
-必须新增或修复：
-
-### frontend auth state layer
+✔ 必须：
 
 ```ts
-auth.user
-auth.role
-auth.isAuthenticated
-auth.loading
+const { user, loading } = useAuth()
 ```
 
-登录后必须：
+渲染规则：
 
-1. 调用 `/api/auth/me`
-2. 更新全局 state
-3. 触发 navbar rerender
-
----
-
-## ❗Fix 4：彻底重构 Navbar（UI闭环）
-
-当前问题：
-
-> 仍显示 student/teacher 登录按钮（旧系统残留）
-
-必须改为：
-
-### 未登录状态：
-
-* Login
-
-### student：
-
-* Dashboard
-* Pathway
-* Profile
-* Logout
-
-### teacher/admin：
-
-* Teacher Dashboard
-* Class Analytics
-* Students Overview
-* Logout
+* user == null → Login
+* user.role == student → student menu
+* user.role == teacher/admin → admin menu
 
 ---
 
-## ❗Fix 5：登录流程修复（卡住问题）
+# 🔧 Step 5：修复 login 卡住问题
 
 必须保证：
 
-```text
-login click
-→ setLoading(true)
-→ POST /api/auth/login
-→ success
-→ call /api/auth/me
-→ setUser()
-→ router.push(role dashboard)
-→ setLoading(false)
+* loading 永远 finally 关闭
+* error 必须 catch
+* router 必须 always execute or fallback
+
+---
+
+# 🔧 Step 6：强制端到端测试（必须模拟真实浏览器行为）
+
+Codex 必须执行：
+
+## Test 1：student login
+
+* login → dashboard
+* refresh → still logged in
+* navbar correct
+
+## Test 2：teacher login
+
+* login → teacher dashboard
+* navbar updates
+
+## Test 3：admin login
+
+* full access verified
+
+## Test 4：logout
+
+* cookie cleared
+* auth state reset
+* UI resets
+
+---
+
+# 🧪 Step 7：必须输出“失败链路定位”
+
+Codex 必须明确回答：
+
+* 为什么 login 页面没跳转
+* 为什么 state 没更新
+* 为什么 navbar 没变化
+
+禁止只说“已修复”
+
+---
+
+# 🚫 禁止行为
+
+* ❌ 不允许只改 backend
+* ❌ 不允许只改 proxy
+* ❌ 不允许只说 build success
+* ❌ 不允许不做 /api/auth/me 链路验证
+* ❌ 不允许 UI 静态判断
+
+---
+
+# 🏁 成功标准（非常关键）
+
+## 登录行为必须一致：
+
+### 任意角色：
+
+```
+login → auth state updated → redirect → UI changed → navbar correct
 ```
 
-任何失败必须：
-
-* setLoading(false)
-* show error
-
 ---
 
-## ❗Fix 6：middleware 统一修复
+## UI必须满足：
 
-必须保证：
-
-* /login 永远可访问
-* /demo 永远可访问
-* /student/* 仅 student
-* /teacher/* 仅 teacher/admin
-* role mismatch → redirect /login（不循环）
-
----
-
-# 🧪 三、强制回归测试（Codex必须执行）
-
-## 登录测试：
-
-### student：
-
-* login success
-* dashboard OK
-* navbar correct
-
-### teacher：
-
-* login success
-* teacher dashboard OK
-* navbar correct
-
-### admin：
-
-* login success
-* full access OK
-
----
-
-## UI测试：
-
-* login → navbar变化
-* refresh → state恢复
-* logout → state清空
-* no stale buttons
-
----
-
-## API测试：
-
-* /api/auth/login 200
-* /api/auth/me 200
-* role mismatch 403
-* cookie persistent
-
----
-
-# 🧹 四、禁止行为（非常重要）
-
-Codex 不允许：
-
-* ❌ 保留 student/teacher 混合导航旧UI
-* ❌ 双 auth system（token + cookie）
-* ❌ localStorage fallback
-* ❌ role hardcode in frontend
-* ❌ login success 但 UI 不更新
-* ❌ 静默失败（必须可见错误）
-
----
-
-# 📦 五、输出要求
-
-Codex必须输出：
-
-1. teacher/admin 登录失败 root cause
-2. navbar 不更新 root cause
-3. loading 卡住 root cause
-4. 修改文件列表
-5. 每个修复说明
-6. 最终验证结果（逐条）
-
----
-
-# 🏁 六、成功标准（非常关键）
-
-系统必须达到：
-
-## 认证层：
-
-* 三类用户全部可登录
-* role 完整贯通 backend → cookie → frontend
-
-## UI层：
-
-* navbar 完全动态
-* 登录后立即变化
-* 无旧系统残留
-
-## 体验层：
-
-* login 无卡顿
-* 无“登录中停住”
-* 无状态错乱
+* 登录前：Login
+* 登录后：Role-based navbar
+* 刷新后：仍保持登录状态
 
