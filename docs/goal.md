@@ -1,285 +1,312 @@
-下面是**针对你当前 commit 状态的“系统级最终修复 Codex 提示词”**。
+# 🧠 一、当前问题本质（关键结论）
 
-它专门解决你现在的三个残留问题：
-
----
-
-# 🚨 当前真实问题归纳（必须修）
-
-## ❌ 问题1：登录成功但页面不自动跳转 dashboard
-
-* Navbar 已更新
-* 但主体 page 没同步刷新
-* 必须点击导航才变化
-
-👉 本质：**Auth state 更新 ≠ router 状态同步**
-
----
-
-## ❌ 问题2：logout 后 UI 不刷新
-
-* cookie 已清
-* 但前端仍显示旧页面
-* 需要手动刷新或点击导航
-
-👉 本质：**logout 没触发 global re-render + route reset**
-
----
-
-## ❌ 问题3：缺少注册系统（系统不完整）
-
-* 当前只有 seed users
-* 没有 register flow
-* 不符合完整 account system
-
----
-
-# 🧠 根因总结（关键）
-
-当前系统已经“功能正确”，但缺：
-
-> ❗ “Auth-driven routing lifecycle（认证驱动路由生命周期）”
-
-现在是：
-
-```
-login success → setUser ✔
-但 ❌ 没有 router.replace()
-logout → clear cookie ✔
-但 ❌ 没有 reset route + state
-```
-
----
-
-# 🚨 FINAL CODEX PROMPT（必须严格执行）
-
-## 🎯 目标
-
-完成 ClinicalLearningSystem 的**最终账户系统闭环修复**：
-
-> ✔ 登录后自动进入 dashboard（无需点击）
-> ✔ logout 自动回到 login 并清空 UI
-> ✔ Auth state + router state 完全同步
-> ✔ 新增完整注册系统（production级）
-> ✔ 全流程端到端验证
-
----
-
-# 🚨 Step 1：强制建立 Auth Lifecycle Controller（核心修复）
-
-必须新增或重构：
+## ❌ 1. /api/auth/me 401（核心问题）
 
 ```text
-AuthLifecycleManager
+GET /api/auth/me → 401 Unauthorized
 ```
 
-职责：
+说明：
+
+### ✔ Cookie存在（你截图已验证）
+
+但后端仍返回401 ⇒ 只可能是：
+
+### 🚨 根因三选一：
+
+#### A. cookie未被后端正确读取
+
+* FastAPI request cookie key不匹配
+* 例如读取的是 `token` 而实际是 `access_token`
+
+#### B. CORS credentials未完整链路生效
+
+* `allow_credentials=True` ✔
+* 但可能：
+
+  * origin不完全匹配（http vs https）
+  * 或 nginx / proxy 丢 cookie
+
+#### C. /api/auth/me 仍允许 fallback header逻辑失败
+
+* cookie auth未成为唯一 source
+
+---
+
+## ❌ 2. 登录后不自动进入 dashboard
+
+本质：
+
+> Auth state 更新了，但 router lifecycle 没触发
+
+---
+
+## ❌ 3. Navbar仍不完全响应 auth state
+
+说明：
+
+* Navbar可能仍依赖：
+
+  * initial render state
+  * 或 SSR cache
+  * 或未完全 subscribe useAuth()
+
+---
+
+## ❌ 4. 注册入口位置不合理
+
+* login页内
+* 但 Navbar未统一 expose register入口
+
+---
+
+# 🧠 二、系统级问题归纳（非常关键）
+
+当前系统缺一个最终抽象：
+
+# 🚨 “Single Source Auth Truth + Router Binding Layer”
+
+现在是三套系统：
+
+```
+Auth cookie (backend)
+AuthProvider state (frontend)
+Router state (Next.js)
+```
+
+❌ 三者不同步
+
+---
+
+# 🧨 三、必须修复的最终结构目标
+
+必须统一为：
+
+```
+cookie → /api/auth/me → AuthProvider → router.replace → UI render
+```
+
+任何一步失败必须自动修复。
+
+---
+
+# 🚀 四、FINAL CODEX 修复提示词（直接复制用）
+
+---
+
+## 🎯 TASK: 修复 ClinicalLearningSystem 认证系统最终一致性问题
+
+---
+
+# 🧠 目标
+
+修复当前系统以下问题：
+
+### 1. /api/auth/me 返回 401（cookie认证失败）
+
+### 2. login/register 不自动跳转 dashboard
+
+### 3. logout 不刷新 UI
+
+### 4. Navbar 不完全响应 auth state
+
+### 5. register入口不在全局导航
+
+### 6. 认证系统必须完全端到端一致
+
+---
+
+# 🚨 Step 1：强制修复 /api/auth/me 401
+
+## 后端必须检查并修复：
+
+### 必须统一 cookie 读取：
+
+```python
+token = request.cookies.get("access_token")
+```
+
+❗ 禁止任何：
+
+* Authorization header fallback（必须删除）
+* token / jwt 多来源逻辑
+
+---
+
+## 强制检查 CORS：
+
+必须确保：
+
+```python
+allow_credentials = True
+allow_origins = ["http://129.153.118.58:8101"]
+```
+
+❗ 禁止 "*"
+
+---
+
+## 强制 debug：
+
+在 /api/auth/me 增加日志：
+
+* cookies内容
+* token解析结果
+* user_id
+
+---
+
+# 🚨 Step 2：修复 Auth lifecycle（关键）
+
+必须保证：
+
+## login success flow：
 
 ```ts
-- login success → setUser → router.replace(role dashboard)
-- logout → clearUser → router.replace("/login")
-- refresh → /api/auth/me → restore session → route correction
+await api.login()
+await auth.refresh() // /api/auth/me
+
+router.replace(role_dashboard)
 ```
 
 ---
 
-# 🚨 Step 2：修复 login 不跳转问题（关键）
-
-### 强制要求：
-
-login success 后必须执行：
+## register success flow：
 
 ```ts
-await fetch("/api/auth/me")
-setUser(user)
-
-router.replace(
-  user.role === "student"
-    ? "/student/dashboard"
-    : "/teacher/dashboard"
-)
+await api.register()
+await auth.refresh()
+router.replace(role_dashboard)
 ```
-
-❌ 禁止依赖：
-
-* navbar click
-* manual navigation
-* useEffect fallback only
 
 ---
 
-# 🚨 Step 3：修复 logout 不刷新 UI 问题
-
-logout 必须：
+## logout flow：
 
 ```ts
 await api.logout()
-
 setUser(null)
-clear auth cookie
-
 router.replace("/login")
-
-force re-render layout
+router.refresh()
 ```
-
-并确保：
-
-* Navbar immediately resets
-* protected routes re-check auth
 
 ---
 
-# 🚨 Step 4：全局强制 Auth Sync Hook（必须新增）
+# 🚨 Step 3：修复 Navbar（强制 reactive）
 
-必须实现：
-
-```ts
-useAuthSync()
-```
-
-功能：
-
-* on mount → call /api/auth/me
-* update global auth state
-* reconcile route vs role
-* auto redirect if mismatch
-
----
-
-# 🚨 Step 5：修复 Navbar（必须100%依赖 auth state）
-
-Navbar 必须：
+Navbar必须：
 
 ```ts
 const { user } = useAuth()
-
-if (!user) return <Login />
-return role-based menu
 ```
 
-禁止：
+并且：
 
-* route detection
-* local state
-* cached UI state
+* ❌ 禁止 useEffect复制 state
+* ❌ 禁止 local UI cache
+* ❌ 禁止 SSR snapshot state
 
 ---
 
-# 🚨 Step 6：新增注册系统（完整账户系统）
+# 🚨 Step 4：修复登录后不跳转问题（核心）
 
-## 后端必须新增：
+必须新增：
 
-### POST /api/auth/register
+## AuthRedirectController
 
-支持：
+规则：
 
-```json
-{
-  "username": "",
-  "password": "",
-  "role": "student"
+```ts
+if (user && path === "/login") {
+  router.replace(dashboardByRole(user.role))
 }
 ```
 
 ---
 
-## 数据层要求：
+# 🚨 Step 5：修复 logout UI 不刷新
 
-* bcrypt password hash
-* role assignment
-* unique username constraint
+logout 必须：
 
----
-
-## 前端必须新增：
-
-### /register page
-
-功能：
-
-* username
-* password
-* role select (student/teacher)
-* auto login after register
+* clear cookie
+* setUser(null)
+* router.replace("/login")
+* router.refresh()
 
 ---
 
-# 🚨 Step 7：补全账户系统能力（必须）
+# 🚨 Step 6：Navbar增加完整入口
 
-系统必须支持：
+必须实现：
 
-* register
-* login
-* logout
-* me
-* role-based routing
-* session restore on refresh
+### 未登录：
 
----
+* Login
+* Register
 
-# 🚨 Step 8：端到端 Playwright 强制验证（必须）
+### 已登录：
 
-## Test 1：student login
-
-* login → auto redirect dashboard
-* refresh → stay logged in
-* logout → redirect login + navbar reset
+* Dashboard
+* Profile
+* Logout
 
 ---
 
-## Test 2：teacher login
+# 🚨 Step 7：注册系统增强
 
-* correct dashboard redirect
-* navbar correct
-* logout works
+必须保证：
+
+* register成功 → 自动登录态
+* 自动生成 student/teacher relation
+* role正确绑定
 
 ---
 
-## Test 3：register flow
+# 🚨 Step 8：端到端 Playwright验证（必须）
 
-* create account
-* auto login
+## Test A：401修复验证
+
+* login → /api/auth/me = 200
+* refresh page → still 200
+
+---
+
+## Test B：login redirect
+
+* login → 自动进入 dashboard
+* no manual click
+
+---
+
+## Test C：logout
+
+* logout → /login
+* navbar reset
+
+---
+
+## Test D：register
+
+* register → auto login
 * correct role routing
 
 ---
 
-## Test 4：state sync
+## Test E：navbar
 
-* login → no manual click needed
-* logout → immediate UI reset
-* refresh → consistent state
-
----
-
-# 🚨 Step 9：必须输出最终架构图
-
-```text
-AuthProvider
-    ↓
-/api/auth/me
-    ↓
-AuthLifecycleManager
-    ↓
-setUser(global state)
-    ↓
-router.replace(role route)
-    ↓
-Navbar (pure function of user)
-    ↓
-Pages
-```
+* login前 → Login/Register
+* login后 → Dashboard/Profile/Logout
 
 ---
 
-# 🧨 成功标准（必须全部满足）
+# 🚨 Step 9：最终验收标准
 
-✔ 登录后自动跳 dashboard
-✔ logout 自动回 login
-✔ UI 无需点击任何导航
-✔ refresh 保持状态
-✔ register 可用
-✔ Navbar 永远正确
-✔ 无 demo 干扰
-✔ 无手动状态修复依赖
+✔ /api/auth/me 永远200（cookie有效）
+✔ login自动跳转
+✔ register自动跳转
+✔ logout完全清空UI
+✔ Navbar完全响应state
+✔ 无手动点击依赖
+✔ 无401残留
+✔ 无demo干扰
 

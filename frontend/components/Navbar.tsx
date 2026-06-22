@@ -2,20 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, GraduationCap, LogIn, LogOut, Route, UserRound, Users } from "lucide-react";
+import { GraduationCap, LogIn, LogOut, UserPlus, UserRound } from "lucide-react";
 
 import { useAuth } from "@/components/AuthProvider";
 
 const studentLinks = [
   { href: "/student/dashboard", label: "Dashboard", icon: GraduationCap },
-  { href: "/student/pathway", label: "Pathway", icon: Route },
   { href: "/student/profile", label: "Profile", icon: UserRound },
 ];
 
 const teacherLinks = [
-  { href: "/teacher/dashboard", label: "Teacher Dashboard", icon: BarChart3 },
-  { href: "/teacher/research-export", label: "Class Analytics", icon: BarChart3 },
-  { href: "/teacher/students", label: "Students Overview", icon: Users },
+  { href: "/teacher/dashboard", label: "Dashboard", icon: GraduationCap },
+  { href: "/teacher/students", label: "Profile", icon: UserRound },
 ];
 
 export function Navbar() {
@@ -37,6 +35,10 @@ export function Navbar() {
         <Link className="flex items-center gap-1 rounded-md px-3 py-2 hover:bg-slate-100" href="/login">
           <LogIn className="h-4 w-4" />
           Login
+        </Link>
+        <Link className="flex items-center gap-1 rounded-md px-3 py-2 hover:bg-slate-100" href="/register">
+          <UserPlus className="h-4 w-4" />
+          Register
         </Link>
       </nav>
     );

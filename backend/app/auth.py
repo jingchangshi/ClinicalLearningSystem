@@ -1,4 +1,5 @@
 import os
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
@@ -13,6 +14,7 @@ from app.models import User
 JWT_SECRET = os.getenv("JWT_SECRET", "dev-clinpath-change-me")
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = int(os.getenv("ACCESS_TOKEN_EXPIRE_HOURS", "12"))
+logger = logging.getLogger("uvicorn.error")
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
@@ -41,6 +43,11 @@ def get_current_user(
     db: Annotated[Session, Depends(get_db)],
 ) -> User:
     token = request.cookies.get("access_token")
+    logger.info(
+        "auth.me cookie_keys=%s access_token_present=%s",
+        sorted(request.cookies.keys()),
+        bool(token),
+    )
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -49,13 +56,16 @@ def get_current_user(
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         user_id = int(payload["sub"])
+        logger.info("auth.me token_valid=true user_id=%s", user_id)
     except (jwt.PyJWTError, KeyError, ValueError):
+        logger.warning("auth.me token_valid=false")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",
         ) from None
     user = db.get(User, user_id)
     if not user:
+        logger.warning("auth.me user_not_found user_id=%s", user_id)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
     return user
 
