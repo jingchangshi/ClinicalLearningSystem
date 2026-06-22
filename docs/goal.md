@@ -1,312 +1,340 @@
-# 🧠 一、当前问题本质（关键结论）
+# 🚨 当前真实问题总结（必须修）
 
-## ❌ 1. /api/auth/me 401（核心问题）
+## ❌ 问题1：LLM系统未完全可用 / 未统一 DeepSeek V4
+
+* LLM可能仍存在分散调用
+* prompt不统一
+* 部分模块未接入 LLMService
+* fallback逻辑可能覆盖真实调用
+
+---
+
+## ❌ 问题2：页面无页边距 + UI不统一
+
+* layout 没有统一 container
+* 学生/教师页面紧贴边缘
+* demo vs main style 不一致
+
+---
+
+## ❌ 问题3：学生端 Navbar 丢失 Pathway
+
+* route group 重构后 navbar config 未同步
+* role-based menu 渲染不完整
+* student menu 缺失 pathway entry
+
+---
+
+# 🧠 Codex 必须理解的系统状态
+
+当前架构是：
 
 ```text
-GET /api/auth/me → 401 Unauthorized
+AuthProvider (main only)
+   ↓
+/api/auth/me (cookie)
+   ↓
+role-based navbar
+   ↓
+student / teacher / admin pages
+   ↓
+LLMService (DeepSeek v4)
 ```
 
-说明：
+但问题是：
 
-### ✔ Cookie存在（你截图已验证）
-
-但后端仍返回401 ⇒ 只可能是：
-
-### 🚨 根因三选一：
-
-#### A. cookie未被后端正确读取
-
-* FastAPI request cookie key不匹配
-* 例如读取的是 `token` 而实际是 `access_token`
-
-#### B. CORS credentials未完整链路生效
-
-* `allow_credentials=True` ✔
-* 但可能：
-
-  * origin不完全匹配（http vs https）
-  * 或 nginx / proxy 丢 cookie
-
-#### C. /api/auth/me 仍允许 fallback header逻辑失败
-
-* cookie auth未成为唯一 source
+> ❗ LLM层未“统一收敛”
+> ❗ UI layout 未“设计系统化”
+> ❗ Navbar config 不完整
 
 ---
 
-## ❌ 2. 登录后不自动进入 dashboard
-
-本质：
-
-> Auth state 更新了，但 router lifecycle 没触发
+# 🚀 FINAL CODEX PROMPT（强约束修复版）
 
 ---
 
-## ❌ 3. Navbar仍不完全响应 auth state
-
-说明：
-
-* Navbar可能仍依赖：
-
-  * initial render state
-  * 或 SSR cache
-  * 或未完全 subscribe useAuth()
+# 🎯 TASK: Final System Stabilization (LLM + UI + Navbar Fix)
 
 ---
 
-## ❌ 4. 注册入口位置不合理
+# 🧠 Step 1：统一 DeepSeek V4 LLM 架构（关键修复）
 
-* login页内
-* 但 Navbar未统一 expose register入口
+## 必须执行：
 
----
+### 1. 确保只有一个 LLM 入口
 
-# 🧠 二、系统级问题归纳（非常关键）
+路径必须统一：
 
-当前系统缺一个最终抽象：
-
-# 🚨 “Single Source Auth Truth + Router Binding Layer”
-
-现在是三套系统：
-
-```
-Auth cookie (backend)
-AuthProvider state (frontend)
-Router state (Next.js)
+```text
+backend/app/services/llm_service.py
 ```
 
-❌ 三者不同步
+❌ 禁止：
+
+* 各模块直接调用 deepseek
+* 重复 client
+* prompt scattered
 
 ---
 
-# 🧨 三、必须修复的最终结构目标
-
-必须统一为：
-
-```
-cookie → /api/auth/me → AuthProvider → router.replace → UI render
-```
-
-任何一步失败必须自动修复。
-
----
-
-# 🚀 四、FINAL CODEX 修复提示词（直接复制用）
-
----
-
-## 🎯 TASK: 修复 ClinicalLearningSystem 认证系统最终一致性问题
-
----
-
-# 🧠 目标
-
-修复当前系统以下问题：
-
-### 1. /api/auth/me 返回 401（cookie认证失败）
-
-### 2. login/register 不自动跳转 dashboard
-
-### 3. logout 不刷新 UI
-
-### 4. Navbar 不完全响应 auth state
-
-### 5. register入口不在全局导航
-
-### 6. 认证系统必须完全端到端一致
-
----
-
-# 🚨 Step 1：强制修复 /api/auth/me 401
-
-## 后端必须检查并修复：
-
-### 必须统一 cookie 读取：
+## 2. 强制 DeepSeek V4 client 标准化
 
 ```python
-token = request.cookies.get("access_token")
-```
+class DeepSeekClient:
+    def __init__(self):
+        self.base_url = os.getenv("DEEPSEEK_BASE_URL")
+        self.api_key = os.getenv("DEEPSEEK_API_KEY")
+        self.model = "deepseek-chat"
 
-❗ 禁止任何：
-
-* Authorization header fallback（必须删除）
-* token / jwt 多来源逻辑
-
----
-
-## 强制检查 CORS：
-
-必须确保：
-
-```python
-allow_credentials = True
-allow_origins = ["http://129.153.118.58:8101"]
-```
-
-❗ 禁止 "*"
-
----
-
-## 强制 debug：
-
-在 /api/auth/me 增加日志：
-
-* cookies内容
-* token解析结果
-* user_id
-
----
-
-# 🚨 Step 2：修复 Auth lifecycle（关键）
-
-必须保证：
-
-## login success flow：
-
-```ts
-await api.login()
-await auth.refresh() // /api/auth/me
-
-router.replace(role_dashboard)
+    def chat(self, messages):
+        return OpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url
+        ).chat.completions.create(
+            model=self.model,
+            messages=messages,
+            temperature=0.3
+        )
 ```
 
 ---
 
-## register success flow：
+## 3. 必须统一 LLM 调用入口
 
-```ts
-await api.register()
-await auth.refresh()
-router.replace(role_dashboard)
+### 所有模块必须改为：
+
+```text
+CaseService → LLMService
+PathwayService → LLMService
+FeedbackService → LLMService
+TeacherInsight → LLMService
 ```
 
 ---
 
-## logout flow：
-
-```ts
-await api.logout()
-setUser(null)
-router.replace("/login")
-router.refresh()
-```
-
----
-
-# 🚨 Step 3：修复 Navbar（强制 reactive）
-
-Navbar必须：
-
-```ts
-const { user } = useAuth()
-```
-
-并且：
-
-* ❌ 禁止 useEffect复制 state
-* ❌ 禁止 local UI cache
-* ❌ 禁止 SSR snapshot state
-
----
-
-# 🚨 Step 4：修复登录后不跳转问题（核心）
+## 4. prompt必须结构化（禁止散写）
 
 必须新增：
 
-## AuthRedirectController
+```text
+backend/app/llm/prompts/
+    case_generation.py
+    pathway.py
+    evaluation.py
+    insight.py
+```
 
-规则：
+---
 
-```ts
-if (user && path === "/login") {
-  router.replace(dashboardByRole(user.role))
+# 🧠 Step 2：修复 UI 页边距（全局设计系统）
+
+---
+
+## ❗问题
+
+当前页面：
+
+* 内容贴边
+* 没有统一 container
+* demo/main style 不一致
+
+---
+
+## ✅ 强制修复：
+
+### 1. 新增全局 layout wrapper
+
+```tsx
+<div className="app-container">
+```
+
+---
+
+### 2. 全局 CSS 必须加入：
+
+```css
+.app-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.page-container {
+  padding: 24px 32px;
 }
 ```
 
 ---
 
-# 🚨 Step 5：修复 logout UI 不刷新
+### 3. 所有页面必须统一：
 
-logout 必须：
+* student pages
+* teacher pages
+* dashboard pages
 
-* clear cookie
-* setUser(null)
-* router.replace("/login")
-* router.refresh()
+全部包裹：
+
+```tsx
+<div className="page-container">
+```
 
 ---
 
-# 🚨 Step 6：Navbar增加完整入口
+# 🧠 Step 3：修复 Navbar 丢失 Pathway（关键bug）
 
-必须实现：
+---
 
-### 未登录：
+## ❗问题
 
-* Login
-* Register
+student role menu missing:
 
-### 已登录：
+* Pathway route 丢失
+* route-group restructure 未同步 navbar config
+
+---
+
+## ✅ 必须修复：
+
+### student navbar config 必须为：
+
+```ts
+studentMenu = [
+  "Dashboard",
+  "Pathway",   ← 必须恢复
+  "Knowledge",
+  "Profile"
+]
+```
+
+---
+
+### 路由必须映射：
+
+```text
+/student/pathway → existing page or restore page
+```
+
+---
+
+### 如果页面缺失：
+
+必须补：
+
+```text
+frontend/app/student/pathway/page.tsx
+```
+
+---
+
+# 🧠 Step 4：统一 Navbar 生成逻辑（非常重要）
+
+---
+
+## ❗禁止静态 navbar
+
+必须：
+
+```ts
+const menu = getMenuByRole(user.role)
+```
+
+---
+
+## role mapping：
+
+### student
 
 * Dashboard
+* Pathway
 * Profile
+* Logout
+
+### teacher
+
+* Dashboard
+* Students
+* Analytics
+* Logout
+
+### admin
+
+* Dashboard
+* System
+* Users
 * Logout
 
 ---
 
-# 🚨 Step 7：注册系统增强
-
-必须保证：
-
-* register成功 → 自动登录态
-* 自动生成 student/teacher relation
-* role正确绑定
+# 🧠 Step 5：端到端验证（必须执行 Playwright）
 
 ---
 
-# 🚨 Step 8：端到端 Playwright验证（必须）
+## Test A：LLM验证
 
-## Test A：401修复验证
-
-* login → /api/auth/me = 200
-* refresh page → still 200
-
----
-
-## Test B：login redirect
-
-* login → 自动进入 dashboard
-* no manual click
+* case generation → DeepSeek v4 response
+* pathway generation → structured output
+* fallback only if API key missing
 
 ---
 
-## Test C：logout
+## Test B：UI layout
 
-* logout → /login
-* navbar reset
-
----
-
-## Test D：register
-
-* register → auto login
-* correct role routing
+* all pages have padding
+* no edge-to-edge content
+* consistent width
 
 ---
 
-## Test E：navbar
+## Test C：Navbar
 
-* login前 → Login/Register
-* login后 → Dashboard/Profile/Logout
+student login:
+
+* Pathway visible ✔
+* Dashboard works ✔
+
+teacher login:
+
+* correct menu ✔
 
 ---
 
-# 🚨 Step 9：最终验收标准
+## Test D：routing
 
-✔ /api/auth/me 永远200（cookie有效）
-✔ login自动跳转
-✔ register自动跳转
-✔ logout完全清空UI
-✔ Navbar完全响应state
-✔ 无手动点击依赖
-✔ 无401残留
-✔ 无demo干扰
+* direct /student/pathway works
+* navbar click works
+* refresh preserved
+
+---
+
+# 🧨 禁止行为（非常重要）
+
+* ❌ 不允许 demo UI 改动影响 main
+* ❌ 不允许多个 LLM client
+* ❌ 不允许 inline prompt scattered
+* ❌ 不允许 navbar hardcoded
+* ❌ 不允许页面无 container
+
+---
+
+# 🏁 成功标准
+
+必须全部满足：
+
+## LLM
+
+✔ DeepSeek v4 single entry
+✔ structured prompt system
+✔ all modules unified
+
+## UI
+
+✔ consistent padding
+✔ centered layout
+✔ professional dashboard spacing
+
+## Navbar
+
+✔ Pathway restored
+✔ role-based correct menu
+✔ no missing routes
 

@@ -10,6 +10,38 @@ from app.core.llm_config import (
     LLM_MODEL,
     LLM_TIMEOUT_SECONDS,
 )
+from app.llm.prompts.evaluation import (
+    GUIDELINE_RATIONALE_SYSTEM_PROMPT,
+    GUIDELINE_RATIONALE_USER_TEMPLATE,
+    REASONING_QUESTION_SYSTEM_PROMPT,
+    REASONING_QUESTION_USER_TEMPLATE,
+    SP_FEEDBACK_SYSTEM_TEMPLATE,
+)
+from app.llm.prompts.insight import TEACHER_INSIGHT_SYSTEM_PROMPT, TEACHER_INSIGHT_USER_TEMPLATE
+from app.llm.prompts.pathway import RECOMMENDATION_EXPLANATION_SYSTEM_PROMPT, RECOMMENDATION_EXPLANATION_USER_TEMPLATE
+
+
+class DeepSeekClient:
+    def __init__(self) -> None:
+        self.base_url = LLM_BASE_URL
+        self.api_key = LLM_API_KEY
+        self.model = LLM_MODEL
+
+    def chat(self, messages: list[dict], temperature: float = 0.3, response_format: dict | None = None):
+        kwargs = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "timeout": LLM_TIMEOUT_SECONDS,
+        }
+        if response_format:
+            kwargs["response_format"] = response_format
+        return OpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url,
+            timeout=LLM_TIMEOUT_SECONDS,
+            max_retries=0,
+        ).chat.completions.create(**kwargs)
 
 
 class LLMService:
@@ -29,25 +61,15 @@ class LLMService:
 
     def explain_recommendation(self, profile: dict, latest_scores: dict, task: dict, fallback: str) -> str:
         return self.chat_completion(
-            "你是医学教育研究者，请生成可用于教学研究报告的学习路径推荐解释。要求具体、克制、可验证。",
-            (
-                f"学生能力画像：{profile}\n"
-                f"最近训练得分：{latest_scores}\n"
-                f"推荐任务：{task}\n"
-                "请用2-3句话说明为什么推荐、对应能力缺口、下一步学习策略。"
-            ),
+            RECOMMENDATION_EXPLANATION_SYSTEM_PROMPT,
+            RECOMMENDATION_EXPLANATION_USER_TEMPLATE.format(profile=profile, latest_scores=latest_scores, task=task),
             fallback,
         )
 
     def generate_sp_feedback(self, sp_case: dict, transcript: list[dict], diagnosis_summary: str, fallback: dict) -> dict:
         payload = self.chat_json(
             (
-                "你是临床医学 OSCE 标准化病人考核评分员。"
-                "请根据 SP 病例、学生问诊对话和最后总结评分。"
-                "必须只输出 JSON，字段包括 history_taking_score, communication_score, "
-                "reasoning_score, humanistic_care_score, total_score, feedback。"
-                "所有分数为0-100数字。\n"
-                f"SP病例：{json.dumps(sp_case, ensure_ascii=False)}"
+                SP_FEEDBACK_SYSTEM_TEMPLATE.format(sp_case_json=json.dumps(sp_case, ensure_ascii=False))
             ),
             json.dumps(
                 {"transcript": transcript, "diagnosis_summary": diagnosis_summary},
@@ -59,44 +81,36 @@ class LLMService:
 
     def generate_guideline_rationale(self, guideline: dict, payload: dict, scoring: dict, fallback: str) -> str:
         return self.chat_completion(
-            "你是医学教育测评专家，请解释循证作答评分依据。",
-            (
-                f"指南：{guideline.get('title')}\n"
-                f"学生作答：{payload}\n"
-                f"评分细项：{scoring['detail']}\n"
-                "请用2句话说明评分理由，避免夸大。"
+            GUIDELINE_RATIONALE_SYSTEM_PROMPT,
+            GUIDELINE_RATIONALE_USER_TEMPLATE.format(
+                title=guideline.get("title"),
+                payload=payload,
+                detail=scoring["detail"],
             ),
             fallback,
         )
 
     def generate_teacher_insight(self, weak_dimensions: list[dict], training_summary: dict, fallback: str) -> str:
         return self.chat_completion(
-            "你是医学教育质量改进顾问，请基于班级数据生成教师端教学洞察。",
-            (
-                f"班级短板：{weak_dimensions}\n"
-                f"训练分布：{training_summary}\n"
-                "请输出2句话，包含班级共性问题和下一步教学干预建议。"
-            ),
+            TEACHER_INSIGHT_SYSTEM_PROMPT,
+            TEACHER_INSIGHT_USER_TEMPLATE.format(weak_dimensions=weak_dimensions, training_summary=training_summary),
             fallback,
         )
 
     def _chat_text_once(self, system_prompt: str, user_prompt: str) -> str:
-        response = self._client().chat.completions.create(
-            model=LLM_MODEL,
-            messages=[
+        response = self._client().chat(
+            [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.3,
-            timeout=LLM_TIMEOUT_SECONDS,
         )
         content = response.choices[0].message.content
         return content.strip() if content and content.strip() else ""
 
     def _chat_json_once(self, system_prompt: str, user_prompt: str, fallback: Any) -> Any:
-        response = self._client().chat.completions.create(
-            model=LLM_MODEL,
-            messages=[
+        response = self._client().chat(
+            [
                 {
                     "role": "system",
                     "content": f"{system_prompt}\n必须只输出合法 JSON，不要输出 markdown 或解释。",
@@ -105,28 +119,27 @@ class LLMService:
             ],
             temperature=0.2,
             response_format={"type": "json_object"},
-            timeout=LLM_TIMEOUT_SECONDS,
         )
         parsed = json.loads(response.choices[0].message.content or "")
         return parsed if isinstance(parsed, (dict, list)) else fallback
 
     def _with_retries(self, operation, fallback: Any) -> Any:
+        last_error: Exception | None = None
         for _ in range(max(1, LLM_MAX_RETRIES + 1)):
             try:
                 result = operation()
                 if result:
                     return result
-            except Exception:
+                last_error = ValueError("LLM returned an empty response")
+            except Exception as error:
+                last_error = error
                 continue
+        if last_error:
+            raise last_error
         return fallback
 
-    def _client(self) -> OpenAI:
-        return OpenAI(
-            api_key=LLM_API_KEY,
-            base_url=LLM_BASE_URL,
-            timeout=LLM_TIMEOUT_SECONDS,
-            max_retries=0,
-        )
+    def _client(self) -> DeepSeekClient:
+        return DeepSeekClient()
 
 
 llm_service = LLMService()
@@ -142,10 +155,12 @@ def chat_json(system_prompt: str, user_prompt: str, fallback: Any) -> Any:
 
 def generate_reasoning_question(case: dict, step: str, student_answer: str) -> str:
     return llm_service.chat_completion(
-        "你是风湿免疫临床教学导师，请提出一个能促进临床推理的追问。",
-        (
-            f"病例：{case.get('title')}\n标准诊断：{case.get('standard_diagnosis')}\n"
-            f"当前步骤：{step}\n学生回答：{student_answer}"
+        REASONING_QUESTION_SYSTEM_PROMPT,
+        REASONING_QUESTION_USER_TEMPLATE.format(
+            title=case.get("title"),
+            standard_diagnosis=case.get("standard_diagnosis"),
+            step=step,
+            student_answer=student_answer,
         ),
         _rule_reasoning_question(step, student_answer),
     )

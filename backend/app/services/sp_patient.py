@@ -1,6 +1,7 @@
 import json
 from typing import Any
 
+from app.llm.prompts.evaluation import SP_PATIENT_SYSTEM_TEMPLATE
 from app.services.llm_service import llm_service
 from app.services.serializers import loads_json
 
@@ -22,12 +23,7 @@ def score_sp_session(sp_case: dict, transcript: list[dict], diagnosis_summary: s
 
 
 def _sp_system_prompt(sp_case: dict) -> str:
-    return (
-        "你正在扮演一名标准化病人，用于临床医学本科生问诊训练。"
-        "只能以患者身份回答，不要主动透露所有病史，不要直接告诉学生最终诊断，"
-        "不要评价学生表现。每次回复不超过120字。\n"
-        f"病例设定：{json.dumps(sp_case, ensure_ascii=False)}"
-    )
+    return SP_PATIENT_SYSTEM_TEMPLATE.format(sp_case_json=json.dumps(sp_case, ensure_ascii=False))
 
 
 def _rule_patient_reply(sp_case: dict, student_message: str) -> str:

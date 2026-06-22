@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.llm.prompts.evaluation import SKILL_FEEDBACK_SYSTEM_PROMPT, SKILL_FEEDBACK_USER_TEMPLATE
 from app.auth import get_current_user, require_student_access, student_id_from_user
 from app.database import get_db
 from app.models import ClinicalSkill, SkillSession, Student, User
@@ -195,10 +196,12 @@ def _skill_feedback(score: float, missed_steps: list[str], safety_score: float, 
 def _skill_feedback_with_llm(score: float, missed_steps: list[str], safety_score: float, errors: list[str]) -> str:
     fallback = _skill_feedback(score, missed_steps, safety_score, errors)
     return llm_service.chat_completion(
-        "你是OSCE技能站教师，请生成结构化技能训练反馈。",
-        (
-            f"总分：{score}\n安全性得分：{safety_score}\n遗漏步骤：{missed_steps}\n常见错误：{errors}\n"
-            "请输出不超过100字，包含表现判断、最关键改进点和下一次训练策略。"
+        SKILL_FEEDBACK_SYSTEM_PROMPT,
+        SKILL_FEEDBACK_USER_TEMPLATE.format(
+            score=score,
+            safety_score=safety_score,
+            missed_steps=missed_steps,
+            errors=errors,
         ),
         fallback,
     )

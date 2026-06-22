@@ -2,24 +2,40 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { GraduationCap, LogIn, LogOut, UserPlus, UserRound } from "lucide-react";
+import { BarChart3, BookOpen, GraduationCap, LogIn, LogOut, Route, Settings, UserPlus, UserRound, Users } from "lucide-react";
 
 import { useAuth } from "@/components/AuthProvider";
 
 const studentLinks = [
   { href: "/student/dashboard", label: "Dashboard", icon: GraduationCap },
+  { href: "/student/pathway", label: "Pathway", icon: Route },
+  { href: "/student/knowledge", label: "Knowledge", icon: BookOpen },
   { href: "/student/profile", label: "Profile", icon: UserRound },
 ];
 
 const teacherLinks = [
   { href: "/teacher/dashboard", label: "Dashboard", icon: GraduationCap },
-  { href: "/teacher/students", label: "Profile", icon: UserRound },
+  { href: "/teacher/students", label: "Students", icon: Users },
+  { href: "/teacher/research-export", label: "Analytics", icon: BarChart3 },
 ];
+
+const adminLinks = [
+  { href: "/teacher/dashboard", label: "Dashboard", icon: GraduationCap },
+  { href: "/teacher/cases", label: "System", icon: Settings },
+  { href: "/teacher/students", label: "Users", icon: Users },
+];
+
+function getMenuByRole(role: string | null) {
+  if (role === "student") return studentLinks;
+  if (role === "teacher") return teacherLinks;
+  if (role === "admin") return adminLinks;
+  return [];
+}
 
 export function Navbar() {
   const pathname = usePathname();
   const { role, isAuthenticated, loading, logout } = useAuth();
-  const links = role === "student" ? studentLinks : role === "teacher" || role === "admin" ? teacherLinks : [];
+  const links = getMenuByRole(role);
 
   async function handleLogout() {
     await logout();

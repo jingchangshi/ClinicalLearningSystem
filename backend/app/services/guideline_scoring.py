@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from app.llm.prompts.evaluation import GUIDELINE_FEEDBACK_SYSTEM_PROMPT, GUIDELINE_FEEDBACK_USER_TEMPLATE
 from app.models import CompetencyProfile
 from app.services.llm_service import llm_service
 
@@ -126,14 +127,13 @@ def _feedback(scoring: dict) -> str:
 def _feedback_with_llm(guideline: dict, payload: dict, scoring: dict) -> str:
     fallback = _feedback(scoring)
     return llm_service.chat_completion(
-        "你是循证医学课程导师，请基于PICO作答评分生成结构化形成性反馈。",
-        (
-            f"指南：{guideline.get('title')}\n"
-            f"学生临床问题：{payload.get('clinical_question')}\n"
-            f"学生PICO：{payload.get('pico')}\n"
-            f"学生回答：{payload.get('answer')}\n"
-            f"评分细项：{scoring['detail']}\n"
-            "请输出不超过120字，包含优点、主要缺口和下一步修改建议。"
+        GUIDELINE_FEEDBACK_SYSTEM_PROMPT,
+        GUIDELINE_FEEDBACK_USER_TEMPLATE.format(
+            title=guideline.get("title"),
+            clinical_question=payload.get("clinical_question"),
+            pico=payload.get("pico"),
+            answer=payload.get("answer"),
+            detail=scoring["detail"],
         ),
         fallback,
     )
