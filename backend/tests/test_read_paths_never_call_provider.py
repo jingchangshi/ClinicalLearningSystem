@@ -95,7 +95,7 @@ def _login_teacher(client, db_factory) -> None:
 
 @pytest.mark.parametrize(
     "path",
-    ["/api/student/pathway", "/api/student/dashboard", "/api/student/competency"],
+    ["/api/student/pathway", "/api/student/dashboard", "/api/student/competency", "/api/student/history"],
 )
 def test_student_read_endpoints_make_no_provider_call(db_factory, client, recorded_provider, path):
     _seed(db_factory)
@@ -158,6 +158,73 @@ def test_teacher_can_request_a_fresh_insight_without_turning_get_into_a_write(
     # Freshly generated, so the next read serves it from the cache with no call.
     assert client.get("/api/teacher/dashboard").json()["teaching_insight_source"] == "ai"
     assert recorded_provider.calls == 1
+
+
+def test_reviewing_a_finished_case_never_re_generates_anything(db_factory, client, recorded_provider):
+    """学习记录 / 病例复盘 are historical reads, not a second evaluation."""
+
+    from datetime import datetime
+
+    from app.models import CaseSession, Score, StudentAnswer, TutorTurn
+    from app.services.serializers import dumps_json
+
+    student_id = _seed(db_factory)
+    db = db_factory()
+    try:
+        session = CaseSession(
+            student_id=student_id,
+            case_id=1,
+            status="completed",
+            completed_at=datetime(2026, 9, 10, 14, 21),
+        )
+        db.add(session)
+        db.flush()
+        for step, text in ANSWER_TEXTS.items():
+            db.add(StudentAnswer(session_id=session.id, step=step, answer_text=text))
+        db.add(
+            TutorTurn(
+                session_id=session.id,
+                step="key_information",
+                turn_index=0,
+                role="tutor",
+                message="蛋白尿为什么值得优先评估？",
+                tutor_state_json=dumps_json({"completion_state": "needs_more"}),
+            )
+        )
+        db.add(
+            Score(
+                session_id=session.id,
+                total_score=72.0,
+                medical_knowledge=70,
+                key_information=74,
+                differential_diagnosis=71,
+                evidence_integration=68,
+                clinical_decision=76,
+                evidence_based_medicine=65,
+                feedback="整体方向正确。",
+                strengths="关键信息提取完整",
+                weaknesses="循证依据不足",
+                evaluation_mode="ai",
+                provider="deepseek",
+                model="deepseek-flash",
+                ai_score=72.0,
+                rule_score=70.0,
+                degraded=False,
+                evaluation_detail_json="{}",
+            )
+        )
+        db.commit()
+        session_id = session.id
+    finally:
+        db.close()
+
+    _login_student(client)
+    for path in (f"/api/sessions/{session_id}/result", "/api/student/history"):
+        response = client.get(path)
+        assert response.status_code == 200, path
+
+    assert recorded_provider.provider_calls == [], "reviewing history must not reach the provider"
+    assert recorded_provider.audit_calls == [], "a historical read publishes no AI audit event"
 
 
 def test_cached_explanations_are_served_without_a_provider_call(

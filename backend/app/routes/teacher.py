@@ -1,8 +1,11 @@
+import csv
+import io
 import logging
 import os
 
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_role
@@ -34,6 +37,7 @@ from app.services import ai_enrichment
 from app.services.pathway_context import load_pathway_catalog
 from app.services.recommendation_service import build_learning_pathway, determine_pathway_stage, choose_recommendation
 from app.services.competency_projector import COMPETENCY_PROJECTOR_VERSION, confirmed_total, reproject_competencies
+from app.services.display_labels import module_label, stage_label
 from app.services.serializers import (
     ABILITY_LABELS,
     ALL_COMPETENCIES,
@@ -224,8 +228,12 @@ def get_student_learning_profile(student_id: int, db: Session = Depends(get_db))
     }
 
 
-@router.get("/export/research-data")
-def export_research_data(db: Session = Depends(get_db)) -> dict:
+# The demo page shows a readable slice; the download and the JSON contract keep
+# every record. `preview_limit` is what the page renders before 查看全部.
+RESEARCH_PREVIEW_LIMIT = 20
+
+
+def _research_rows(db: Session) -> list[dict]:
     rows = []
     events = db.query(LearningEvidenceEvent).order_by(LearningEvidenceEvent.created_at.asc()).all()
     for event in events:
@@ -236,13 +244,72 @@ def export_research_data(db: Session = Depends(get_db)) -> dict:
                 "student_code": f"S{event.student_id:04d}",
                 "class_name": student.class_name if student else "",
                 "module_type": event.module_type,
+                "module_label": module_label(event.module_type),
                 "score": event.score,
                 "competency_before": {key: value.get("before") for key, value in updates.items()},
                 "competency_after": {key: value.get("after") for key, value in updates.items()},
                 "created_at": event.created_at,
             }
         )
-    return {"format": "json", "anonymous": True, "rows": rows}
+    return rows
+
+
+def _research_summary(rows: list[dict]) -> dict:
+    dates = sorted(str(row["created_at"])[:10] for row in rows)
+    labels: list[str] = []
+    for row in rows:
+        if row["module_label"] not in labels:
+            labels.append(row["module_label"])
+    return {
+        "student_count": len({row["student_code"] for row in rows}),
+        "record_count": len(rows),
+        "module_labels": labels,
+        "date_range": {"start": dates[0] if dates else None, "end": dates[-1] if dates else None},
+        "preview_limit": RESEARCH_PREVIEW_LIMIT,
+        "preview_count": min(RESEARCH_PREVIEW_LIMIT, len(rows)),
+    }
+
+
+@router.get("/export/research-data")
+def export_research_data(db: Session = Depends(get_db)) -> dict:
+    rows = _research_rows(db)
+    # Newest first: a single prolific student must not bury every other one.
+    preview = sorted(rows, key=lambda row: row["created_at"], reverse=True)[:RESEARCH_PREVIEW_LIMIT]
+    return {
+        "format": "json",
+        "anonymous": True,
+        "rows": rows,
+        "preview_rows": preview,
+        "summary": _research_summary(rows),
+    }
+
+
+@router.get("/export/research-data.csv")
+def export_research_data_csv(db: Session = Depends(get_db)) -> Response:
+    """The complete anonymised dataset as a spreadsheet a teacher can open.
+
+    The BOM is there so Excel on a Chinese Windows install reads the headers as
+    UTF-8 instead of mojibake.
+    """
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["匿名学生编号", "班级", "学习模块", "训练得分", "记录时间"])
+    for row in _research_rows(db):
+        writer.writerow(
+            [
+                row["student_code"],
+                row["class_name"],
+                row["module_label"],
+                "" if row["score"] is None else row["score"],
+                str(row["created_at"]),
+            ]
+        )
+    return Response(
+        content="\ufeff" + buffer.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="clinpath-research-data.csv"'},
+    )
 
 
 @router.post("/interventions")
@@ -498,6 +565,7 @@ def _student_row(student: Student) -> dict:
         "id": student.id,
         "name": student.name,
         "current_stage": student.current_stage,
+        "current_stage_label": stage_label(student.current_stage),
         "recent_score": completed[-1].score.total_score if completed else None,
         "weakest_ability": ABILITY_LABELS[weakest],
         "recommended_training": _training_direction(weakest),

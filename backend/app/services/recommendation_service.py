@@ -14,7 +14,7 @@ PATHWAY_STAGES = [
     },
     {
         "key": "stage_3_clinical_decision",
-        "title": "治疗决策训练",
+        "title": "临床决策训练",
         "description": "结合器官受累和风险评估制定治疗与监测方案。",
     },
     {

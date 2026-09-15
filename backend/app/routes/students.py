@@ -1,3 +1,4 @@
+from sqlalchemy import func
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -9,8 +10,11 @@ from app.models import (
     KnowledgeUnit,
     LearningRecommendation,
     Student,
+    StudentAnswer,
+    TutorTurn,
     User,
 )
+from app.services.display_labels import stage_label
 from app.services.recommendation_service import (
     PATHWAY_STAGES,
     build_learning_pathway,
@@ -70,6 +74,20 @@ def get_current_pathway(
     user: User = Depends(get_current_user),
 ) -> dict:
     return _pathway_payload(db, _current_student_id(user))
+
+
+@student_router.get("/history")
+def get_current_history(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """The learner's own completed case training, for later review.
+
+    A read of what already happened: it must not generate anything, and it is
+    scoped by the authenticated account rather than by a client-supplied id.
+    """
+
+    return _history_payload(db, _current_student_id(user))
 
 
 @student_router.get("/knowledge-progress")
@@ -142,7 +160,11 @@ def _dashboard_payload(db: Session, student_id: int) -> dict:
         if explanation:
             item["recommendation_reason"] = explanation
     sessions = student_case_sessions(db, student_id)
-    completed = [session for session in sessions if session.status == "completed"]
+    completed = sorted(
+        (session for session in sessions if session.status == "completed"),
+        key=lambda session: session.completed_at or session.started_at,
+        reverse=True,
+    )
     recent = recommendations[0] if recommendations else None
     return {
         "student": serialize_student(student),
@@ -152,6 +174,17 @@ def _dashboard_payload(db: Session, student_id: int) -> dict:
         "recent_advice": recent["recommendation_reason"] if recent else "请先完成推荐病例训练。",
         "recent_advice_source": recent["recommendation_reason_source"] if recent else "rule",
         "learning_evidence": build_student_evidence_summary(db, student_id)["evidence_summary"],
+        # Three lines are enough for the dashboard teaser; the full list lives on
+        # /student/history so the home page does not turn into a log.
+        "recent_case_sessions": [
+            {
+                "session_id": session.id,
+                "case_title": session.case.title,
+                "completed_at": session.completed_at,
+                "score": session.score.total_score if session.score else None,
+            }
+            for session in completed[:3]
+        ],
         "progress": {
             "completed_cases": len(completed),
             "in_progress_cases": len(sessions) - len(completed),
@@ -241,6 +274,63 @@ def _get_student(db: Session, student_id: int) -> Student:
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
     return student
+
+
+def _history_payload(db: Session, student_id: int) -> dict:
+    student = _get_student(db, student_id)
+    sessions = sorted(
+        (session for session in student_case_sessions(db, student_id) if session.status == "completed"),
+        key=lambda session: session.completed_at or session.started_at,
+        reverse=True,
+    )
+    session_ids = [session.id for session in sessions]
+    # Two grouped queries instead of two lazy loads per row: this is a read path
+    # and its cost must not grow with the number of finished sessions.
+    tutor_counts = (
+        dict(
+            db.query(TutorTurn.session_id, func.count(TutorTurn.id))
+            .filter(TutorTurn.session_id.in_(session_ids))
+            .group_by(TutorTurn.session_id)
+            .all()
+        )
+        if session_ids
+        else {}
+    )
+    answer_counts = (
+        dict(
+            db.query(StudentAnswer.session_id, func.count(StudentAnswer.id))
+            .filter(StudentAnswer.session_id.in_(session_ids))
+            .group_by(StudentAnswer.session_id)
+            .all()
+        )
+        if session_ids
+        else {}
+    )
+    items = [
+        {
+            "session_id": session.id,
+            "case_id": session.case_id,
+            "case_title": session.case.title,
+            "disease_category": session.case.disease_category,
+            "started_at": session.started_at,
+            "completed_at": session.completed_at,
+            "status": session.status,
+            "status_label": "已完成",
+            "total_score": session.score.total_score if session.score else None,
+            "evaluation_mode": session.score.evaluation_mode if session.score else None,
+            "degraded": session.score.degraded if session.score else None,
+            "model": session.score.model if session.score else None,
+            "tutor_turn_count": tutor_counts.get(session.id, 0),
+            "answer_count": answer_counts.get(session.id, 0),
+        }
+        for session in sessions
+    ]
+    return {
+        "student": serialize_student(student),
+        "current_stage_label": stage_label(student.current_stage),
+        "count": len(items),
+        "items": items,
+    }
 
 
 def _recommendations_for_student(

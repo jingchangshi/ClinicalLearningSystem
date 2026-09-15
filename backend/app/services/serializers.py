@@ -63,12 +63,18 @@ def dumps_json(value: Any) -> str:
 
 
 def serialize_student(student: Student) -> dict:
+    # Imported here on purpose: ``display_labels`` reads ``PATHWAY_STAGES``, which
+    # reads this module, so a module-level import would be a cycle. The stage
+    # label ships with the student so no surface has to print a raw stage key.
+    from app.services.display_labels import stage_label
+
     return {
         "id": student.id,
         "name": student.name,
         "student_no": student.student_no,
         "class_name": student.class_name,
         "current_stage": student.current_stage,
+        "current_stage_label": stage_label(student.current_stage),
     }
 
 

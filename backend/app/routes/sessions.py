@@ -277,6 +277,12 @@ def get_result(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> dict:
+    """The learner's own record of one finished case.
+
+    A historical read: nothing here regenerates a tutor question, a score or a
+    recommendation, and the stored ``tutor_state_json`` never leaves the server.
+    """
+
     session = _get_session(db, session_id)
     require_student_access(session.student_id, user)
     if not session.score:
@@ -301,6 +307,7 @@ def get_result(
             for answer in session.answers
         ],
         "required_steps": REQUIRED_REASONING_STEPS,
+        "reasoning_review": _reasoning_review(db, session),
         "score": serialize_score(session.score),
         "competency": serialize_profile(session.student.competency_profile),
         "recommendation": {
@@ -311,6 +318,46 @@ def get_result(
         if latest_recommendation
         else None,
     }
+
+
+def _reasoning_review(db: Session, session: CaseSession) -> list[dict]:
+    """The five steps with what the learner wrote and what the tutor asked.
+
+    One query for the whole transcript, ordered by step then turn, then grouped
+    in Python. Five per-step queries would be the same data at five times the
+    read-path cost, and this endpoint is on the review page's critical path.
+    """
+
+    turns = (
+        db.query(TutorTurn)
+        .filter(TutorTurn.session_id == session.id)
+        .order_by(TutorTurn.step.asc(), TutorTurn.turn_index.asc())
+        .all()
+    )
+    turns_by_step: dict[str, list[dict]] = {}
+    for turn in turns:
+        turns_by_step.setdefault(turn.step, []).append(
+            {
+                "role": turn.role,
+                "message": turn.message,
+                "created_at": turn.created_at,
+            }
+        )
+    answers_by_step = {answer.step: answer for answer in session.answers}
+    review = []
+    for step in REQUIRED_REASONING_STEPS:
+        answer = answers_by_step.get(step["key"])
+        review.append(
+            {
+                "step": step["key"],
+                "step_title": step["title"],
+                "prompt": step["prompt"],
+                "answer_text": answer.answer_text if answer else "",
+                "answered_at": answer.updated_at if answer else None,
+                "tutor_turns": turns_by_step.get(step["key"], []),
+            }
+        )
+    return review
 
 
 def _get_session(db: Session, session_id: int) -> CaseSession:
