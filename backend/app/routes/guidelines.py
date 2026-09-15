@@ -7,6 +7,7 @@ from app.core.ai_audit import ai_invocation
 from app.database import get_db
 from app.models import GuidelineDocument, GuidelineLearningSession, Student, User
 from app.services.competency_update_service import update_competency_from_guideline
+from app.services import ai_enrichment
 from app.services.guideline_scoring import score_guideline_pico
 from app.services.serializers import (
     loads_json,
@@ -85,6 +86,7 @@ def submit_pico(
     update_competency_from_guideline(db, student_id, result["score"], result["detail"], session.id)
     db.commit()
     db.refresh(session)
+    ai_enrichment.schedule_student(student_id)
 
     return {
         "score": result["score"],

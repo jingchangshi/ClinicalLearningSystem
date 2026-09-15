@@ -15,7 +15,7 @@ import pytest
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 
-HEAD_REVISION = "20260915_05"
+HEAD_REVISION = "20260915_06"
 
 
 def _run_seed(database: Path) -> subprocess.CompletedProcess:

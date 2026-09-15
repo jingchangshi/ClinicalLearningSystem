@@ -18,7 +18,7 @@ class _FakeLLM:
     def __init__(self, payload):
         self.payload = payload
 
-    def chat_json(self, system_prompt, user_prompt, fallback):
+    def chat_json(self, system_prompt, user_prompt, fallback, task_type=None):
         if isinstance(self.payload, Exception):
             raise self.payload
         return self.payload
@@ -30,7 +30,7 @@ class _FakeReasoningLLM:
     def __init__(self, evaluation):
         self.evaluation = evaluation
 
-    def chat_json(self, system_prompt, user_prompt, fallback):
+    def chat_json(self, system_prompt, user_prompt, fallback, task_type=None):
         return self.evaluation
 
 

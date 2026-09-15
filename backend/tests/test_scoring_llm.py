@@ -13,17 +13,17 @@ class FakeLLM:
     def __init__(self, response):
         self.response = response
 
-    def chat_json(self, *_args):
+    def chat_json(self, *_args, **_kwargs):
         return self.response
 
 
 class FailingLLM:
-    def chat_json(self, *_args):
+    def chat_json(self, *_args, **_kwargs):
         raise TimeoutError("provider timed out")
 
 
 class DisabledLLM:
-    def chat_json(self, *_args):
+    def chat_json(self, *_args, **_kwargs):
         return {"_fallback": True}
 
 

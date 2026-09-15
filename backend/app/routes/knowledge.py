@@ -8,6 +8,7 @@ from app.auth import get_current_user, require_student_access, student_id_from_u
 from app.database import get_db
 from app.models import KnowledgeProgress, KnowledgeUnit, Student, User
 from app.services.competency_update_service import update_competency_from_knowledge
+from app.services import ai_enrichment
 from app.services.serializers import (
     loads_json,
     serialize_knowledge_progress,
@@ -91,6 +92,7 @@ def submit_quiz(
     update_competency_from_knowledge(db, student_id, quiz_score, progress.id)
     db.commit()
     db.refresh(progress)
+    ai_enrichment.schedule_student(student_id)
 
     return {
         "quiz_score": quiz_score,

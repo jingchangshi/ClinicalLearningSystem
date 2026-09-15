@@ -34,6 +34,7 @@ PROMPT_VERSIONS = {
     "teacher_insight": "teacher-insight-v1",
     "case_generation": "case-generation-v1",
     "skill_feedback": "skill-feedback-v1",
+    "ai_probe": "ai-probe-v1",
 }
 
 

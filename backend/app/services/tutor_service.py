@@ -115,6 +115,7 @@ def next_tutor_question(case: dict, step: str, student_answer: str, state: dict)
             reasoning_state=prompt_json(state),
         ),
         fallback,
+        task_type="tutor_question",
     )
     question = (question or "").strip()
     if not question:

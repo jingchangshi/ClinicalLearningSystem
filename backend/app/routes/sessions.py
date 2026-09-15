@@ -22,6 +22,7 @@ from app.models import (
 )
 from app.services.competency_update_service import update_competency_from_case
 from app.schemas import AnswerCreate, CoachRequest, SessionStartRequest, TutorRequest
+from app.services import ai_enrichment
 from app.services.llm_service import generate_learning_recommendation, score_student_answer
 from app.services.recommendation_service import determine_pathway_stage
 from app.services.tutor_service import build_reasoning_state, next_tutor_question
@@ -264,6 +265,9 @@ def submit_session(
     )
     db.commit()
     db.refresh(score)
+    # The learning event is durable now; refreshing the reader-facing explanation
+    # is optional work that must not make the student wait for another model call.
+    ai_enrichment.schedule_student(session.student_id)
     return _submission_response(session, score, recommendation)
 
 

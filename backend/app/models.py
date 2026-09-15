@@ -258,6 +258,41 @@ class LearningRecommendation(Base):
     recommended_case: Mapped["Case"] = relationship()
 
 
+class AIEnrichment(Base):
+    """Cached AI *enrichment* text: explanation wording, never decision input.
+
+    The learner model stays authoritative: competency scores, task ranking and
+    teacher-confirmed assessments are computed deterministically and never read
+    this table. What lives here is the readability layer — the reason string shown
+    next to an already-decided recommendation, or the teacher dashboard's class
+    insight paragraph.
+
+    Two properties make that safe:
+
+    * ``source_fingerprint`` is computed from the learner evidence that produced
+      the text. A row is only used while its fingerprint still matches, so an
+      explanation can never silently describe an older learner state.
+    * It is optional and regenerable. A missing or stale row degrades to the rule
+      text instead of failing a request, which is why generation may happen on a
+      best-effort background worker.
+    """
+
+    __tablename__ = "ai_enrichments"
+    __table_args__ = (UniqueConstraint("kind", "cache_key", name="uq_ai_enrichments_kind_key"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    cache_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    student_id: Mapped[int | None] = mapped_column(ForeignKey("students.id"), nullable=True)
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    prompt_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    source_fingerprint: Mapped[str] = mapped_column(String(120), nullable=False)
+    fallback_used: Mapped[bool] = mapped_column(nullable=False, default=False)
+    generated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class KnowledgeUnit(Base):
     __tablename__ = "knowledge_units"
 

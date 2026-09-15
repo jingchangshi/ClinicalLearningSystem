@@ -99,12 +99,12 @@ role-based navigation
 - `frontend/proxy.ts` 只做粗粒度路由保护，并且**必须先用 `JWT_SECRET` 验证 HS256 签名**
   再读取 `role`；未签名、签名错误、已过期、`alg` 非 HS256 的 token 一律视为未认证。
 - 角色不匹配不经过 `/login`，直接跳到该角色自己的 dashboard，避免 redirect loop。
-- `JWT_SECRET` 缺失时 proxy 记录错误并退化为「只检查 cookie 是否存在」，绝不因为配置缺失
-  把已登录用户锁在门外；后端仍会拒绝任何无效 token。
-- `JWT_SECRET` 缺失时**绝不**解码并信任未验证的 role：proxy 对携带 cookie 的受保护请求
-  直接返回 `503 Deployment misconfigured: JWT_SECRET is required`，没有 token 时照常跳
-  `/login`。这样既不会信任伪造声明，也不会在 `/login` 与 dashboard 之间来回跳转。
+- `JWT_SECRET` 缺失时前端**fail closed**，不存在「只检查 cookie 是否存在」这种降级：
+  没有 cookie 的受保护路由照常跳 `/login`；**携带 cookie 的受保护请求直接返回**
+  `503 Deployment misconfigured: JWT_SECRET is required`。proxy 绝不解码、绝不信任任何
+  未验证声明（`role` 也不行），也绝不因为配置缺失把未验证请求放行到页面。
   `scripts/start_frontend_8101.sh` 在 `JWT_SECRET` 为空时拒绝启动，让配置错误在启动阶段暴露。
+  该行为由 `E2E_EXPECT_NO_JWT_SECRET=1` 的 E2E 与 `frontend/proxy.ts` 共同固定。
 - 公开注册默认关闭（见 §9）。教师 / 管理员账号**从不**由 seed 创建，只能用服务器端
   `python -m app.manage_users create-teacher|create-admin` 开通；`audit-accounts` 用于复查
   账号（含 legacy 名称、未关联 admin、重复学生登录等标记，且从不输出任何口令材料）。
@@ -247,6 +247,64 @@ created_at
   避免 datetime / Decimal 之类对象把请求打成 500
   （历史事故：`/api/student/pathway` 500「Object of type datetime is not JSON serializable」）。
 
+### 5.5 读路径不变式与 task-aware 策略（本阶段新增）
+
+**不变式：普通 GET/读接口不同步依赖外部模型。**
+
+```text
+GET/read endpoint
+        ↓
+数据库 + 确定性逻辑（必需）
+        ↓
+立刻可用响应（规则理由永远齐全）
+        ↓
+可选：*仍然有效* 的缓存 AI 解释（有就换上更好的措辞）
+```
+
+外部模型慢、限流、不可用或昂贵时，页面不得因此变慢或不可用。实现落点：
+
+- `recommendation_service` 只做确定性规划：`LearnerGap → Candidate Generator →
+  Constraint Filter → Ranker`；`choose_recommendation()` / `build_learning_pathway()`
+  **不含任何模型调用**，每项任务自带规则理由（`REASON_TEMPLATES`）。
+- `app/services/ai_enrichment.py` 负责「生成 + 缓存 + 失效」：
+  `ai_enrichments` 表按 `(kind, cache_key)` 存一条 payload，并记录
+  `source_fingerprint`。**只有 fingerprint 仍然匹配时才使用缓存**，因此过期的解释
+  永远不会被当成当前解释展示。
+- fingerprint = 学习者证据（`competency_profile.updated_at` + 最新
+  `learning_evidence_events.id`）的摘要；班级洞察用全库最新证据 id + 计数。
+  证据一变化（完成病例 / 知识 / 技能 / SP / 指南 / 教师确认复核），缓存自动失效，
+  页面退回规则理由，而不是显示旧解释。
+- 生成时机：学习事件提交并 `commit` 之后由 `ai_enrichment.schedule_student()` 入队；
+  教师可显式 `POST /api/teacher/dashboard/refresh-insight` 生成班级洞察。
+  **GET 从不触发生成**（`tests/test_read_paths_never_call_provider.py` 守住）。
+- 读缓存**不写假的 `ai_invocations`**：只有真正发生 provider 调用时才产生审计事件。
+- 耐久性区别：核心评估状态（score / evidence / competency）在请求事务内同步写入，
+  丢失即损坏；AI 解释是可选、可再生成的，因此可以交给尽力而为的后台线程，
+  丢了只是少一句更好的措辞。`CLINPATH_AI_ENRICHMENT=off` 可立即停止这类调用。
+
+**task-aware 策略**：`backend/app/core/ai_policy.py` 是唯一声明处，
+`AI_TASK_POLICIES[task_type]` 描述每个任务的 `thinking / reasoning_effort /
+max_tokens / temperature / timeout / retries`；transport 仍然 provider-aware。
+路由与 service 只表达任务语义，**不构造 provider 原始载荷**
+（`tests/test_ai_policy.py` 断言只有 `llm_service` 出现 `extra_body`）。
+
+策略值来自 `backend/tools/ai_benchmark.py` 的实测比较，而不是直觉：
+
+```text
+task                       thinking   effort   max_tokens  timeout   依据
+case_evaluation            enabled    high     8192        60s       正确性优先；关闭 thinking 实测快 4.6×，
+                                                                     但属于教学判定，未在证据足够前改动
+case_generation            enabled    high     8192        60s       低频、教师侧；实测方差大（14–29s）
+tutor_question             disabled   —        600         25s       实测 p50 963ms vs thinking 4672ms
+sp_patient                 disabled   —        600         25s       实测 p50 1218ms vs thinking 3252ms
+sp_evaluation              disabled   —        2600        40s       实测 1525ms vs 4504ms（结构化 JSON）
+guideline_rationale        disabled   —        1200        30s       实测 1286ms vs 5717ms
+skill_feedback             disabled   —        700         25s       实测 1295ms vs 2694ms
+recommendation_explanation disabled   —        900         25s       实测 1204ms vs 2889ms（路径页解释）
+teacher_insight            disabled   —        600         25s       实测 1650ms vs 3967ms
+ai_probe                   disabled   —        16          15s       「能不能连通」，不需要推理
+```
+
 ## 6. Learning integrity（一次训练只算一次）
 
 - `student_answers` 有唯一约束 `uq_student_answers_session_step`：`(session_id, step)`。
@@ -328,6 +386,24 @@ competency profile
 
 这是合理的 MVP：结构化逻辑负责可靠性，LLM 只负责语义表达。
 不要改成「LLM 决定一切」。
+
+**本阶段修正**：解释文本曾经在 `GET /api/student/pathway`、`GET /api/student/dashboard`、
+`GET /api/teacher/dashboard`、`GET /api/teacher/students/{id}/learning-profile`
+里同步生成，于是「刷新页面」=「再花一次钱、再等 3–20 秒」。现在这四条读路径
+**只读确定性结果 + 仍然有效的缓存解释**（见 §5.5）：
+
+```text
+GET /pathway
+    ↓
+deterministic pathway（规则理由永远可用）
+    ↓
+ai_enrichments 中 fingerprint 匹配的解释（有则替换措辞）
+    ↓
+reason_source = ai | rule（不把旧解释伪装成当前解释）
+```
+
+推荐理由的生成改到「有意义的学习事件之后」（提交并 commit 之后入队）或教师显式刷新；
+LLM 不参与 `selected case`、`pathway_stage`、competency 的任何决定。
 
 病例候选不再按标题字符串匹配：`case_tags(case)` 从结构化字段
 （`learning_objectives` / `disease_category` / `chief_complaint` / `difficulty`）
@@ -460,19 +536,31 @@ server {
 
 在没有域名 / 证书之前，HTTPS 迁移不阻塞其它修复，但不得再把裸 HTTP 描述为最终生产架构。
 
-## 12. 已知债务（按优先级）
+## 12. 已知债务（按优先级，依据本阶段实测重排）
 
+- P1：**病例评测仍然是同步的**。真实 provider 实测 p50 17.6–20.3s、p95 28.3s、
+  最大 61.7s（并发 2/5/10）。它不再拖累任何读路径，但「提交后等待半分钟」仍是
+  教学体验问题。下一步应做异步化设计（冻结作答 → `evaluation_pending` → 后台评测 →
+  结果就绪），见 `docs/PILOT_READINESS_REPORT.md` §9。
 - P1：`ai_invocations` 以「一次任务一个事件」聚合记录；如需逐次重试级别的审计
   （每次 attempt 一行）仍需扩展。
 - P1：五类学习材料都已结构化打标并接入 Candidate → Constraint → Ranker；标签目前由内容
   字段启发式推导，尚未由教师在编辑界面显式维护（缺 tags 的可视化编辑与校验）。
 - P1：tutor 只覆盖病例训练的 5 个推理步骤；SP 问诊、指南 PICO、技能训练仍是一次性反馈。
-- P1：限流为单进程内存实现，多进程 / 多实例部署前必须替换。
+- P1：限流仍是单进程内存实现，而部署已改为多 worker（§16）。
+  **当前决策是接受并记录 per-process 语义**：限流是滥用防护，不是配额账本，
+  有效上限变成「配置值 × worker 数」对教学试点可接受；换共享限流器需要引入
+  额外中间件，本阶段没有证据支持。多实例（多机）部署前必须重新评估。
+- P2：`ai_runtime` 的 calls/failures/fallbacks 与最近一次 probe 状态是**进程内**的，
+  多 worker 下 `/teacher/runtime` 看到的是「某个 worker」的计数；持久事实以
+  `ai_invocations` 表为准。若要跨 worker 一致，需要把计数改为查表。
 - P2：LLM 出口强制脱敏 + 教师录入时检测提示（可选严格阻断）均已实现；
   剩余限制是正则本身——完全没有标签、也没有性别/年龄等线索的自由文本姓名仍可能漏过。
   当前病例库为教学用示例数据。
-- P2：公网仍为 HTTP，需要域名 + HTTPS reverse proxy + `COOKIE_SECURE=true`。
 - P2：learner model 仍是加权投影，未纳入 confidence / difficulty / recency / source。
+- P2：读接口仍是 GIL 受限的同步实现：4 worker 让 100 并发读 p95 落在 0.14–0.18s，
+  但单进程只有几十 req/s；若试点规模继续增长，应先做 N+1/序列化开销优化
+  （本阶段已把 pathway 的 161 条 SQL 降到 18 条），再考虑多机。
 
 ## 13. 数据库演进与迁移安全
 
@@ -486,6 +574,16 @@ server {
   能力投影，再在第二个事务里写入推荐（`get_result` 已容忍推荐暂缺）。
 - 审计写入不预先执行任何读语句：读会让 INSERT 变成锁升级，SQLite 在这种升级上会立即返回
   `SQLITE_BUSY` 而忽略 `busy_timeout`。审计失败只记 warning，绝不影响训练请求。
+- **连接池是一个容量上限，不是一个实现细节**：SQLAlchemy 对文件 SQLite 默认使用
+  `QueuePool(pool_size=5, max_overflow=10)`，即整进程只有 15 个并发 session。
+  100 并发读实测直接把它打满，请求在池上等 30 秒后抛
+  `QueuePool limit of size 5 overflow 10 reached`。现在
+  `app/database.py` 显式声明 `pool_size=20 / max_overflow=40 / pool_timeout=5`
+  （可用 `CLINPATH_SQLITE_POOL_SIZE` 等覆盖）。缩短 `pool_timeout` 也是刻意的：
+  等 30 秒只会把容量问题变成一堆慢 500。
+- 读接口是 GIL 受限的同步函数：单进程只能顺序执行 Python 级工作，`docs/PILOT_READINESS_REPORT.md`
+  记录了 100 并发下的实测吞吐与多 worker 对比。**提高 worker 数会改变进程内语义**
+  （限流窗口与 `ai_runtime` 计数变为 per-process），见 §12 与 §16。
 
 1. 迁移前先跑 `scripts/backup_db.sh` 生成时间戳备份（`start_backend_8100.sh` 会自动执行）。
 2. `alembic current` / `alembic heads` 确认迁移链，再 `alembic upgrade head`。
@@ -534,6 +632,23 @@ E2E_EXPECT_REAL_AI=1         针对已配置真实 provider 的生产部署，�
                              case_evaluation 与 tutor_question 的 calls>0、success=true、
                              fallback_used=false。DeepSeek 不可用时该门禁必须失败，不允许静默回退。
 ```
+
+本阶段新增的三类**永久架构门禁**（都在默认 `pytest -q` 内，不需要任何环境变量）：
+
+```text
+tests/test_read_paths_never_call_provider.py
+    替换 provider 边界计数：/student/pathway、/student/dashboard、/student/competency、
+    /teacher/dashboard、/teacher/students/{id}/learning-profile 的 provider_call_count == 0，
+    且读请求不产生任何 AI 审计事件；缓存解释过期时展示规则理由、且不在读路径触发生成。
+tests/test_ai_policy.py
+    每个 audit 能力都有策略；thinking 任务不得携带 temperature；只有 llm_service
+    可以碰 `extra_body`；正确性关键任务保留完整推理预算。
+tests/test_proxy_timeout_budget.py（既有）
+    proxyTimeout 仍是「正确性上限」，不因页面变快而调小。
+```
+
+页面延迟证据不使用毫秒断言（浏览器测试会因此变脆），改用
+`scripts/measure_page_latency.py` 采样并写进报告；provider 停机的导航验收见 §16。
 
 ### 14.2 部署一致性
 
@@ -633,3 +748,58 @@ proxyTimeout (frontend/next.config.ts)  >  LLM_TIMEOUT_SECONDS × (LLM_MAX_RETRI
 | Competency Model | `models.CompetencyProfile` + `services/competency_projector.py` |
 | Adaptive Planner | `services/recommendation_service.py` |
 | Teacher Review | `routes/teacher.py`、`models.TeacherScoreReview`、`/teacher/runtime` |
+
+## 16. 容量、SLO 与实测基线
+
+完整数据与复现命令在 `docs/PILOT_READINESS_REPORT.md`；这里只固定**可执行的**目标与
+**已经达成的**事实，二者必须分开写，不得互相冒充。
+
+### 目标（试点 SLO）
+
+```text
+普通已认证 GET        ：低负载 p95 < 1s（后端）
+页面可交互            ：几秒内，不等待模型
+GET /student/pathway  ：0 次 provider 调用，确定性响应立即可用
+GET /teacher/dashboard：0 次 provider 调用
+GET /teacher/.../learning-profile：0 次 provider 调用
+AI 任务单独报告        ：Tutor / case evaluation / SP feedback / guideline rationale
+```
+
+### 本阶段实测达成情况（单 VPS，4 vCPU，SQLite WAL，4 backend workers）
+
+```text
+100 并发非 AI 用户（k6，真实登录 + 导航，2m45s）
+    read p95 = 139ms / 187ms（两次运行）
+    0% HTTP 失败，0 个 5xx，0 个 429（限流已按 staging 设置抬高）
+    backend 峰值 CPU ≈ 2.3 / 4 核，RSS ≈ 655MB
+    SQLite 同负载下写入 1283 次：0 失败，p50 1ms / p95 2ms
+
+provider 完全不可达时
+    所有导航 GET 200，路径页 27–35ms、教师看板 107–113ms
+
+mock 慢 provider（8s / 15s）+ 25 个并发 AI 请求
+    导航 p95 206ms / 326ms，0 5xx；provider 全部 429 时导航 p95 615ms，0 5xx
+
+真实 DeepSeek（deepseek-flash）
+    tutor 并发 2/5/10：p50 0.98 / 5.8 / 5.7s，无降级、无 429
+    case evaluation 并发 2/5/10：p50 17.6 / 18.8 / 20.3s，p95 28.3s，无降级
+```
+
+### 为什么是 4 个 worker
+
+实测：单进程在 100 并发读下 p95 6–10s（GIL 受限的同步请求体），3 worker p95 ≈ 2.0s，
+4 worker p95 ≈ 0.19s 且峰值 CPU 2.3/4 核、RSS 655MB，仍有留给 Next.js 与系统的余量。
+代价必须一起写下来：限流窗口与 `ai_runtime` 计数变成 per-process（§12）。
+
+### 复现工具
+
+```text
+loadtest/k6_navigation.js        场景 A：100 并发非 AI 用户
+loadtest/k6_mixed_ai.js          场景 B：导航 + 并发 AI（配合 mock provider）
+loadtest/mock_provider.py        确定性假 provider（延迟 / 429 / 5xx / 空体 / 非法 JSON）
+loadtest/sqlite_write_probe.py   负载下的 SQLite 写健康
+scripts/start_staging_8200.sh    一次性 staging 后端（生产库副本 + 迁移到 head）
+scripts/measure_page_latency.py  认证后页面延迟采样（before/after）
+backend/tools/ai_benchmark.py    逐任务策略的延迟/质量对比（会消耗真实额度）
+backend/tools/ai_concurrency.py  有界真实 provider 并发
+```

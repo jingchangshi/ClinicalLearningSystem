@@ -27,8 +27,11 @@ from app.services.learning_evidence_service import (
     build_growth_trend,
     build_student_evidence_events,
     build_student_evidence_summary,
+    student_case_sessions,
 )
 from app.services.llm_service import llm_service
+from app.services import ai_enrichment
+from app.services.pathway_context import load_pathway_catalog
 from app.services.recommendation_service import build_learning_pathway, determine_pathway_stage, choose_recommendation
 from app.services.competency_projector import COMPETENCY_PROJECTOR_VERSION, confirmed_total, reproject_competencies
 from app.services.serializers import (
@@ -40,10 +43,7 @@ from app.services.serializers import (
     serialize_case,
     serialize_case_summary,
     serialize_guideline_session,
-    serialize_knowledge_summary,
     serialize_profile,
-    serialize_skill_summary,
-    serialize_sp_case_summary,
     serialize_sp_session,
     serialize_student,
 )
@@ -86,12 +86,10 @@ def get_teacher_dashboard(db: Session = Depends(get_db)) -> dict:
     weak_dimensions = _weak_dimensions(averages)
     training_summary = build_class_training_summary(db)
     teaching_interventions = _teaching_interventions(weak_dimensions)
-    with ai_invocation("teacher_insight", evidence_ref="teacher_dashboard"):
-        teaching_insight_summary = llm_service.generate_teacher_insight(
-            weak_dimensions,
-            training_summary,
-            _teaching_insight_fallback(weak_dimensions, training_summary),
-        )
+    # Reading the dashboard must not wait for a model. The deterministic summary
+    # is always available; a *current* cached insight replaces it when one exists
+    # (generated after a learning event, or by the explicit refresh action).
+    insight = ai_enrichment.current_teacher_insight(db)
     return {
         "student_count": len(students),
         "completed_session_count": len(completed),
@@ -115,7 +113,13 @@ def get_teacher_dashboard(db: Session = Depends(get_db)) -> dict:
         "current_common_weakness": weak_dimensions[0]["label"] if weak_dimensions else "暂无明显短板",
         "class_heatmap": build_class_heatmap(db),
         "teaching_interventions": teaching_interventions,
-        "teaching_insight_summary": teaching_insight_summary,
+        "teaching_insight_summary": (
+            insight["payload"]["insight"]
+            if insight
+            else _teaching_insight_fallback(weak_dimensions, training_summary)
+        ),
+        "teaching_insight_source": "ai" if insight else "rule",
+        "teaching_insight_generated_at": insight["generated_at"] if insight else None,
         "teaching_focus": _teaching_focus(weak_dimensions),
         "students": [_student_row(student) for student in students],
         "recent_sessions": [
@@ -131,14 +135,58 @@ def get_teacher_dashboard(db: Session = Depends(get_db)) -> dict:
     }
 
 
+@router.post("/dashboard/refresh-insight")
+def refresh_teacher_insight(db: Session = Depends(get_db)) -> dict:
+    """Explicit, deliberate AI generation. GET stays read-only.
+
+    A teacher reloading the dashboard must not spend provider quota; asking for a
+    fresh insight is a separate decision, so it is a POST that persists its own
+    result.
+    """
+
+    text = ai_enrichment.regenerate_teacher_insight(db, build_teacher_insight_text)
+    if text is None:
+        return {
+            "teaching_insight_summary": None,
+            "teaching_insight_source": "rule",
+            "degraded": True,
+            "message": "AI 洞察暂不可用，已保留规则化教学建议。",
+        }
+    return {"teaching_insight_summary": text, "teaching_insight_source": "ai", "degraded": False}
+
+
+def build_teacher_insight_text(db: Session) -> str | None:
+    """Generate the class insight now. ``None`` means the model did not answer.
+
+    A rule answer must never be stored as an AI insight, so the audit event's
+    ``fallback_used`` flag decides whether there is anything to persist.
+    """
+
+    students = db.query(Student).all()
+    weak_dimensions = _weak_dimensions(_class_averages(students))
+    training_summary = build_class_training_summary(db)
+    with ai_invocation("teacher_insight", evidence_ref="teacher_dashboard") as invocation:
+        text = llm_service.generate_teacher_insight(
+            weak_dimensions,
+            training_summary,
+            _teaching_insight_fallback(weak_dimensions, training_summary),
+        )
+        if invocation.fallback_used:
+            return None
+    return text
+
+
 @router.get("/students/{student_id}/learning-profile")
 def get_student_learning_profile(student_id: int, db: Session = Depends(get_db)) -> dict:
     student = db.get(Student, student_id)
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
     profile = serialize_profile(student.competency_profile)
-    recent_activity = _recent_activity(db)
-    learning_pathway = build_learning_pathway(profile, recent_activity)
+    learning_pathway = build_learning_pathway(profile, load_pathway_catalog(db))
+    enrichment = ai_enrichment.current_pathway_enrichment(db, student_id)
+    explanation_source = ai_enrichment.apply_task_explanations(
+        learning_pathway["recommended_tasks"], enrichment
+    )
     completed_sessions = [
         {
             "session_id": session.id,
@@ -146,7 +194,7 @@ def get_student_learning_profile(student_id: int, db: Session = Depends(get_db))
             "score": session.score.total_score if session.score else None,
             "completed_at": session.completed_at,
         }
-        for session in student.sessions
+        for session in student_case_sessions(db, student_id)
         if session.status == "completed"
     ]
     latest_sp = (
@@ -167,6 +215,8 @@ def get_student_learning_profile(student_id: int, db: Session = Depends(get_db))
         "learning_evidence": build_student_evidence_summary(db, student_id)["evidence_summary"],
         "evidence_events": build_student_evidence_events(db, student_id),
         "recommended_tasks": learning_pathway["recommended_tasks"],
+        "explanation_source": explanation_source,
+        "explanation_generated_at": enrichment["generated_at"] if enrichment else None,
         "completed_sessions": completed_sessions,
         "latest_sp": serialize_sp_session(latest_sp) if latest_sp else None,
         "latest_guideline": serialize_guideline_session(latest_guideline) if latest_guideline else None,
@@ -267,6 +317,9 @@ def create_score_review(
         db.rollback()
         raise
     db.refresh(review)
+    # A teacher-confirmed score is a new piece of evidence: the cached class
+    # insight and this learner's explanation are both out of date now.
+    ai_enrichment.schedule_student(event.student_id)
     return _serialize_review(review)
 
 
@@ -464,25 +517,6 @@ def _training_direction(weakest: str) -> str:
         "humanistic_care": "SP人文关怀训练",
     }
     return mapping[weakest]
-
-
-def _recent_activity(db: Session) -> dict:
-    from app.models import ClinicalSkill, GuidelineDocument, KnowledgeUnit, SPCase
-
-    return {
-        "cases": [serialize_case_summary(case) for case in db.query(Case).all()],
-        "knowledge_units": [serialize_knowledge_summary(unit) for unit in db.query(KnowledgeUnit).all()],
-        "clinical_skills": [serialize_skill_summary(skill) for skill in db.query(ClinicalSkill).all()],
-        "guidelines": [
-            {
-                "id": guideline.id,
-                "title": guideline.title,
-                "difficulty": "指南",
-            }
-            for guideline in db.query(GuidelineDocument).all()
-        ],
-        "sp_cases": [serialize_sp_case_summary(sp_case) for sp_case in db.query(SPCase).all()],
-    }
 
 
 def _serialize_intervention(intervention: TeachingIntervention) -> dict:

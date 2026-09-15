@@ -4,6 +4,7 @@ import type { LucideIcon } from "lucide-react";
 
 import { ClassHeatmap } from "@/components/ClassHeatmap";
 import { CompetencyRadar } from "@/components/CompetencyRadar";
+import { TeacherInsightPanel } from "@/components/TeacherInsightPanel";
 import { TeachingInterventionPanel } from "@/components/TeachingInterventionPanel";
 import { TrainingLoopFlow } from "@/components/TrainingLoopFlow";
 import { getTeacherDashboard } from "@/lib/api";
@@ -66,6 +67,8 @@ export default async function TeacherDashboard() {
         <TeachingInterventionPanel interventions={data.teaching_interventions.length ? data.teaching_interventions : data.teaching_focus} />
         <TrainingLoopFlow />
       </div>
+
+      <TeacherInsightPanel summary={data.teaching_insight_summary} source={data.teaching_insight_source} />
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="font-semibold">研究数据入口</h2>

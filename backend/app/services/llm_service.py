@@ -6,6 +6,7 @@ from typing import Any
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
 
 from app.core import ai_audit
+from app.core.ai_policy import AI_PROBE, AITaskPolicy, policy_for
 from app.core.ai_runtime import ai_runtime
 from app.core.deidentify import deidentify, deidentify_text
 from app.core.llm_config import (
@@ -28,13 +29,14 @@ from app.llm.prompts.evaluation import (
 )
 from app.llm.prompts.insight import TEACHER_INSIGHT_SYSTEM_PROMPT, TEACHER_INSIGHT_USER_TEMPLATE
 from app.llm.prompts.pathway import RECOMMENDATION_EXPLANATION_SYSTEM_PROMPT, RECOMMENDATION_EXPLANATION_USER_TEMPLATE
+from app.llm.prompts.pathway import RECOMMENDATION_EXPLANATION_BATCH_SYSTEM_PROMPT
 
 logger = logging.getLogger("clinpath.llm")
 
 # A tiny, deterministic, non-thinking request: the probe answers "is the
-# provider reachable?", never "how well does it reason?".
+# provider reachable?", never "how well does it reason?" (policy: ai_probe).
 PROBE_PROMPT = "Reply exactly: ok"
-PROBE_MAX_TOKENS = 16
+PROBE_MAX_TOKENS = AI_PROBE.max_tokens
 
 # Transient provider failures worth another attempt. Everything else (bad
 # request, bad key, empty balance, invalid parameters) is permanent: retrying it
@@ -72,9 +74,12 @@ def build_chat_kwargs(
     response_format: dict | None = None,
     thinking: bool | None = None,
     max_tokens: int | None = None,
+    policy: AITaskPolicy | None = None,
 ) -> dict:
     """Assemble provider request kwargs. The one place Thinking Mode is decided.
 
+    - ``policy`` is the task's own budget (``app.core.ai_policy``). When it is
+      absent the deployment-wide ``LLM_*`` values apply.
     - Thinking Mode (DeepSeek) is requested explicitly instead of relying on the
       provider default, and carries ``reasoning_effort``.
     - ``temperature`` is omitted while thinking is on: the provider ignores it,
@@ -84,17 +89,23 @@ def build_chat_kwargs(
     """
 
     deepseek = LLM_PROVIDER == "deepseek"
+    if policy is not None:
+        thinking = policy.thinking
+        max_tokens = policy.max_tokens
+        if policy.temperature is not None:
+            temperature = policy.temperature
     wants_thinking = thinking_mode_active(LLM_PROVIDER) if thinking is None else (deepseek and thinking)
     kwargs: dict = {
         "model": LLM_MODEL,
         "messages": _sanitised(messages),
-        "timeout": LLM_TIMEOUT_SECONDS,
+        "timeout": policy.timeout_seconds if policy else LLM_TIMEOUT_SECONDS,
         "max_tokens": max_tokens if max_tokens is not None else LLM_MAX_TOKENS,
     }
     if deepseek:
         kwargs["extra_body"] = {"thinking": {"type": "enabled" if wants_thinking else "disabled"}}
     if wants_thinking:
-        kwargs["reasoning_effort"] = LLM_REASONING_EFFORT
+        # The task policy may ask for a cheaper effort than the deployment default.
+        kwargs["reasoning_effort"] = (policy.reasoning_effort if policy else None) or LLM_REASONING_EFFORT
     else:
         kwargs["temperature"] = temperature
     if response_format:
@@ -125,6 +136,7 @@ class OpenAICompatibleClient:
         response_format: dict | None = None,
         thinking: bool | None = None,
         max_tokens: int | None = None,
+        policy: AITaskPolicy | None = None,
     ):
         kwargs = build_chat_kwargs(
             messages,
@@ -132,11 +144,12 @@ class OpenAICompatibleClient:
             response_format=response_format,
             thinking=thinking,
             max_tokens=max_tokens,
+            policy=policy,
         )
         return OpenAI(
             api_key=self.api_key,
             base_url=self.base_url,
-            timeout=LLM_TIMEOUT_SECONDS,
+            timeout=policy.timeout_seconds if policy else LLM_TIMEOUT_SECONDS,
             max_retries=0,
         ).chat.completions.create(**kwargs)
 
@@ -152,22 +165,44 @@ def _sanitised(messages: list[dict]) -> list[dict]:
 
 
 class LLMService:
-    def chat_completion(self, system_prompt: str, user_prompt: str, fallback: str) -> str:
+    def chat_completion(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        fallback: str,
+        task_type: str | None = None,
+        policy: AITaskPolicy | None = None,
+    ) -> str:
+        # An explicit policy wins so the benchmark harness can compare options
+        # without editing the production table.
+        policy = policy or (policy_for(task_type) if task_type else None)
         if not LLM_API_KEY:
             ai_runtime.record_call("rule_fallback", "NotConfigured")
             ai_audit.report_call(success=False, fallback_used=True, latency_ms=0, error_type="NotConfigured")
             return fallback
-        return self._with_retries(lambda: self._chat_text_once(system_prompt, user_prompt), fallback, "text")
+        return self._with_retries(
+            lambda: self._chat_text_once(system_prompt, user_prompt, policy), fallback, "text", policy
+        )
 
-    def chat_json(self, system_prompt: str, user_prompt: str, fallback: Any) -> Any:
+    def chat_json(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        fallback: Any,
+        task_type: str | None = None,
+        policy: AITaskPolicy | None = None,
+    ) -> Any:
+        policy = policy or (policy_for(task_type) if task_type else None)
         if not LLM_API_KEY:
             ai_runtime.record_call("rule_fallback", "NotConfigured")
             ai_audit.report_call(success=False, fallback_used=True, latency_ms=0, error_type="NotConfigured")
             return fallback
-        return self._with_retries(lambda: self._chat_json_once(system_prompt, user_prompt, fallback), fallback, "json")
+        return self._with_retries(
+            lambda: self._chat_json_once(system_prompt, user_prompt, fallback, policy), fallback, "json", policy
+        )
 
     def generate_case(self, system_prompt: str, user_prompt: str, fallback: dict) -> dict:
-        payload = self.chat_json(system_prompt, user_prompt, fallback)
+        payload = self.chat_json(system_prompt, user_prompt, fallback, task_type="case_generation")
         return payload if isinstance(payload, dict) else fallback
 
     def explain_recommendation(self, profile: dict, latest_scores: dict, task: dict, fallback: str) -> str:
@@ -175,18 +210,16 @@ class LLMService:
             RECOMMENDATION_EXPLANATION_SYSTEM_PROMPT,
             RECOMMENDATION_EXPLANATION_USER_TEMPLATE.format(profile=profile, latest_scores=latest_scores, task=task),
             fallback,
+            task_type="recommendation_explanation",
         )
 
     def explain_recommendation_batch(self, profile: dict, recent_evidence: dict, tasks: list[dict]) -> dict[str, str]:
         fallback: dict[str, str] = {}
         payload = self.chat_json(
-            (
-                "你是临床学习路径导师。只输出 JSON："
-                "{\"explanations\":{\"task_key\":\"简洁、基于能力画像的训练理由\"}}。"
-                "不得预测未经验证的学习增益。"
-            ),
+            RECOMMENDATION_EXPLANATION_BATCH_SYSTEM_PROMPT,
             prompt_json({"profile": profile, "recent_evidence": recent_evidence, "tasks": tasks}),
             fallback,
+            task_type="recommendation_explanation",
         )
         explanations = payload.get("explanations") if isinstance(payload, dict) else None
         if not isinstance(explanations, dict):
@@ -200,6 +233,7 @@ class LLMService:
             ),
             prompt_json({"transcript": transcript, "diagnosis_summary": diagnosis_summary}),
             fallback,
+            task_type="sp_evaluation",
         )
         return payload if isinstance(payload, dict) else fallback
 
@@ -212,6 +246,7 @@ class LLMService:
                 detail=scoring["detail"],
             ),
             fallback,
+            task_type="guideline_rationale",
         )
 
     def generate_teacher_insight(self, weak_dimensions: list[dict], training_summary: dict, fallback: str) -> str:
@@ -219,20 +254,24 @@ class LLMService:
             TEACHER_INSIGHT_SYSTEM_PROMPT,
             TEACHER_INSIGHT_USER_TEMPLATE.format(weak_dimensions=weak_dimensions, training_summary=training_summary),
             fallback,
+            task_type="teacher_insight",
         )
 
-    def _chat_text_once(self, system_prompt: str, user_prompt: str) -> str:
+    def _chat_text_once(self, system_prompt: str, user_prompt: str, policy: AITaskPolicy | None = None) -> str:
         response = self._client().chat(
             [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.3,
+            policy=policy,
         )
         content = response.choices[0].message.content
         return content.strip() if content and content.strip() else ""
 
-    def _chat_json_once(self, system_prompt: str, user_prompt: str, fallback: Any) -> Any:
+    def _chat_json_once(
+        self, system_prompt: str, user_prompt: str, fallback: Any, policy: AITaskPolicy | None = None
+    ) -> Any:
         response = self._client().chat(
             [
                 {
@@ -249,6 +288,7 @@ class LLMService:
             ],
             temperature=0.2,
             response_format={"type": "json_object"},
+            policy=policy,
         )
         content = response.choices[0].message.content
         if not content or not content.strip():
@@ -258,11 +298,17 @@ class LLMService:
         parsed = json.loads(content)
         return parsed if isinstance(parsed, (dict, list)) else fallback
 
-    def _with_retries(self, operation, fallback: Any, operation_name: str = "chat") -> Any:
+    def _with_retries(
+        self,
+        operation,
+        fallback: Any,
+        operation_name: str = "chat",
+        policy: AITaskPolicy | None = None,
+    ) -> Any:
         last_error: Exception | None = None
         last_error_type: str | None = None
         started = time.monotonic()
-        max_attempts = max(1, LLM_MAX_RETRIES + 1)
+        max_attempts = max(1, (policy.max_retries if policy else LLM_MAX_RETRIES) + 1)
         for attempt in range(max_attempts):
             attempt_started = time.monotonic()
             try:
@@ -319,7 +365,7 @@ class LLMService:
                 [{"role": "user", "content": PROBE_PROMPT}],
                 temperature=0,
                 thinking=False,
-                max_tokens=PROBE_MAX_TOKENS,
+                policy=AI_PROBE,
             )
             latency_ms = round((time.monotonic() - started) * 1000)
             ai_runtime.record_probe(True, latency_ms, None)
@@ -355,6 +401,7 @@ def generate_reasoning_question(case: dict, step: str, student_answer: str) -> s
             student_answer=student_answer,
         ),
         _rule_reasoning_question(step, student_answer),
+        task_type="tutor_question",
     )
 
 

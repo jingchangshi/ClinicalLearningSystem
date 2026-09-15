@@ -136,6 +136,7 @@ def evaluate_case_submission(case: dict, answers: list[dict], rubric: dict, llm_
                 answers=prompt_json(answers), rule_evidence=prompt_json(rule_score),
             ),
             fallback,
+            task_type="case_evaluation",
         )
     except Exception:
         raw = fallback

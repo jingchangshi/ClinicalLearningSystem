@@ -136,6 +136,7 @@ def _feedback_with_llm(guideline: dict, payload: dict, scoring: dict) -> str:
             detail=scoring["detail"],
         ),
         fallback,
+        task_type="guideline_rationale",
     )
 
 

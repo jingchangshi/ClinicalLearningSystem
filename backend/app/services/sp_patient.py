@@ -9,7 +9,7 @@ def generate_patient_reply(sp_case: dict, transcript: list[dict], student_messag
     fallback = _rule_patient_reply(sp_case, student_message)
     system_prompt = _sp_system_prompt(sp_case)
     user_prompt = prompt_json({"transcript": transcript, "student_message": student_message})
-    return llm_service.chat_completion(system_prompt, user_prompt, fallback)
+    return llm_service.chat_completion(system_prompt, user_prompt, fallback, task_type="sp_patient")
 
 
 def score_sp_session(sp_case: dict, transcript: list[dict], diagnosis_summary: str) -> dict:

@@ -5,12 +5,9 @@ from app.auth import get_current_user, require_role, require_student_access
 from app.database import get_db
 from app.models import (
     Case,
-    ClinicalSkill,
     CompetencyProfile,
-    GuidelineDocument,
     KnowledgeUnit,
     LearningRecommendation,
-    SPCase,
     Student,
     User,
 )
@@ -21,15 +18,14 @@ from app.services.recommendation_service import (
     determine_pathway_stage,
     weakest_abilities,
 )
-from app.services.learning_evidence_service import build_student_evidence_summary
+from app.services import ai_enrichment
+from app.services.learning_evidence_service import build_student_evidence_summary, student_case_sessions
+from app.services.pathway_context import load_pathway_catalog
 from app.services.serializers import (
     ABILITY_LABELS,
     serialize_case_summary,
-    serialize_guideline_summary,
     serialize_knowledge_summary,
     serialize_profile,
-    serialize_skill_summary,
-    serialize_sp_case_summary,
     serialize_student,
 )
 
@@ -132,9 +128,21 @@ def get_dashboard(
 def _dashboard_payload(db: Session, student_id: int) -> dict:
     student = _get_student(db, student_id)
     profile = serialize_profile(student.competency_profile)
+    # Only the cases are ranked here; loading the whole five-module catalog for a
+    # dashboard read was pure overhead on a GIL-bound request path.
     cases = [serialize_case_summary(case) for case in db.query(Case).all()]
     recommendations = _recommendations_for_student(db, student_id, profile, cases)
-    completed = [session for session in student.sessions if session.status == "completed"]
+    # A cached explanation may rewrite the wording of an already-decided
+    # recommendation. It never decides which case is recommended, and reading
+    # the dashboard never waits for a provider.
+    enrichment = ai_enrichment.current_pathway_enrichment(db, student_id)
+    for item in recommendations:
+        explanation = ai_enrichment.explanation_for(enrichment, f"case:{item['case'].get('id')}")
+        item["recommendation_reason_source"] = "ai" if explanation else "rule"
+        if explanation:
+            item["recommendation_reason"] = explanation
+    sessions = student_case_sessions(db, student_id)
+    completed = [session for session in sessions if session.status == "completed"]
     recent = recommendations[0] if recommendations else None
     return {
         "student": serialize_student(student),
@@ -142,10 +150,11 @@ def _dashboard_payload(db: Session, student_id: int) -> dict:
         "recommended_cases": [item["case"] for item in recommendations[:3]],
         "recommendation_details": recommendations[:3],
         "recent_advice": recent["recommendation_reason"] if recent else "请先完成推荐病例训练。",
+        "recent_advice_source": recent["recommendation_reason_source"] if recent else "rule",
         "learning_evidence": build_student_evidence_summary(db, student_id)["evidence_summary"],
         "progress": {
             "completed_cases": len(completed),
-            "in_progress_cases": len(student.sessions) - len(completed),
+            "in_progress_cases": len(sessions) - len(completed),
             "average_score": round(
                 sum(session.score.total_score for session in completed if session.score) / len(completed),
                 1,
@@ -169,7 +178,9 @@ def get_pathway(
 def _pathway_payload(db: Session, student_id: int) -> dict:
     student = _get_student(db, student_id)
     profile = serialize_profile(student.competency_profile)
-    cases = [serialize_case_summary(case) for case in db.query(Case).all()]
+    catalog = load_pathway_catalog(db)
+    cases = catalog["cases"]
+    sessions = student_case_sessions(db, student_id)
     completed = [
         {
             "session_id": session.id,
@@ -177,7 +188,7 @@ def _pathway_payload(db: Session, student_id: int) -> dict:
             "score": session.score.total_score if session.score else None,
             "completed_at": session.completed_at,
         }
-        for session in student.sessions
+        for session in sessions
         if session.status == "completed"
     ]
     recent_scores = [
@@ -190,22 +201,19 @@ def _pathway_payload(db: Session, student_id: int) -> dict:
             "clinical_decision": session.score.clinical_decision,
             "evidence_based_medicine": session.score.evidence_based_medicine,
         }
-        for session in student.sessions
+        for session in sessions
         if session.score
     ]
     recommendation = choose_recommendation(profile, recent_scores, cases)
     weak_keys = weakest_abilities(profile, limit=4, use_expanded=True)
     knowledge_suggestions = _knowledge_suggestions(db, weak_keys)
-    learning_pathway = build_learning_pathway(
-        profile,
-        {
-            "cases": cases,
-            "knowledge_units": [serialize_knowledge_summary(unit) for unit in db.query(KnowledgeUnit).all()],
-            "clinical_skills": [serialize_skill_summary(skill) for skill in db.query(ClinicalSkill).all()],
-            "guidelines": [serialize_guideline_summary(guideline) for guideline in db.query(GuidelineDocument).all()],
-            "sp_cases": [serialize_sp_case_summary(sp_case) for sp_case in db.query(SPCase).all()],
-        },
+    # Deterministic first: the rule reasons are complete and correct on their own.
+    learning_pathway = build_learning_pathway(profile, catalog)
+    enrichment = ai_enrichment.current_pathway_enrichment(db, student_id)
+    explanation_source = ai_enrichment.apply_task_explanations(
+        learning_pathway["recommended_tasks"], enrichment
     )
+    recommended_reason = ai_enrichment.explanation_for(enrichment, f"case:{recommendation['case'].get('id')}")
     return {
         "student": serialize_student(student),
         "competency": profile,
@@ -213,7 +221,10 @@ def _pathway_payload(db: Session, student_id: int) -> dict:
         "current_stage": learning_pathway["current_stage"],
         "completed_cases": completed,
         "recommended_case": recommendation["case"],
-        "recommendation_reason": recommendation["reason"],
+        "recommendation_reason": recommended_reason or recommendation["reason"],
+        "recommendation_reason_source": "ai" if recommended_reason else "rule",
+        "explanation_source": explanation_source,
+        "explanation_generated_at": enrichment["generated_at"] if enrichment else None,
         "weak_abilities": [
             {"key": key, "label": ABILITY_LABELS[key], "score": profile[key]}
             for key in learning_pathway["weak_abilities"]

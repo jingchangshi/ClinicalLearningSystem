@@ -10,6 +10,7 @@ from app.core.ai_audit import ai_invocation
 from app.database import get_db
 from app.models import ClinicalSkill, SkillSession, Student, User
 from app.services.competency_update_service import update_competency_from_skill
+from app.services import ai_enrichment
 from app.services.serializers import (
     dumps_json,
     loads_json,
@@ -89,6 +90,7 @@ def submit_skill_session(
     update_competency_from_skill(db, session.student_id, result["score"], result["detail"], session.id)
     db.commit()
     db.refresh(session)
+    ai_enrichment.schedule_student(session.student_id)
 
     return {
         **result,
@@ -209,4 +211,5 @@ def _skill_feedback_with_llm(score: float, missed_steps: list[str], safety_score
                 errors=errors,
             ),
             fallback,
+            task_type="skill_feedback",
         )

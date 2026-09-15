@@ -76,7 +76,21 @@ Deployment                       → deploy/, scripts/
    into competency twice.
 9. Learning evidence must stay traceable back to the session that produced it.
 10. Every production change is tested before deployment, and deployment ends with a
-   real browser verification.
+    real browser verification.
+11. Ordinary GET/read endpoints never call an external model. Reads return
+    deterministic state (plus a *current* cached AI explanation when one exists);
+    generation happens on a learning event or an explicit teacher action.
+12. Adaptive pathway ranking is deterministic and usable with no model at all. The
+    LLM may rewrite explanation wording; it never decides what is recommended.
+13. Model policies are per task, declared once in `backend/app/core/ai_policy.py`.
+    Route handlers do not assemble provider payloads.
+14. `next.config.ts` `proxyTimeout` is the correctness ceiling for a legitimate
+    synchronous model call — never a latency target. Do not reduce it to "make
+    pages faster".
+15. Capacity and architecture changes are measurement-driven
+    (`docs/PILOT_READINESS_REPORT.md`). Multi-process deployment changes the
+    semantics of in-memory limits and runtime counters; reconcile them in the same
+    change.
 
 ## Definition of Done
 

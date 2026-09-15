@@ -1,6 +1,4 @@
-from app.core.ai_audit import ai_invocation
 from app.services.catalog_tags import MODULE_LABELS, item_tags
-from app.services.llm_service import llm_service
 from app.services.serializers import ALL_COMPETENCIES, ABILITY_LABELS, CORE_ABILITIES
 
 PATHWAY_STAGES = [
@@ -60,47 +58,40 @@ def weakest_abilities(profile: dict, limit: int = 2, use_expanded: bool = False)
 
 
 def choose_recommendation(profile: dict, recent_scores: list[dict], cases: list[dict]) -> dict:
+    """Deterministic case recommendation. Never calls a model.
+
+    The reason is rule text; an available AI enrichment may replace it for the
+    reader (``app.services.ai_enrichment``), but it must not decide *which* case
+    is recommended — and reading a page must not wait for a provider.
+    """
+
     stage = determine_pathway_stage(profile)
     latest = recent_scores[-1] if recent_scores else profile
     case = _pick_case(latest, cases)
-    fallback_reason = _recommendation_reason(latest, case)
     return {
         "case": case,
         "pathway_stage": stage,
-        "reason": explain_recommendation_with_llm(profile, latest, case, fallback_reason),
+        "reason": _recommendation_reason(latest, case),
     }
 
 
-def explain_recommendation_with_llm(profile: dict, latest_scores: dict, task: dict, fallback: str) -> str:
-    weak_keys = weakest_abilities(profile, limit=3, use_expanded=True) if profile else []
-    weak_text = "、".join(f"{ABILITY_LABELS.get(key, key)}={profile.get(key)}" for key in weak_keys) or "由当前任务优先级和训练类型判断"
-    with ai_invocation("recommendation_explanation", evidence_ref=f"case:{task.get('id')}"):
-        return llm_service.explain_recommendation(
-            {"主要能力缺口": weak_text, **profile},
-            latest_scores,
-            task,
-            fallback,
-        )
-
-
 def build_learning_pathway(student_profile: dict, recent_activity: dict) -> dict:
+    """Deterministic pathway. Usable with no model, no network and no cache.
+
+    Stages 1-4 stay authoritative:
+
+        LearnerGap -> Candidate Generator -> Constraint Filter -> Ranker
+
+    Every task already carries a rule reason from ``REASON_TEMPLATES``; AI
+    enrichment only rewrites the wording of that reason afterwards.
+    """
+
     current_stage = determine_pathway_stage(student_profile)
     weak_keys = weakest_abilities(student_profile, limit=5, use_expanded=True)
     # Learner gap -> candidate generator -> constraint filter -> ranker.
     candidates = generate_candidates(weak_keys, recent_activity)
     admissible = apply_constraints(candidates, student_profile)
     unique_tasks = rank_candidates(admissible, student_profile, weak_keys)[:3]
-    with ai_invocation("recommendation_explanation", evidence_ref="learning_pathway"):
-        explanations = llm_service.explain_recommendation_batch(
-            student_profile,
-            recent_activity.get("recent_evidence", {}),
-            [
-                {"task_key": _task_key(task), "title": task["title"], "type": task["type"], "priority": task["priority"], "fallback_reason": task["reason"]}
-                for task in unique_tasks
-            ],
-        )
-    for task in unique_tasks:
-        task["reason"] = explanations.get(_task_key(task), task["reason"])
     return {
         "current_stage": current_stage,
         "weak_abilities": weak_keys,
@@ -238,7 +229,9 @@ def _difficulty_fit(score: float, rank: int) -> float:
     return 0.0
 
 
-def _task_key(task: dict) -> str:
+def task_key(task: dict) -> str:
+    """Stable identity of a recommended task, used as the enrichment cache key."""
+
     return f"{task['type']}:{task['id']}"
 
 

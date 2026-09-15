@@ -9,3 +9,12 @@ RECOMMENDATION_EXPLANATION_USER_TEMPLATE = (
     "推荐任务：{task}\n"
     "请用2-3句话说明为什么推荐、对应能力缺口、下一步学习策略。"
 )
+
+# The pathway page explains several tasks at once, so the batch call has its own
+# contract. It lives here (not inline in the transport) so the benchmark measures
+# exactly the prompt production sends.
+RECOMMENDATION_EXPLANATION_BATCH_SYSTEM_PROMPT = (
+    "你是临床学习路径导师。只输出 JSON："
+    "{\"explanations\":{\"task_key\":\"简洁、基于能力画像的训练理由\"}}。"
+    "不得预测未经验证的学习增益。"
+)

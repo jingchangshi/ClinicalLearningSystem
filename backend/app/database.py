@@ -6,10 +6,23 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./clinical_learning.db")
 
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False},
-)
+# The default QueuePool is 5 connections plus 10 of overflow, i.e. 15 in-flight
+# sessions for the whole process. Measured under 100 concurrent readers, that
+# ceiling — not SQLite and not the CPU — was what produced
+# "QueuePool limit of size 5 overflow 10 reached, connection timed out".
+# The size is explicit here so the limit is a decision with evidence behind it.
+# ``pool_timeout`` stays short: waiting 30 s for a connection only converts a
+# capacity problem into a pile of slow 500s.
+_engine_kwargs: dict = {"connect_args": {"check_same_thread": False}}
+if DATABASE_URL.startswith("sqlite") and ":memory:" not in DATABASE_URL:
+    _engine_kwargs.update(
+        pool_size=int(os.getenv("CLINPATH_SQLITE_POOL_SIZE", "20")),
+        max_overflow=int(os.getenv("CLINPATH_SQLITE_MAX_OVERFLOW", "40")),
+        pool_timeout=float(os.getenv("CLINPATH_SQLITE_POOL_TIMEOUT", "5")),
+        pool_recycle=1800,
+    )
+
+engine = create_engine(DATABASE_URL, **_engine_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 

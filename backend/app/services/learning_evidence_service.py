@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from sqlalchemy.orm import selectinload
 
 from app.models import (
     CaseSession,
@@ -10,6 +11,24 @@ from app.models import (
     Student,
 )
 from app.services.serializers import loads_json
+
+
+def student_case_sessions(db: Session, student_id: int) -> list[CaseSession]:
+    """Every case session of one learner, with its case and score already loaded.
+
+    Touching ``session.case`` / ``session.score`` inside a loop is a lazy load per
+    row: one pathway page issued 161 SQL statements that way, which dominated the
+    request's CPU (and Python's GIL turns that CPU into latency for everyone
+    else). Three statements total is the same data.
+    """
+
+    return (
+        db.query(CaseSession)
+        .options(selectinload(CaseSession.case), selectinload(CaseSession.score))
+        .filter(CaseSession.student_id == student_id)
+        .order_by(CaseSession.started_at.desc())
+        .all()
+    )
 
 
 def build_student_evidence_summary(db: Session, student_id: int) -> dict:

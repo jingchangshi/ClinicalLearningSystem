@@ -143,7 +143,7 @@ def test_rule_fallback_never_quotes_a_hidden_label(monkeypatch):
 
     case = {"standard_diagnosis": "系统性红斑狼疮，疑似狼疮肾炎。"}
     state = {"missing_reasoning_elements": ["狼疮肾炎"], "asked_about": [], "misconceptions": []}
-    monkeypatch.setattr(tutor_service.llm_service, "chat_completion", lambda *_args: "")
+    monkeypatch.setattr(tutor_service.llm_service, "chat_completion", lambda *_args, **_kwargs: "")
 
     question = tutor_service.next_tutor_question(case, "examination", "", state)
 
@@ -169,7 +169,7 @@ def test_tutor_falls_back_to_a_rule_question_on_a_label_leak(db_factory, client,
     monkeypatch.setattr(
         tutor_service.llm_service,
         "chat_completion",
-        lambda system_prompt, user_prompt, fallback: "你的诊断应该是系统性红斑狼疮。",
+        lambda system_prompt, user_prompt, fallback, task_type=None: "你的诊断应该是系统性红斑狼疮。",
     )
     payload = client.post(f"/api/sessions/{session_id}/tutor", json={"step": "initial_diagnosis"}).json()
     question = payload["tutor_question"]
@@ -228,7 +228,7 @@ def test_tutor_stops_and_does_not_leak_ai_answer(db_factory, client, monkeypatch
     )
 
     class _LeakyLLM:
-        def chat_completion(self, system_prompt, user_prompt, fallback):
+        def chat_completion(self, system_prompt, user_prompt, fallback, task_type=None):
             return f"标准治疗是{treatment_plan}"
 
     monkeypatch.setattr(tutor_service.llm_service, "chat_completion", _LeakyLLM().chat_completion)

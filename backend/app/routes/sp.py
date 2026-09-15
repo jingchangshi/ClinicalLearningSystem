@@ -11,6 +11,7 @@ from app.core.rate_limit import enforce
 from app.database import get_db
 from app.models import SPCase, SPSession, Student, User
 from app.services.competency_update_service import update_competency_from_sp
+from app.services import ai_enrichment
 from app.services.serializers import (
     dumps_json,
     loads_json,
@@ -160,6 +161,7 @@ def submit_sp_session(
     update_competency_from_sp(db, session.student_id, scoring, session.id)
     db.commit()
     db.refresh(session)
+    ai_enrichment.schedule_student(session.student_id)
     return {
         **scoring,
         "session": serialize_sp_session(session),

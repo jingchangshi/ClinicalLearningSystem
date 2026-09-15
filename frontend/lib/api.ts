@@ -726,6 +726,8 @@ export function getTeacherDashboard() {
     }[];
     teaching_interventions: string[];
     teaching_insight_summary: string;
+    teaching_insight_source: "ai" | "rule";
+    teaching_insight_generated_at: string | null;
     teaching_focus: string[];
     students: {
       id: number;
@@ -743,6 +745,15 @@ export function getTeacherDashboard() {
       completed_at: string | null;
     }[];
   }>("/api/teacher/dashboard");
+}
+
+export function refreshTeacherInsight() {
+  return request<{
+    teaching_insight_summary: string | null;
+    teaching_insight_source: "ai" | "rule";
+    degraded: boolean;
+    message?: string;
+  }>("/api/teacher/dashboard/refresh-insight", { method: "POST" });
 }
 
 export function getTeacherStudentProfile(studentId: string | number) {
