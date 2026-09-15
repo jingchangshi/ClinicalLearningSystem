@@ -3,6 +3,28 @@ const API_BASE =
     ? process.env.INTERNAL_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8100/api"
     : process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api";
 
+export class ApiError extends Error {
+  readonly status: number;
+  readonly body: unknown;
+
+  constructor(status: number, body: unknown) {
+    super(`API request failed: ${status}`);
+    this.name = "ApiError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
+/** Submission errors carry the canonical list of unanswered reasoning steps. */
+export function missingStepsFrom(error: unknown): string[] {
+  if (!(error instanceof ApiError)) return [];
+  const detail = (error.body as { detail?: unknown } | null)?.detail;
+  if (detail && typeof detail === "object" && Array.isArray((detail as { missing_steps?: unknown }).missing_steps)) {
+    return (detail as { missing_steps: unknown[] }).missing_steps.map(String);
+  }
+  return [];
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const forwardedCookie = await cookieHeader();
   const requestUrl = `${API_BASE}${normalizeApiPath(path)}`;
@@ -18,13 +40,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    const responseBody = await response.text();
+    const rawBody = await response.text();
+    let parsedBody: unknown = rawBody;
+    try {
+      parsedBody = rawBody ? JSON.parse(rawBody) : null;
+    } catch {
+      parsedBody = rawBody;
+    }
     console.error("API request failed", {
       url: requestUrl,
       status: response.status,
-      body: responseBody,
+      body: rawBody,
     });
-    throw new Error(`API request failed: ${response.status}`);
+    throw new ApiError(response.status, parsedBody);
   }
   return response.json();
 }
@@ -108,7 +136,8 @@ export type SessionDetail = {
   status: string;
   started_at: string;
   completed_at: string | null;
-  answers: { id: number; step: string; answer_text: string; created_at: string }[];
+  answers: { id: number; step: string; answer_text: string; created_at: string; updated_at?: string }[];
+  required_steps?: { key: string; title: string; prompt: string }[];
   ai_messages: {
     id: number;
     role: string;
@@ -130,15 +159,32 @@ export type Score = {
   strengths: string;
   weaknesses: string;
   evaluation_mode: "ai" | "rule_fallback";
+  provider: string | null;
+  model: string | null;
   rule_score: number | null;
   ai_score: number | null;
   teacher_confirmed_score: number | null;
   teacher_override_reason: string | null;
   degraded: boolean;
   evaluation_detail: {
-    dimensions?: Record<string, { evidence: string[]; missing_points: string[]; feedback: string }>;
+    mode?: "ai" | "rule_fallback";
+    dimensions?: Record<
+      string,
+      {
+        score?: number | null;
+        confidence?: number;
+        evidence: string[];
+        missing_points: string[];
+        feedback: string;
+        source?: "ai" | "rule";
+      }
+    >;
+    strengths?: string[];
+    priority_gaps?: string[];
+    overall_feedback?: string;
     safety_flags?: string[];
   };
+  safety_flags: string[];
   chart_data: ChartPoint[];
 };
 export type KnowledgeUnit = {
@@ -323,10 +369,13 @@ export function getSession(sessionId: number) {
 }
 
 export function saveAnswer(sessionId: number, step: string, answerText: string) {
-  return request<{ id: number; step: string; answer_text: string }>(`/api/sessions/${sessionId}/answers`, {
-    method: "POST",
-    body: JSON.stringify({ step, answer_text: answerText }),
-  });
+  return request<{ id: number; step: string; answer_text: string; updated_at: string }>(
+    `/api/sessions/${sessionId}/answers`,
+    {
+      method: "POST",
+      body: JSON.stringify({ step, answer_text: answerText }),
+    },
+  );
 }
 
 export function getCoachQuestion(sessionId: number, step: string, answerText: string) {
@@ -352,6 +401,137 @@ export function getResult(sessionId: string | number) {
     competency: Competency;
     recommendation: { case: CaseSummary; recommendation_reason: string; pathway_stage: string } | null;
   }>(`/api/sessions/${sessionId}/result`);
+}
+
+export type AiStatus = {
+  configured: boolean;
+  provider: string | null;
+  model: string | null;
+  base_url_host: string | null;
+  reachable: boolean | null;
+  last_probe_at: string | null;
+  last_probe_latency_ms: number | null;
+  last_error_type: string | null;
+  last_call_at: string | null;
+  last_call_mode: "ai" | "rule_fallback" | null;
+  calls: number;
+  failures: number;
+  fallbacks: number;
+  timeout_seconds: number;
+  max_retries: number;
+  deprecated_variables_in_use: string[];
+};
+
+export function getSystemVersion() {
+  return request<{
+    app: string;
+    environment: string;
+    git_sha: string | null;
+    git_sha_short: string | null;
+    git_dirty: boolean;
+    backend_source_fingerprint: string;
+    schema_revision: string | null;
+    backend_runtime: string;
+    ai_configured: boolean;
+  }>("/api/system/version");
+}
+
+export function getAiStatus() {
+  return request<AiStatus>("/api/system/ai-status");
+}
+
+export type ReasoningStep = { key: string; title: string; prompt: string };
+
+export function getReasoningSteps() {
+  return request<{ steps: ReasoningStep[]; required_keys: string[] }>("/api/system/reasoning-steps");
+}
+
+export type TutorState = {
+  step: string;
+  dimension: string;
+  evidence_already_covered: string[];
+  missing_reasoning_elements: string[];
+  misconceptions: string[];
+  safety_gap: string[];
+  asked_about: string[];
+  turn_count: number;
+  student_turn_count: number;
+  max_turns: number;
+  completion_state: "not_started" | "in_progress" | "coverage_sufficient" | "max_turns_reached";
+};
+
+export type TutorTurn = {
+  id: number;
+  step: string;
+  turn_index: number;
+  role: "tutor" | "student";
+  message: string;
+  created_at: string;
+};
+
+export type TutorConversation = {
+  step: string;
+  turns: TutorTurn[];
+  state: TutorState;
+  tutor_question?: string | null;
+  stopped_reason?: string | null;
+};
+
+export function getTutorConversation(sessionId: number, step: string) {
+  return request<TutorConversation>(
+    `/api/sessions/${sessionId}/tutor?step=${encodeURIComponent(step)}`,
+  );
+}
+
+export function sendTutorTurn(sessionId: number, step: string, message?: string) {
+  return request<TutorConversation>(`/api/sessions/${sessionId}/tutor`, {
+    method: "POST",
+    body: JSON.stringify({ step, ...(message ? { message } : {}) }),
+  });
+}
+
+export function probeAi() {
+  return request<{
+    configured: boolean;
+    provider: string | null;
+    model: string | null;
+    reachable: boolean;
+    latency_ms: number | null;
+    error_type: string | null;
+  }>("/api/system/ai-probe", { method: "POST" });
+}
+
+export type AiInvocation = {
+  id: number;
+  task_type: string;
+  provider: string | null;
+  model: string | null;
+  prompt_version: string | null;
+  evidence_ref: string | null;
+  session_id: number | null;
+  student_id: number | null;
+  calls: number;
+  failures: number;
+  success: boolean;
+  fallback_used: boolean;
+  latency_ms: number;
+  error_type: string | null;
+  created_at: string;
+};
+
+export function getAiInvocations(limit = 20) {
+  return request<{
+    recent: AiInvocation[];
+    by_task: {
+      task_type: string;
+      events: number;
+      calls: number;
+      failures: number;
+      fallbacks: number;
+      avg_latency_ms: number | null;
+      last_seen: string | null;
+    }[];
+  }>(`/api/system/ai-invocations?limit=${limit}`);
 }
 
 export function getPathway(studentId: number) {
@@ -649,15 +829,22 @@ export function teacherListCases() {
   return request<CaseDetail[]>("/api/teacher/cases");
 }
 
+/** Authoring endpoints report identifier-shaped input without echoing the values. */
+export type DeidentificationReport = {
+  clean: boolean;
+  findings: { field: string; label: string; kinds: string[] }[];
+  message: string;
+};
+
 export function teacherCreateCase(payload: Omit<CaseDetail, "id">) {
-  return request<CaseDetail>("/api/teacher/cases", {
+  return request<CaseDetail & { deidentification: DeidentificationReport }>("/api/teacher/cases", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
 export function teacherUpdateCase(caseId: number, payload: Omit<CaseDetail, "id">) {
-  return request<CaseDetail>(`/api/teacher/cases/${caseId}`, {
+  return request<CaseDetail & { deidentification: DeidentificationReport }>(`/api/teacher/cases/${caseId}`, {
     method: "PUT",
     body: JSON.stringify(payload),
   });
@@ -676,7 +863,11 @@ export type CaseGenerateRequest = {
 };
 
 export function generateTeacherCase(payload: CaseGenerateRequest) {
-  return request<{ draft_id: number; generated_payload: Omit<CaseDetail, "id"> }>(
+  return request<{
+    draft_id: number;
+    generated_payload: Omit<CaseDetail, "id">;
+    deidentification: DeidentificationReport;
+  }>(
     "/api/teacher/case-generator/generate",
     {
       method: "POST",
