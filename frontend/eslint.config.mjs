@@ -3,7 +3,8 @@ import tseslint from "typescript-eslint";
 
 export default [
   {
-    ignores: [".next/**", "node_modules/**", "next-env.d.ts"],
+    // `.next*` also covers a disposable build written by NEXT_DIST_DIR.
+    ignores: [".next/**", ".next*/**", "node_modules/**", "next-env.d.ts"],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

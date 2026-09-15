@@ -25,7 +25,10 @@ export function missingStepsFrom(error: unknown): string[] {
   return [];
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+/** `quiet` marks a failure that is an expected outcome rather than a problem. */
+type RequestOptions = RequestInit & { quiet?: boolean };
+
+async function request<T>(path: string, init?: RequestOptions): Promise<T> {
   const forwardedCookie = await cookieHeader();
   const requestUrl = `${API_BASE}${normalizeApiPath(path)}`;
   const response = await fetch(requestUrl, {
@@ -47,11 +50,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       parsedBody = rawBody;
     }
-    console.error("API request failed", {
-      url: requestUrl,
-      status: response.status,
-      body: rawBody,
-    });
+    // Callers can mark a request whose failure is an expected outcome (an
+    // anonymous visitor probing /api/auth/me is a 401 by design) so the console
+    // stays a signal of real problems. The error is still thrown.
+    if (!init?.quiet) {
+      console.error("API request failed", {
+        url: requestUrl,
+        status: response.status,
+        body: rawBody,
+      });
+    }
     throw new ApiError(response.status, parsedBody);
   }
   return response.json();
@@ -325,7 +333,9 @@ export function register(payload: {
 }
 
 export function getMe() {
-  return request<User>("/api/auth/me");
+  // An anonymous visitor is expected to get 401 here; the AuthProvider treats the
+  // rejection as "not signed in", so this must not look like an application error.
+  return request<User>("/api/auth/me", { quiet: true });
 }
 
 export function logout() {
