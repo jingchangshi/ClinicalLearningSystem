@@ -221,6 +221,9 @@ HTTP 失败          0.00%（0 个 5xx，0 个 429，0 个超时）
 iterations        4,252 完成 / 0 中断
 
 复跑（60s hold）：read p95 123.8ms，25,100 请求，0% 失败
+复跑（60s hold，显式统计 p99）：
+    read latency  avg 48.6ms  p50 18.0ms  p90 113.9ms  p95 180.7ms  p99 419.9ms  max 1.92s
+    23,980 检查全部通过，0% 失败，0 个 5xx，0 个 429
 CPU（4 worker）   峰值 2.31 / 4 核，稳态 ≈2.0 核
 内存（4 worker）   RSS 合计 ≈ 655MB（每 worker ≈155MB）
 SQLite 写入       同负载下 1,283 次写入：0 失败，p50 1ms / p95 2ms / max 5ms
