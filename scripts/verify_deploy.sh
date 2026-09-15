@@ -97,4 +97,37 @@ printf 'home           : %s\n' "$(curl -fsS -o /dev/null -w '%{http_code}' "$PUB
 printf 'login          : %s\n' "$(curl -fsS -o /dev/null -w '%{http_code}' "$PUBLIC_BASE/login" || echo unreachable)"
 printf 'api proxy      : %s\n' "$(curl -fsS "$PUBLIC_BASE/api/health" || echo unreachable)"
 
+echo
+echo "== shared secret parity (values are never printed) =="
+python3 - "${CLINPATH_BACKEND_ENV:-$HOME/.config/clinpath/backend.env}" \
+         "${CLINPATH_FRONTEND_ENV:-$HOME/.config/clinpath/frontend.env}" <<'PY'
+import hashlib
+import os
+import sys
+
+def secret_digest(path: str) -> str:
+    if not os.path.exists(path):
+        return "missing-file"
+    for line in open(path):
+        name, _, value = line.strip().partition("=")
+        if name == "JWT_SECRET":
+            if not value:
+                return "empty"
+            return hashlib.sha256(value.encode()).hexdigest()[:12]
+    return "absent"
+
+backend, frontend = sys.argv[1], sys.argv[2]
+left, right = secret_digest(backend), secret_digest(frontend)
+print(f"backend.env    : {left}")
+print(f"frontend.env   : {right}")
+if left == right and left not in {"missing-file", "empty", "absent"}:
+    print("verdict        : MATCH (backend and frontend sign with the same secret)")
+else:
+    print("verdict        : MISMATCH - the proxy cannot verify backend cookies")
+    sys.exit(1)
+PY
+if [ $? -ne 0 ]; then
+  status=1
+fi
+
 exit "$status"

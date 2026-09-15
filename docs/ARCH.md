@@ -57,7 +57,17 @@
 ```text
 ~/.config/systemd/user/clinical-backend.service   -> scripts/start_backend_8100.sh
 ~/.config/systemd/user/clinical-frontend.service  -> scripts/start_frontend_8101.sh
-EnvironmentFile (both units) = ~/.config/clinpath/backend.env
+
+EnvironmentFile clinical-backend.service  = ~/.config/clinpath/backend.env
+    CLINPATH_ENV / JWT_SECRET / COOKIE_SECURE / LLM_* (model credentials live only here)
+EnvironmentFile clinical-frontend.service = ~/.config/clinpath/frontend.env
+    JWT_SECRET (same value as the backend) / NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS /
+    NEXT_PUBLIC_ALLOW_PUBLIC_REGISTRATION
+
+Both units must sign/verify cookies with the same JWT_SECRET. The web tier never
+receives model credentials; `scripts/verify_deploy.sh` compares only the SHA-256
+prefix of the two secrets and prints MATCH/MISMATCH, never a value.
+`scripts/start_frontend_8101.sh` refuses to start when JWT_SECRET is empty.
 ```
 
 `scripts/start_backend_8100.sh` 在 `alembic upgrade head` **之前**比较 `alembic current`
@@ -91,7 +101,13 @@ role-based navigation
 - 角色不匹配不经过 `/login`，直接跳到该角色自己的 dashboard，避免 redirect loop。
 - `JWT_SECRET` 缺失时 proxy 记录错误并退化为「只检查 cookie 是否存在」，绝不因为配置缺失
   把已登录用户锁在门外；后端仍会拒绝任何无效 token。
-- 公开注册默认关闭（见 §9），教师 / 管理员账号只能由服务器端 `app/manage_users.py` 开通。
+- `JWT_SECRET` 缺失时**绝不**解码并信任未验证的 role：proxy 对携带 cookie 的受保护请求
+  直接返回 `503 Deployment misconfigured: JWT_SECRET is required`，没有 token 时照常跳
+  `/login`。这样既不会信任伪造声明，也不会在 `/login` 与 dashboard 之间来回跳转。
+  `scripts/start_frontend_8101.sh` 在 `JWT_SECRET` 为空时拒绝启动，让配置错误在启动阶段暴露。
+- 公开注册默认关闭（见 §9）。教师 / 管理员账号**从不**由 seed 创建，只能用服务器端
+  `python -m app.manage_users create-teacher|create-admin` 开通；`audit-accounts` 用于复查
+  账号（含 legacy 名称、未关联 admin、重复学生登录等标记，且从不输出任何口令材料）。
 
 ## 4. Deployment truth（运行版本可见性）
 
@@ -215,7 +231,12 @@ completion_state = not_started | in_progress | coverage_sufficient | max_turns_r
   LLM 只负责把状态转成一个聚焦问题。
 - Prompt 硬约束：不给标准诊断、不给标准治疗、不透露 rubric、每次只问一个问题、
   优先问「为什么」，并要求证据与反证、鉴别排序、验证策略与安全性。
-- 泄漏防护：`leaks_hidden_answer()` 会拒绝任何包含隐藏字段长片段的模型输出并改用规则问题；
+- 泄漏防护（`leaks_hidden_answer()`，两级）：
+  - 长片段：treatment plan / rubric / 鉴别诊断条目在问题中逐字出现（≥12 字）→ 拒绝。
+  - 短标签：标准诊断按去标点归一化后逐字出现 → 拒绝，除非学生自己的回答里已经写出该诊断
+    （此时导师引用它不构成新信息）。因此「你的诊断应该是系统性红斑狼疮」会被拒，
+    而「是否需要先排除感染？依据是什么？」这类合法提问不受影响。
+  命中即改用规则问题（规则问题同样不泄露答案），并记录 warning；
   发往 provider 的病例上下文只包含 `_visible_case()` 允许的字段。
 - 有界：`MAX_TUTOR_TURNS_PER_STEP`（默认 6）与 `MAX_COACH_TURNS_PER_SESSION`（默认 20）。
 - 会话上下文：学生回复与保存的回答一起参与状态分析，因此覆盖充分时会自动停止追问。
@@ -429,10 +450,19 @@ server {
 
 ### 全新安装路径
 
-`app/seed_data.py` 在 `create_all` + 兼容性修补之后执行 `alembic stamp head`：
-新库已经拥有当前 schema，如果保持「无版本」状态，下一次 `alembic upgrade head`
-会把历史迁移重放到已是最新的表上。迁移本身也逐个列检查存在性（`20260915_01`），
-因此「先建表再迁移」不会因为重复列或 SQLite batch 重建而失败。
+`app/seed_data.py` 区分两种情况，判断发生在 `create_all` **之前**：
+
+```text
+全新空库   -> create_all（当前完整 schema）-> alembic stamp head
+已有数据库 -> 绝不 stamp -> alembic upgrade head
+```
+
+理由：`stamp` 只是写版本号，不执行迁移。对已有数据库 stamp 会假装它是最新的，
+把缺失的列/表留在原地。已有库必须真正跑迁移；`seed_data` 因此调用 `upgrade`，
+且迁移本身逐个列/表检查存在性（`20260915_01` 逐列新增、`02`–`05` 先 inspect），
+所以「先建表再迁移」也不会因为重复列或 SQLite batch 重建而失败。
+`tests/test_seed_migration_semantics.py` 用真实子进程覆盖三种场景：
+全新库、被人为改旧的库（缺列必须被迁移补回）、已是最新的库（重复执行幂等）。
 
 ## 14. 目标架构全景（最终形态）
 

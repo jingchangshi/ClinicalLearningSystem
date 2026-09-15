@@ -51,9 +51,12 @@ Deployment                       → deploy/, scripts/
 
 1. The FastAPI backend is the final authority for authentication and authorization.
    The Next.js proxy may only do coarse routing; it must verify the JWT before
-   trusting any claim, and it must never be the only check.
+   trusting any claim, and it must never be the only check. With no `JWT_SECRET` it
+   fails closed (503) instead of decoding the payload and trusting `role`.
 2. Students must never receive hidden answers: `standard_diagnosis`,
-   `treatment_plan`, `rubric`, hidden SP history.
+   `treatment_plan`, `rubric`, hidden SP history. The tutor must not *state* the
+   standard diagnosis or treatment either: naming the hidden diagnosis is a leak
+   unless the student already wrote it.
 3. AI may be unavailable — falling back to rules is allowed, but the result must be
    explicitly marked `degraded` / `rule_fallback`. Never present rule output as AI.
    Every AI capability must leave an `ai_invocations` audit event (metadata and an
@@ -63,11 +66,16 @@ Deployment                       → deploy/, scripts/
 5. Never evolve the database by resetting it. Migrations only, with a **timestamped
    SQLite backup before any schema or data change**; `seed_data --reset` is forbidden
    in production.
-6. Never commit or print API keys, JWT secrets, or `.env` contents.
-7. One logical answer per `(session, step)`; a training event must never be counted
+6. Never commit or print API keys, JWT secrets, or `.env` contents. Operator secrets
+   live in mode-600 files under `~/.config/clinpath/`; only the
+   `deploy/env/*.example` templates are committed.
+7. Never seed, commit or publish a privileged credential. Staff accounts exist only
+   through `python -m app.manage_users create-teacher|create-admin`; the seed path
+   creates teaching data plus, optionally, restricted student demo logins.
+8. One logical answer per `(session, step)`; a training event must never be counted
    into competency twice.
-8. Learning evidence must stay traceable back to the session that produced it.
-9. Every production change is tested before deployment, and deployment ends with a
+9. Learning evidence must stay traceable back to the session that produced it.
+10. Every production change is tested before deployment, and deployment ends with a
    real browser verification.
 
 ## Definition of Done

@@ -10,6 +10,7 @@ frontend/playwright-report/
 
 .env
 .env.*
+!.env.example
 backend/clinical_learning.db
 backend/clinical_learning.db-wal
 backend/clinical_learning.db-shm
