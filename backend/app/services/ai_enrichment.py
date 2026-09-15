@@ -32,6 +32,7 @@ import logging
 import os
 import queue
 import threading
+from datetime import datetime
 from typing import Callable, Iterable
 
 from sqlalchemy import func
@@ -247,6 +248,10 @@ def _store(
         record = AIEnrichment(kind=kind, cache_key=cache_key, student_id=student_id)
         db.add(record)
     record.payload_json = dumps_json(payload)
+    # A regenerated row must not keep the timestamp of the text it replaced:
+    # generated_at is provenance, and "when was this written" is the whole reason
+    # the fingerprint check is trustworthy to a reader.
+    record.generated_at = datetime.utcnow()
     record.prompt_version = ai_audit.PROMPT_VERSIONS.get(
         "recommendation_explanation" if kind == KIND_PATHWAY else "teacher_insight"
     )

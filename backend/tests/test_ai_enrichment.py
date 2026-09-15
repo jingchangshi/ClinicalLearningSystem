@@ -46,6 +46,34 @@ def test_worker_generates_the_class_insight(seeded, db_factory, worker_uses_test
     assert row["payload"]["insight"] == "班级共性短板为鉴别诊断。"
 
 
+def test_regeneration_refreshes_the_timestamp(seeded, db_factory, worker_uses_test_database, monkeypatch):
+    """generated_at is provenance: a regenerated row must not keep the old stamp."""
+
+    from datetime import datetime
+
+    from app.models import AIEnrichment
+
+    monkeypatch.setattr(llm_service, "generate_teacher_insight", lambda *args, **kwargs: "第一版洞察")
+    ai_enrichment._run(ai_enrichment.KIND_TEACHER_INSIGHT, None)
+
+    # Pretend the cached text was written long ago, then regenerate. The new
+    # payload must carry its own timestamp.
+    db = db_factory()
+    db.query(AIEnrichment).update({AIEnrichment.generated_at: datetime(2020, 1, 1)})
+    db.commit()
+    db.close()
+
+    monkeypatch.setattr(llm_service, "generate_teacher_insight", lambda *args, **kwargs: "第二版洞察")
+    ai_enrichment._run(ai_enrichment.KIND_TEACHER_INSIGHT, None)
+    db = db_factory()
+    refreshed = ai_enrichment.current_teacher_insight(db)
+    db.close()
+
+    assert refreshed is not None
+    assert refreshed["payload"]["insight"] == "第二版洞察"
+    assert refreshed["generated_at"] > datetime(2020, 1, 1)
+
+
 def test_worker_generates_the_pathway_explanation(seeded, db_factory, worker_uses_test_database, monkeypatch):
     monkeypatch.setattr(
         llm_service,
