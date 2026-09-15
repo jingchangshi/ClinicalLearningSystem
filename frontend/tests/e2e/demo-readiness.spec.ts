@@ -196,7 +196,7 @@ test.describe("teacher demo surfaces", () => {
     await loginTeacher(page);
     await page.goto("/teacher/research-export");
 
-    await expect(page.getByRole("heading", { name: "匿名化研究数据" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "匿名化研究数据", exact: true })).toBeVisible();
     const headers = await page.locator("table thead th").allInnerTexts();
     expect(headers).toEqual(["匿名学生编号", "班级", "学习模块", "训练得分", "记录时间"]);
 

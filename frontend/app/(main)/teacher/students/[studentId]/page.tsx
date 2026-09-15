@@ -1,10 +1,11 @@
 import Link from "next/link";
 
 import { CompetencyRadar } from "@/components/CompetencyRadar";
-import { GrowthTrendChart, changeText } from "@/components/GrowthTrendChart";
+import { GrowthTrendChart } from "@/components/GrowthTrendChart";
 import { LearningEvidenceCards } from "@/components/LearningEvidenceCards";
 import { RecommendedTaskCard } from "@/components/RecommendedTaskCard";
 import { getTeacherStudentProfile } from "@/lib/api";
+import { changeText } from "@/lib/competencyChanges";
 import { formatDateTime } from "@/lib/format";
 
 // A teacher reads the newest few events; the rest are one click away and stay

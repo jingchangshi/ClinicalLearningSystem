@@ -354,8 +354,10 @@ test("student completes a case with Coach and receives formative feedback", asyn
   }
   await expect(review).toContainText("我的最终回答");
   await expect(review.getByText("AI 导师").first()).toBeVisible();
-  await expect(review.getByText("我", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("总分")).toBeVisible();
+  // The learner's own reply to the tutor is part of the stored transcript.
+  await expect(review.getByText("因为患者发热伴皮疹和ANA阳性", { exact: false }).first()).toBeVisible();
+  // The score of the reopened case is the one that was just submitted.
+  await expect(page.getByText("总分", { exact: true })).toBeVisible();
   const reviewUrl = page.url();
   await page.reload({ waitUntil: "networkidle" });
   await expect(page).toHaveURL(reviewUrl);

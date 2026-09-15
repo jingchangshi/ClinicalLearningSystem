@@ -3,35 +3,9 @@
 import { useEffect, useState } from "react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
+import { changeText, headlineChanges } from "@/lib/competencyChanges";
+import type { GrowthTrendPoint } from "@/lib/competencyChanges";
 import { formatDateTime, formatShortDate } from "@/lib/format";
-
-export type CompetencyChange = {
-  key: string;
-  label: string;
-  before: number | null;
-  after: number | null;
-  delta: number | null;
-};
-
-export type GrowthTrendPoint = {
-  event_id: number;
-  module_label: string;
-  event_label: string;
-  score: number | null;
-  created_at: string;
-  competency_changes: CompetencyChange[];
-};
-
-function headlineChanges(point: GrowthTrendPoint, limit = 2): CompetencyChange[] {
-  return [...point.competency_changes]
-    .sort((a, b) => Math.abs(b.delta ?? 0) - Math.abs(a.delta ?? 0))
-    .slice(0, limit);
-}
-
-export function changeText(change: CompetencyChange): string {
-  const delta = change.delta ?? 0;
-  return `${change.label} ${change.before} → ${change.after}（${delta >= 0 ? "+" : ""}${delta}）`;
-}
 
 function TrendTooltip({ active, payload }: { active?: boolean; payload?: { payload: GrowthTrendPoint }[] }) {
   if (!active || !payload?.length) return null;
@@ -41,7 +15,7 @@ function TrendTooltip({ active, payload }: { active?: boolean; payload?: { paylo
       <div className="font-semibold text-ink">{formatDateTime(point.created_at)}</div>
       <div className="mt-1 text-slate-600">{point.module_label}</div>
       <div className="mt-1 font-semibold text-clinic">训练得分 {point.score ?? "待评分"}</div>
-      {headlineChanges(point).map((change) => (
+      {headlineChanges(point.competency_changes).map((change) => (
         <div key={change.key} className="mt-1 text-slate-600">
           {changeText(change)}
         </div>
