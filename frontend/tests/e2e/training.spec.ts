@@ -146,6 +146,13 @@ test("student completes a case with Coach and receives formative feedback", asyn
       await expect(page.getByTestId("tutor-turn-tutor")).toHaveCount(2);
       const coached = await answersForStep(page, sessionId, "key_information");
       expect(coached).toHaveLength(1);
+
+      // The coaching conversation is persisted, so a reload must restore it
+      // together with the saved answer for this step.
+      await page.reload({ waitUntil: "networkidle" });
+      await expect(page.getByTestId("tutor-turn-tutor")).toHaveCount(2);
+      await expect(page.getByTestId("tutor-turn-student")).toHaveCount(1);
+      await expect(page.locator("textarea").first()).toHaveValue(/关键信息/);
       first = false;
     }
   }
