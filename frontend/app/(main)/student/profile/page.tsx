@@ -11,7 +11,7 @@ export default async function StudentProfilePage() {
     <div className="space-y-6">
       <section className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-clinic">Student Profile</p>
+          <p className="text-sm font-semibold tracking-[0.22em] text-clinic">能力画像</p>
           <h1 className="mt-2 text-3xl font-semibold text-ink">{data.student.name} 学习档案</h1>
           <p className="mt-2 text-slate-600">
             学号 {data.student.student_no} · {data.student.class_name} · 当前阶段 {data.student.current_stage}

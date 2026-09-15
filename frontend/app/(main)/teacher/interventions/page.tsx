@@ -9,7 +9,7 @@ export default async function InterventionsPage() {
     <div className="space-y-6">
       <section className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-clinic">Teaching Interventions</p>
+          <p className="text-sm font-semibold tracking-[0.22em] text-clinic">教学驾驶舱 · 教学干预</p>
           <h1 className="mt-2 text-3xl font-semibold text-ink">教学干预记录</h1>
           <p className="mt-2 text-slate-600">记录教师基于班级短板采取的教学调整，用于教学质量改进闭环。</p>
         </div>

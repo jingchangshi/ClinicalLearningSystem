@@ -57,7 +57,7 @@ export function GrowthTrendChart({ points }: { points: GrowthTrendPoint[] }) {
     <div className="mt-4 h-72 w-full" data-testid="growth-trend-chart">
       {mounted ? (
         <ResponsiveContainer>
-          <LineChart data={data} margin={{ top: 8, right: 16, bottom: 8, left: -12 }}>
+          <LineChart data={data} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
             <XAxis dataKey="axis" tick={{ fontSize: 12 }} />
             <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />

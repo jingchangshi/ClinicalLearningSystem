@@ -44,7 +44,7 @@ export default async function ResearchExportPage() {
           value={String(summary.module_labels.length)}
           note={summary.module_labels.join(" / ") || "暂无"}
         />
-        <SummaryCard title="数据时间范围" value={dateRange} note="跨越多个教学周更有研究价值" small />
+        <SummaryCard title="数据时间范围" value={dateRange} note="全部学习证据事件的记录时间" small />
       </section>
 
       <ResearchDataPreview rows={data.rows} previewLimit={summary.preview_limit} />

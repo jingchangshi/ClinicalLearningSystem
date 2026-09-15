@@ -10,7 +10,7 @@ export default async function ScoreReviewPage() {
     <div className="space-y-6">
       <section className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-clinic">Teacher Score Review</p>
+          <p className="text-sm font-semibold tracking-[0.22em] text-clinic">教学驾驶舱 · 评分复核</p>
           <h1 className="mt-2 text-3xl font-semibold text-ink">教师评分复核</h1>
           <p className="mt-2 text-slate-600">AI形成性评价仅供教学参考，最终评价由教师确认。</p>
         </div>

@@ -5,7 +5,7 @@ export function TeachingInterventionPanel({ interventions }: { interventions: st
     <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex items-center gap-2 text-clinic">
         <Activity className="h-5 w-5" />
-        <h3 className="text-lg font-semibold">AI Teaching Intervention Suggestions</h3>
+        <h3 className="text-lg font-semibold">AI 教学干预建议</h3>
       </div>
       <div className="mt-4 space-y-3">
         {interventions.map((item) => (

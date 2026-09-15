@@ -7,7 +7,7 @@ export function AdaptiveRecommendationEngine() {
     <div className="rounded-2xl border border-teal-100 bg-gradient-to-br from-teal-700 to-cyan-700 p-6 text-white shadow-sm">
       <div className="flex items-center gap-3">
         <BrainCircuit className="h-7 w-7" />
-        <h3 className="text-xl font-semibold">Adaptive Recommendation Engine</h3>
+        <h3 className="text-xl font-semibold">自适应推荐引擎</h3>
       </div>
       <div className="mt-5 flex flex-wrap items-center gap-3">
         {steps.map((step, index) => (
