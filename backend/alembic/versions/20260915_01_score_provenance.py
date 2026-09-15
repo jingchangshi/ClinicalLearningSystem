@@ -10,6 +10,15 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # New installations receive the full declarative schema. Existing installs
+    # retain their data and receive only the provenance columns below.
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if "scores" not in inspector.get_table_names():
+        from app.database import Base
+        import app.models  # noqa: F401
+        Base.metadata.create_all(bind=bind)
+        return
     with op.batch_alter_table("scores") as batch:
         batch.add_column(sa.Column("evaluation_mode", sa.String(30), nullable=False, server_default="rule_fallback"))
         batch.add_column(sa.Column("provider", sa.String(50), nullable=True))

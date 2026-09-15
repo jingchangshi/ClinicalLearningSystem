@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { MessageSquare, Save, ShieldCheck } from "lucide-react";
 
 import {
-  CaseDetail,
+  StudentCaseDetail,
   getCoachQuestion,
   saveAnswer,
   SessionDetail,
@@ -25,7 +25,7 @@ export function CaseTrainingClient({
   caseData,
   initialSession,
 }: {
-  caseData: CaseDetail;
+  caseData: StudentCaseDetail;
   initialSession: SessionDetail | null;
 }) {
   const router = useRouter();

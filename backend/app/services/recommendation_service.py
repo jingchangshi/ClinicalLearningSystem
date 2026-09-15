@@ -71,12 +71,26 @@ def build_learning_pathway(student_profile: dict, recent_activity: dict) -> dict
     for key in weak_keys:
         recommended_tasks.extend(_tasks_for_ability(key, student_profile, recent_activity))
 
-    unique_tasks = _dedupe_tasks(recommended_tasks)
+    unique_tasks = _dedupe_tasks(recommended_tasks)[:3]
+    explanations = llm_service.explain_recommendation_batch(
+        student_profile,
+        recent_activity.get("recent_evidence", {}),
+        [
+            {"task_key": _task_key(task), "title": task["title"], "type": task["type"], "priority": task["priority"], "fallback_reason": task["reason"]}
+            for task in unique_tasks
+        ],
+    )
+    for task in unique_tasks:
+        task["reason"] = explanations.get(_task_key(task), task["reason"])
     return {
         "current_stage": current_stage,
         "weak_abilities": weak_keys,
         "recommended_tasks": unique_tasks,
     }
+
+
+def _task_key(task: dict) -> str:
+    return f"{task['type']}:{task['id']}"
 
 
 def _pick_case(scores: dict, cases: list[dict]) -> dict:
@@ -289,21 +303,15 @@ def _make_task(
 ) -> dict:
     target_abilities = _target_abilities(task_type)
     fallback_evidence = source_evidence or _source_evidence(task_type, target_abilities)
-    enhanced_reason = explain_recommendation_with_llm(
-        {},
-        {"priority": priority, "reason": reason},
-        item,
-        reason,
-    )
     return {
         "type": task_type,
         "id": item["id"],
         "title": item["title"],
-        "reason": enhanced_reason,
+        "reason": reason,
         "priority": priority,
         "target_abilities": target_abilities,
         "source_evidence": fallback_evidence,
-        "expected_lift": _expected_lift(priority),
+        "priority_label": _expected_lift(priority),
         "difficulty_label": item.get("difficulty") or item.get("level") or "自适应",
         "next_step_label": _next_step_label(task_type),
     }

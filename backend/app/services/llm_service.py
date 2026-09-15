@@ -70,6 +70,22 @@ class LLMService:
             fallback,
         )
 
+    def explain_recommendation_batch(self, profile: dict, recent_evidence: dict, tasks: list[dict]) -> dict[str, str]:
+        fallback: dict[str, str] = {}
+        payload = self.chat_json(
+            (
+                "你是临床学习路径导师。只输出 JSON："
+                "{\"explanations\":{\"task_key\":\"简洁、基于能力画像的训练理由\"}}。"
+                "不得预测未经验证的学习增益。"
+            ),
+            json.dumps({"profile": profile, "recent_evidence": recent_evidence, "tasks": tasks}, ensure_ascii=False),
+            fallback,
+        )
+        explanations = payload.get("explanations") if isinstance(payload, dict) else None
+        if not isinstance(explanations, dict):
+            return fallback
+        return {str(key): value for key, value in explanations.items() if isinstance(value, str) and value.strip()}
+
     def generate_sp_feedback(self, sp_case: dict, transcript: list[dict], diagnosis_summary: str, fallback: dict) -> dict:
         payload = self.chat_json(
             (
@@ -168,7 +184,7 @@ def generate_reasoning_question(case: dict, step: str, student_answer: str) -> s
         REASONING_QUESTION_SYSTEM_PROMPT,
         REASONING_QUESTION_USER_TEMPLATE.format(
             title=case.get("title"),
-            standard_diagnosis=case.get("standard_diagnosis"),
+            case_context=json.dumps(case, ensure_ascii=False),
             step=step,
             student_answer=student_answer,
         ),

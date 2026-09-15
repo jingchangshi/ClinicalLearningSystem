@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user
 from app.database import get_db
 from app.models import Case
-from app.services.serializers import dumps_json, serialize_case, serialize_case_summary
+from app.services.serializers import dumps_json, serialize_case, serialize_case_for_student, serialize_case_summary
 
 router = APIRouter(prefix="/api/cases", tags=["cases"])
 
@@ -15,11 +15,11 @@ def list_cases(db: Session = Depends(get_db), _user=Depends(get_current_user)) -
 
 
 @router.get("/{case_id}")
-def get_case(case_id: int, db: Session = Depends(get_db), _user=Depends(get_current_user)) -> dict:
+def get_case(case_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)) -> dict:
     case = db.get(Case, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
-    return serialize_case(case)
+    return serialize_case(case) if user.role in {"teacher", "admin"} else serialize_case_for_student(case)
 
 
 def create_case_from_payload(payload: dict, db: Session) -> Case:

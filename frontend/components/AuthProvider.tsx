@@ -18,7 +18,7 @@ type AuthContextValue = {
 type RegisterPayload = {
   username: string;
   password: string;
-  role: "student" | "teacher";
+  role: "student";
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);

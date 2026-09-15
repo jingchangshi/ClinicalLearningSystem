@@ -89,14 +89,17 @@ def evaluate_case_submission(case: dict, answers: list[dict], rubric: dict, llm_
     """Use the semantic rubric when available; deterministic scoring remains a safe fallback."""
     rule_score = score_with_rules(case, answers, rubric)
     fallback = {"_fallback": True}
-    raw = llm_service.chat_json(
-        CASE_EVALUATION_SYSTEM_PROMPT,
-        CASE_EVALUATION_USER_TEMPLATE.format(
-            case=json.dumps(case, ensure_ascii=False), rubric=json.dumps(rubric, ensure_ascii=False),
-            answers=json.dumps(answers, ensure_ascii=False), rule_evidence=json.dumps(rule_score, ensure_ascii=False),
-        ),
-        fallback,
-    )
+    try:
+        raw = llm_service.chat_json(
+            CASE_EVALUATION_SYSTEM_PROMPT,
+            CASE_EVALUATION_USER_TEMPLATE.format(
+                case=json.dumps(case, ensure_ascii=False), rubric=json.dumps(rubric, ensure_ascii=False),
+                answers=json.dumps(answers, ensure_ascii=False), rule_evidence=json.dumps(rule_score, ensure_ascii=False),
+            ),
+            fallback,
+        )
+    except Exception:
+        raw = fallback
     try:
         if raw == fallback:
             raise ValueError("LLM unavailable")

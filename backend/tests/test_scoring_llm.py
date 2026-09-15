@@ -17,6 +17,16 @@ class FakeLLM:
         return self.response
 
 
+class FailingLLM:
+    def chat_json(self, *_args):
+        raise TimeoutError("provider timed out")
+
+
+class DisabledLLM:
+    def chat_json(self, *_args):
+        return {"_fallback": True}
+
+
 def test_uses_validated_ai_evaluation_when_available():
     response = {
         "dimensions": {key: {"score": 80, "confidence": 0.8, "evidence": ["reason"], "missing_points": [], "feedback": "good"} for key in DIMENSIONS},
@@ -34,3 +44,17 @@ def test_invalid_llm_payload_degrades_to_rule_evaluator():
     assert result["evaluation_mode"] == "rule_fallback"
     assert result["degraded"] is True
     assert result["ai_score"] is None
+
+
+def test_llm_exception_degrades_to_rule_evaluator():
+    result = evaluate_case_submission(CASE, ANSWERS, {}, FailingLLM())
+    assert result["evaluation_mode"] == "rule_fallback"
+    assert result["degraded"] is True
+    assert result["ai_score"] is None
+
+
+def test_disabled_llm_uses_rule_fallback_without_http_failure():
+    result = evaluate_case_submission(CASE, ANSWERS, {}, DisabledLLM())
+    assert result["evaluation_mode"] == "rule_fallback"
+    assert result["degraded"] is True
+    assert result["rule_score"] is not None

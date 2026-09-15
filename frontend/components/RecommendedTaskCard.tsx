@@ -25,7 +25,7 @@ export function RecommendedTaskCard({ task, href }: { task: RecommendedTask; hre
       <p className="mt-2 text-sm text-slate-600">目标能力：{target}</p>
       <p className="mt-2 text-sm text-slate-600">证据来源：{task.source_evidence}</p>
       <div className="mt-4 flex items-center justify-between">
-        <span className="rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-700">预计提升：{task.expected_lift}</span>
+        <span className="rounded-full bg-emerald-100 px-3 py-1 text-sm font-semibold text-emerald-700">训练优先级：{task.priority_label}</span>
         <span className="text-sm font-semibold text-clinic">{task.next_step_label}</span>
         <ArrowRight className="h-4 w-4 text-clinic" />
       </div>

@@ -95,10 +95,16 @@ export type CaseDetail = CaseSummary & {
   treatment_plan: string;
   rubric: Record<string, string>;
 };
+export type StudentCaseDetail = CaseSummary & {
+  history: string;
+  physical_exam: string;
+  lab_results: string;
+  imaging: string;
+};
 export type SessionDetail = {
   id: number;
   student: Student;
-  case: CaseDetail;
+  case: StudentCaseDetail;
   status: string;
   started_at: string;
   completed_at: string | null;
@@ -243,7 +249,7 @@ export type RecommendedTask = {
   priority: number;
   target_abilities: string[];
   source_evidence: string;
-  expected_lift: string;
+  priority_label: string;
   difficulty_label: string;
   next_step_label: string;
 };
@@ -264,9 +270,7 @@ export function login(username: string, password: string) {
 export function register(payload: {
   username: string;
   password: string;
-  role: "student" | "teacher" | "admin";
-  student_id?: number;
-  teacher_id?: number;
+  role: "student";
 }) {
   return request<{ token_type: string; user: User }>("/api/auth/register", {
     method: "POST",
@@ -300,7 +304,7 @@ export function getStudentDashboard(studentId: number) {
 }
 
 export function getCase(caseId: string | number) {
-  return request<CaseDetail>(`/api/cases/${caseId}`);
+  return request<StudentCaseDetail>(`/api/cases/${caseId}`);
 }
 
 export function listCases() {
@@ -613,6 +617,32 @@ export function listTeacherScoreReviews() {
       created_at: string;
     }[]
   >("/api/teacher/reviews");
+}
+
+export type ReviewableEvidence = {
+  evidence_event_id: number;
+  student_id: number;
+  student_name: string;
+  case_session_id: number;
+  ai_score: number;
+  teacher_confirmed_score: number | null;
+  dimensions: Record<string, number>;
+  created_at: string;
+};
+
+export function listReviewableEvidence() {
+  return request<ReviewableEvidence[]>("/api/teacher/reviewable-evidence");
+}
+
+export function createTeacherScoreReview(payload: {
+  evidence_event_id: number;
+  confirmed_dimensions: Record<string, number>;
+  comment: string;
+}) {
+  return request<{ id: number; teacher_score: number }>("/api/teacher/reviews", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export function teacherListCases() {

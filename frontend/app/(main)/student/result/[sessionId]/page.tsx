@@ -17,6 +17,9 @@ export default async function ResultPage({ params }: { params: Promise<{ session
             <h1 className="text-2xl font-semibold">评分反馈</h1>
             <p className="mt-2 max-w-3xl text-slate-600">{result.score.feedback}</p>
             <p className="mt-2 text-xs text-slate-500">AI形成性评价，仅供教学参考，教师可复核。</p>
+            <p className="mt-1 text-xs font-medium text-slate-600">
+              {result.score.teacher_confirmed_score === null ? "待教师确认" : "教师已确认"}
+            </p>
           </div>
           <div className="text-right">
             <div className="text-sm text-slate-500">总分</div>

@@ -27,6 +27,7 @@ from app.core.llm_config import LLM_API_KEY, LLM_MODEL
 from app.services.serializers import (
     dumps_json,
     serialize_case,
+    serialize_case_for_student,
     serialize_case_summary,
     serialize_profile,
     serialize_score,
@@ -101,7 +102,7 @@ def coach(
     session = _get_session(db, session_id)
     require_student_access(session.student_id, user)
     question = generate_reasoning_question(
-        serialize_case(session.case),
+        serialize_case_for_student(session.case),
         payload.step,
         payload.answer_text,
     )
@@ -236,7 +237,7 @@ def _serialize_session(session: CaseSession) -> dict:
     return {
         "id": session.id,
         "student": serialize_student(session.student),
-        "case": serialize_case(session.case),
+        "case": serialize_case_for_student(session.case),
         "status": session.status,
         "started_at": session.started_at,
         "completed_at": session.completed_at,

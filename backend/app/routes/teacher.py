@@ -1,8 +1,8 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.auth import require_role
+from app.auth import get_current_user, require_role
 from app.database import get_db
 from app.models import (
     Case,
@@ -24,7 +24,8 @@ from app.services.learning_evidence_service import (
     build_student_evidence_summary,
 )
 from app.services.llm_service import llm_service
-from app.services.recommendation_service import build_learning_pathway
+from app.services.recommendation_service import build_learning_pathway, determine_pathway_stage, choose_recommendation
+from app.services.competency_projector import COMPETENCY_PROJECTOR_VERSION, confirmed_total, reproject_competencies
 from app.services.serializers import (
     ABILITY_LABELS,
     ALL_COMPETENCIES,
@@ -59,9 +60,14 @@ class InterventionCreate(BaseModel):
 
 class ReviewCreate(BaseModel):
     evidence_event_id: int
-    ai_score: float
-    teacher_score: float
-    comment: str
+    confirmed_dimensions: dict[str, float] = Field(min_length=6, max_length=6)
+    comment: str = Field(min_length=1)
+
+    def model_post_init(self, __context: object) -> None:
+        if set(self.confirmed_dimensions) != set(CORE_ABILITIES):
+            raise ValueError("confirmed_dimensions must contain exactly the six core competencies")
+        if any(score < 0 or score > 100 for score in self.confirmed_dimensions.values()):
+            raise ValueError("dimension scores must be between 0 and 100")
 
 
 @router.get("/dashboard")
@@ -203,23 +209,55 @@ def list_interventions(db: Session = Depends(get_db)) -> list[dict]:
 
 
 @router.post("/reviews")
-def create_score_review(payload: ReviewCreate, db: Session = Depends(get_db)) -> dict:
+def create_score_review(
+    payload: ReviewCreate,
+    db: Session = Depends(get_db),
+    reviewer=Depends(get_current_user),
+) -> dict:
     event = db.get(LearningEvidenceEvent, payload.evidence_event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Evidence event not found")
-    score = db.query(Score).filter(Score.session_id == event.source_id).first() if event.module_type == "case" else None
-    if score:
-        score.teacher_confirmed_score = payload.teacher_score
+    if event.event_type != "case_session_scored":
+        raise HTTPException(status_code=400, detail="Only case score evidence can be reviewed")
+    score = db.query(Score).filter(Score.session_id == event.source_id).first()
+    if not score:
+        raise HTTPException(status_code=404, detail="Original score not found")
+    teacher_score = confirmed_total(payload.confirmed_dimensions)
+    authoritative_ai_score = score.ai_score if score.ai_score is not None else score.total_score
+    try:
+        score.teacher_confirmed_score = teacher_score
         score.teacher_override_reason = payload.comment
-    review = TeacherScoreReview(
-        evidence_event_id=payload.evidence_event_id,
-        ai_score=score.ai_score if score and score.ai_score is not None else payload.ai_score,
-        teacher_score=payload.teacher_score,
-        comment=payload.comment,
-        agreement_delta=round(payload.teacher_score - payload.ai_score, 1),
-    )
-    db.add(review)
-    db.commit()
+        review = TeacherScoreReview(
+            evidence_event_id=event.id,
+            reviewer_user_id=reviewer.id,
+            ai_score=authoritative_ai_score,
+            teacher_score=teacher_score,
+            comment=payload.comment,
+            agreement_delta=round(teacher_score - authoritative_ai_score, 1),
+            confirmed_dimensions_json=dumps_json(payload.confirmed_dimensions),
+            projector_version=COMPETENCY_PROJECTOR_VERSION,
+        )
+        db.add(review)
+        db.flush()
+        db.add(LearningEvidenceEvent(
+            student_id=event.student_id, module_type="case", module_id=event.module_id,
+            session_id=event.session_id, event_type="teacher_score_confirmed",
+            source_table="teacher_score_reviews", source_id=review.id, score=teacher_score,
+            competency_updates_json="{}", evidence_payload_json=dumps_json({"original_evidence_event_id": event.id, "dimensions": payload.confirmed_dimensions}),
+        ))
+        reproject_competencies(db, event.student_id)
+        student = db.get(Student, event.student_id)
+        profile = serialize_profile(student.competency_profile)
+        student.current_stage = determine_pathway_stage(profile)
+        cases = [serialize_case_summary(case) for case in db.query(Case).all()]
+        recommendation = choose_recommendation(profile, [], cases)
+        # A fresh recommendation makes the corrected profile immediately authoritative.
+        from app.models import LearningRecommendation
+        db.add(LearningRecommendation(student_id=student.id, recommended_case_id=recommendation["case"]["id"], recommendation_reason=recommendation["reason"], pathway_stage=recommendation["pathway_stage"]))
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     db.refresh(review)
     return _serialize_review(review)
 
@@ -228,6 +266,33 @@ def create_score_review(payload: ReviewCreate, db: Session = Depends(get_db)) ->
 def list_score_reviews(db: Session = Depends(get_db)) -> list[dict]:
     rows = db.query(TeacherScoreReview).order_by(TeacherScoreReview.created_at.desc()).all()
     return [_serialize_review(row) for row in rows]
+
+
+@router.get("/reviewable-evidence")
+def list_reviewable_evidence(db: Session = Depends(get_db)) -> list[dict]:
+    events = (
+        db.query(LearningEvidenceEvent)
+        .filter(LearningEvidenceEvent.event_type == "case_session_scored")
+        .order_by(LearningEvidenceEvent.created_at.desc())
+        .all()
+    )
+    rows = []
+    for event in events:
+        score = db.query(Score).filter(Score.session_id == event.source_id).first()
+        student = db.get(Student, event.student_id)
+        if not score or not student:
+            continue
+        rows.append({
+            "evidence_event_id": event.id,
+            "student_id": student.id,
+            "student_name": student.name,
+            "case_session_id": event.source_id,
+            "ai_score": score.ai_score if score.ai_score is not None else score.total_score,
+            "teacher_confirmed_score": score.teacher_confirmed_score,
+            "dimensions": {key: getattr(score, key) for key in CORE_ABILITIES},
+            "created_at": event.created_at,
+        })
+    return rows
 
 
 @router.get("/cases")
@@ -406,5 +471,7 @@ def _serialize_review(review: TeacherScoreReview) -> dict:
         "teacher_score": review.teacher_score,
         "comment": review.comment,
         "agreement_delta": review.agreement_delta,
+        "confirmed_dimensions": loads_json(review.confirmed_dimensions_json, {}),
+        "projector_version": review.projector_version,
         "created_at": review.created_at,
     }

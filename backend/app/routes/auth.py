@@ -15,9 +15,9 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 class RegisterRequest(BaseModel):
     username: str = Field(min_length=3, max_length=100)
     password: str = Field(min_length=6, max_length=128)
-    role: Literal["student", "teacher"] = "student"
+    # Teacher and administrator accounts are provisioned server-side only.
+    role: Literal["student"] = "student"
     student_id: int | None = None
-    teacher_id: int | None = None
 
 
 class LoginRequest(BaseModel):
@@ -44,7 +44,6 @@ def register(payload: RegisterRequest, response: Response, db: Session = Depends
     if db.query(User).filter(User.username == payload.username).first():
         raise HTTPException(status_code=409, detail="Username already exists")
     student_id = payload.student_id
-    teacher_id = payload.teacher_id
     if payload.role == "student":
         if student_id is None:
             student = _create_registered_student(db, payload.username)
@@ -53,20 +52,12 @@ def register(payload: RegisterRequest, response: Response, db: Session = Depends
             raise HTTPException(status_code=400, detail="Valid student_id is required")
         if db.query(User).filter(User.student_id == student_id).first():
             raise HTTPException(status_code=409, detail="Student already has a user")
-    if payload.role == "teacher":
-        if teacher_id is None:
-            teacher = _create_registered_teacher(db, payload.username)
-            teacher_id = teacher.id
-        elif not db.get(Teacher, teacher_id):
-            raise HTTPException(status_code=400, detail="Valid teacher_id is required")
-        if db.query(User).filter(User.teacher_id == teacher_id).first():
-            raise HTTPException(status_code=409, detail="Teacher already has a user")
     user = User(
         username=payload.username,
         password_hash=hash_password(payload.password),
         role=payload.role,
         student_id=student_id if payload.role == "student" else None,
-        teacher_id=teacher_id if payload.role == "teacher" else None,
+        teacher_id=None,
     )
     db.add(user)
     db.commit()
@@ -99,18 +90,7 @@ def _create_registered_student(db: Session, username: str) -> Student:
     return student
 
 
-def _create_registered_teacher(db: Session, username: str) -> Teacher:
-    teacher = Teacher(
-        name=username,
-        teacher_no=_unique_no(db, Teacher, "teacher_no", "REGT"),
-        department="注册用户",
-    )
-    db.add(teacher)
-    db.flush()
-    return teacher
-
-
-def _unique_no(db: Session, model: type[Student] | type[Teacher], field: str, prefix: str) -> str:
+def _unique_no(db: Session, model: type[Student], field: str, prefix: str) -> str:
     next_id = (db.query(model).count() or 0) + 1
     while True:
         value = f"{prefix}{next_id:06d}"

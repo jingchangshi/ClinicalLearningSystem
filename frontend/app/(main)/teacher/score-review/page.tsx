@@ -1,9 +1,10 @@
 import Link from "next/link";
 
-import { listTeacherScoreReviews } from "@/lib/api";
+import { listReviewableEvidence, listTeacherScoreReviews } from "@/lib/api";
+import { TeacherReviewClient } from "./TeacherReviewClient";
 
 export default async function ScoreReviewPage() {
-  const reviews = await listTeacherScoreReviews();
+  const [reviews, evidence] = await Promise.all([listTeacherScoreReviews(), listReviewableEvidence()]);
 
   return (
     <div className="space-y-6">
@@ -17,6 +18,8 @@ export default async function ScoreReviewPage() {
           返回教师驾驶舱
         </Link>
       </section>
+
+      <TeacherReviewClient evidence={evidence} />
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="font-semibold">复核记录</h2>

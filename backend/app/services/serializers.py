@@ -91,6 +91,22 @@ def serialize_case(case: Case) -> dict:
     }
 
 
+def serialize_case_for_student(case: Case) -> dict:
+    """Material visible to a learner before submitting a case."""
+    return {
+        "id": case.id,
+        "title": case.title,
+        "disease_category": case.disease_category,
+        "difficulty": case.difficulty,
+        "learning_objectives": loads_json(case.learning_objectives, []),
+        "chief_complaint": case.chief_complaint,
+        "history": case.history,
+        "physical_exam": case.physical_exam,
+        "lab_results": case.lab_results,
+        "imaging": case.imaging,
+    }
+
+
 def serialize_case_summary(case: Case) -> dict:
     return {
         "id": case.id,

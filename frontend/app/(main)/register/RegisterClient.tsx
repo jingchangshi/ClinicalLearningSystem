@@ -10,14 +10,13 @@ export function RegisterClient() {
   const { register, loading } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"student" | "teacher">("student");
   const [error, setError] = useState<string | null>(null);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError(null);
     try {
-      await register({ username, password, role });
+      await register({ username, password, role: "student" });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "注册失败");
     }
@@ -31,7 +30,7 @@ export function RegisterClient() {
         </div>
         <h1 className="mt-6 text-4xl font-semibold">创建 ClinPath 账号</h1>
         <p className="mt-4 leading-7 text-emerald-50">
-          注册后系统会自动建立账户、写入安全 cookie，并进入对应角色工作台。
+          注册后系统会建立学生账户、写入安全 cookie，并进入学习工作台。
         </p>
       </section>
 
@@ -58,17 +57,7 @@ export function RegisterClient() {
             className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3"
           />
         </label>
-        <label className="mt-4 block text-sm font-medium text-slate-600">
-          角色
-          <select
-            value={role}
-            onChange={(event) => setRole(event.target.value as "student" | "teacher")}
-            className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3"
-          >
-            <option value="student">学生</option>
-            <option value="teacher">教师</option>
-          </select>
-        </label>
+        <p className="mt-4 text-sm text-slate-500">公开注册仅适用于学生；教师账户由教学管理人员开通。</p>
         {error ? <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-alert">{error}</p> : null}
         <button
           disabled={loading}
