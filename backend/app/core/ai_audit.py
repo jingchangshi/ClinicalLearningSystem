@@ -57,7 +57,7 @@ _session_factory: Callable[[], object] | None = None
 
 # Audit events are queued and written by a background thread: a busy SQLite file
 # can then neither drop an event nor add lock latency to a training request.
-_queue: deque[dict] = deque(maxlen=2000)
+_queue: deque[tuple[dict, Callable[[], object] | None]] = deque(maxlen=2000)
 _queue_lock = threading.Lock()
 _wake = threading.Event()
 _flusher: threading.Thread | None = None
@@ -151,7 +151,10 @@ def _enqueue(record: dict) -> None:
         if len(_queue) == _queue.maxlen:
             DROPPED_EVENTS += 1
             logger.warning("ai_audit: queue full, dropping oldest audit event")
-        _queue.append(record)
+        # Bind the record to the session factory that was active when it was
+        # produced, so a queued event can never be written into a different store
+        # (which is what made test runs interfere with each other).
+        _queue.append((record, _session_factory))
     _start_flusher()
     _wake.set()
 
@@ -178,11 +181,11 @@ def _drain() -> int:
             if not _queue:
                 break
             # Claim the record first: two drainers must never write the same event.
-            record = _queue.popleft()
-        if not _write(record):
+            record, factory = _queue.popleft()
+        if not _write(record, factory):
             # Keep it queued for the next pass instead of losing the event.
             with _queue_lock:
-                _queue.appendleft(record)
+                _queue.appendleft((record, factory))
             break
         written += 1
     return written
@@ -213,14 +216,13 @@ def reset_for_tests() -> None:
         _queue.clear()
 
 
-def _write(record: dict) -> bool:
+def _write(record: dict, factory: Callable[[], object] | None = None) -> bool:
     for attempt in range(3):
         try:
             from app.database import SessionLocal
             from app.models import AIInvocation
 
-            factory = _session_factory or SessionLocal
-            db = factory()
+            db = (factory or SessionLocal)()
             try:
                 # No statements before the INSERT: a read (even a PRAGMA) would turn
                 # this into a lock upgrade, which returns SQLITE_BUSY immediately
