@@ -367,6 +367,24 @@ tests/test_ai_enrichment.py                     4 项：worker 真的能产出�
 
 ### 11.2 容量/延迟复现
 
+### 11.3 真实 AI 验收证据（部署 5863c45 之后）
+
+```text
+ai_invocations（最近 8 条，全部 provider=deepseek model=deepseek-flash）：
+  teacher_insight            calls=1 failures=0 success=1 fallback_used=0 latency 1358ms
+  recommendation_explanation calls=1 failures=0 success=1 fallback_used=0 latency 1809ms
+  case_evaluation            calls=1 failures=0 success=1 fallback_used=0 latency 21149ms
+  tutor_question             calls=1 failures=0 success=1 fallback_used=0 latency  887ms
+
+scores（最近 3 条）：evaluation_mode=ai, degraded=0, provider=deepseek,
+                     model=deepseek-flash, ai_score 非空, rule_score 非空
+
+GET /api/teacher/dashboard → teaching_insight_source=ai（缓存命中，0.165s，无 provider 调用）
+POST /api/teacher/dashboard/refresh-insight → source=ai, degraded=false, 219 字符
+```
+
+tutor 的 887ms 就是新策略的直接效果：同一条链路上，改造前是 thinking+high 的 4–5 秒。
+
 ```bash
 # 页面延迟（只读）
 python3 scripts/measure_page_latency.py --samples 3
