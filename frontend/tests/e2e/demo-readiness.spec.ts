@@ -217,6 +217,15 @@ test.describe("teacher demo surfaces", () => {
     expect(modules.size).toBeGreaterThanOrEqual(3);
     expect(dates.size).toBeGreaterThanOrEqual(3);
 
+    // The download is the complete dataset, and it really is a CSV a teacher can
+    // open (the page's own link, exercised through the same proxy and cookie).
+    const csv = await page.request.get("/api/teacher/export/research-data.csv");
+    expect(csv.status()).toBe(200);
+    expect(csv.headers()["content-type"]).toContain("text/csv");
+    const csvBody = await csv.text();
+    expect(csvBody.startsWith("\ufeff")).toBe(true);
+    expect(csvBody).toContain("匿名学生编号,班级,学习模块,训练得分,记录时间");
+
     expect(recorder.serverErrors.join(" | ")).toBe("");
   });
 });
