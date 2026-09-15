@@ -28,7 +28,9 @@ import urllib.request
 from base64 import urlsafe_b64encode
 from pathlib import Path
 
-DEFAULT_BASE_URL = "http://129.153.118.58:8101"
+# The pilot entry is HTTPS (see docs/ARCH.md §11). Override with
+# CLINPATH_MEASURE_BASE_URL=http://127.0.0.1:8101 for a loopback-only run.
+DEFAULT_BASE_URL = os.getenv("CLINPATH_MEASURE_BASE_URL", "https://clinpath.1031989.xyz")
 DEFAULT_TEACHER_USER_ID = 4
 
 STUDENT_TARGETS = (

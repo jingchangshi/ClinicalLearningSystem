@@ -34,7 +34,7 @@ const nextConfig: NextConfig = {
   // Lets a disposable/test deployment build beside the production build instead
   // of overwriting the `.next` directory the running service serves.
   distDir: process.env.NEXT_DIST_DIR ?? ".next",
-  allowedDevOrigins: ["129.153.118.58"],
+  allowedDevOrigins: ["129.153.118.58", "clinpath.1031989.xyz"],
   env: {
     NEXT_PUBLIC_BUILD_SHA: buildSha(),
   },

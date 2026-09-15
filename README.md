@@ -156,9 +156,15 @@ export NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 
 推荐端口：
 
-- 前端公网入口：`http://129.153.118.58:8101`
+- 前端公网入口：`https://clinpath.1031989.xyz`（Cloudflare 隧道终止 TLS）
+- 前端监听地址：`127.0.0.1:8101`（只回环；不再对公网开放）
 - 后端内部地址：`http://127.0.0.1:8100`
-- 前端同源 API：`http://129.153.118.58:8101/api/...`
+- 前端同源 API：`https://clinpath.1031989.xyz/api/...`
+
+HTTPS 入口由 `deploy/systemd-user/clinical-https.service` 维持（配置模板
+`deploy/cloudflared/clinpath-pilot.yml.example`）。若要临时回到裸 HTTP
+（应急排查），设 `CLINPATH_FRONTEND_HOST=0.0.0.0`、`COOKIE_SECURE=false` 后重启两个服务；
+这只是回退手段，不是目标架构（`docs/ARCH.md` §11）。
 
 一键启动脚本：
 
@@ -245,10 +251,10 @@ ss -ltnp | grep -E ':8100|:8101'
 ./scripts/verify_deploy.sh          # 只读：HEAD/指纹/schema/systemd/公网入口 一次核对
 curl http://127.0.0.1:8100/api/health
 curl http://127.0.0.1:8100/api/system/version
-curl http://127.0.0.1:8101/api/students
-curl -I http://129.153.118.58:8101/
-curl http://129.153.118.58:8101/api/students
-curl http://129.153.118.58:8101/api/knowledge
+curl -I https://clinpath.1031989.xyz/
+curl https://clinpath.1031989.xyz/api/health
+curl -I http://clinpath.1031989.xyz/     # 期望 307 -> https
+curl -I http://129.153.118.58:8101/       # 期望不可达：公网 HTTP 端口已退役
 ```
 
 ## 环境变量与真实 AI 接入

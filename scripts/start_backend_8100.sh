@@ -4,7 +4,7 @@ set -euo pipefail
 cd /home/jcshi/workspace/clinical_learning_system/backend
 
 export PATH="/home/jcshi/.local/bin:/home/jcshi/Software/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
-export FRONTEND_ORIGINS="${FRONTEND_ORIGINS:-http://129.153.118.58:8101,http://localhost:8101,http://127.0.0.1:8101}"
+export FRONTEND_ORIGINS="${FRONTEND_ORIGINS:-https://clinpath.1031989.xyz,http://127.0.0.1:8101,http://localhost:8101}"
 # Read endpoints are synchronous, so one process runs Python-level work one
 # request at a time (measured: p95 6-10s for 100 concurrent readers). Four
 # workers brought the same load to p95 ~0.19s at 2.3/4 cores of CPU.
