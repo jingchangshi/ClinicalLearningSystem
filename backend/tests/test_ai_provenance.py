@@ -126,7 +126,7 @@ def test_submit_stores_provenance_for_the_ai_path(db_factory, client, monkeypatc
 
     # Provenance must come from the live configuration, not from a constant.
     monkeypatch.setattr(llm_config, "LLM_PROVIDER", "deepseek")
-    monkeypatch.setattr(llm_config, "LLM_MODEL", "deepseek-chat")
+    monkeypatch.setattr(llm_config, "LLM_MODEL", "deepseek-flash")
     monkeypatch.setattr(llm_config, "LLM_API_KEY", "test-key")
     monkeypatch.setattr(sessions_routes, "score_student_answer", fake_score)
     monkeypatch.setattr(

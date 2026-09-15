@@ -103,6 +103,9 @@ def next_tutor_question(case: dict, step: str, student_answer: str, state: dict)
     """One focused question, with a rule fallback and a hidden-answer guard."""
 
     fallback = _rule_question(step, state)
+    if leaks_hidden_answer(fallback, case, student_text=student_answer):
+        # The rule question quotes the same vocabulary the hidden diagnosis uses.
+        fallback = SAFE_TUTOR_QUESTION
     question = llm_service.chat_completion(
         TUTOR_SYSTEM_PROMPT,
         TUTOR_USER_TEMPLATE.format(
@@ -124,9 +127,35 @@ def next_tutor_question(case: dict, step: str, student_answer: str, state: dict)
 
 # A short label such as "系统性红斑狼疮" is still the answer when the tutor names
 # it. Long hidden material is caught by fragment matching; the standard diagnosis
-# by normalised label matching (allowed only when the student already used it).
+# by normalised alias matching (allowed only when the student already used it).
 LONG_FRAGMENT_THRESHOLD = 12
 MIN_LABEL_LENGTH = 3
+
+# Real seed cases carry compound diagnoses such as
+# "系统性红斑狼疮，疑似狼疮肾炎。" — matching only the whole string would let the
+# tutor state "你的诊断应该是系统性红斑狼疮。".
+CLAUSE_SPLIT = re.compile(r"[，。、；;,、!！?？:：/（）()\[\]{}《》【】\s]+")
+CONJUNCTION_SPLIT = re.compile(r"(?:伴|合并|并发|同时)")
+# Hedges that guard HOW likely a diagnosis is, not WHICH diagnosis it is.
+HEDGE_PREFIX = re.compile(
+    r"^(?:疑似|倾向|考虑|可能|拟诊|拟|提示|支持|符合|考虑为|诊断为|诊断|"
+    r"标准诊断|主要诊断|首要诊断|初步诊断|需动态鉴别|需鉴别|需排除|待排|排除|为|是)+"
+)
+# Generic clinical descriptions are not diagnosis labels: guarding them would
+# block legitimate Socratic questions about organ involvement or disease activity.
+GENERIC_CLAUSE_MARKERS = (
+    "受累",
+    "疾病活动",
+    "活动度",
+    "风险",
+    "并发症",
+    "临床表现",
+    "鉴别",
+    "排除",
+)
+
+# Shown when every rule-based question would itself quote hidden vocabulary.
+SAFE_TUTOR_QUESTION = "请说明你目前判断的证据，以及还有哪些证据与它矛盾？为什么？"
 
 
 def normalize_for_matching(text: str) -> str:
@@ -135,13 +164,30 @@ def normalize_for_matching(text: str) -> str:
     return re.sub(r"[\s，。、；：？！,.;:?!\"'（）()《》\-—]+", "", (text or "").lower())
 
 
+def _diagnosis_aliases(diagnosis: str) -> list[str]:
+    """Every string that, if the tutor said it, would give the diagnosis away.
+
+    "系统性红斑狼疮，疑似狼疮肾炎。" yields ["系统性红斑狼疮", "狼疮肾炎"].
+    "ANCA相关血管炎，倾向肉芽肿性多血管炎，肺肾受累。" yields the two disease
+    names and drops "肺肾受累", which describes organ involvement rather than
+    naming the answer.
+    """
+
+    aliases: list[str] = []
+    for clause in CLAUSE_SPLIT.split(diagnosis):
+        for piece in CONJUNCTION_SPLIT.split(clause):
+            unhedged = HEDGE_PREFIX.sub("", piece.strip()).strip()
+            if any(marker in unhedged for marker in GENERIC_CLAUSE_MARKERS):
+                continue
+            aliases.append(unhedged)
+    return aliases
+
+
 def _hidden_labels(case: dict) -> list[str]:
     diagnosis = case.get("standard_diagnosis")
-    labels: list[str] = []
+    labels: list[str] = [diagnosis] if isinstance(diagnosis, str) else []
     if isinstance(diagnosis, str):
-        labels.append(diagnosis)
-        # "系统性红斑狼疮（SLE）" -> also guard the bare disease name.
-        labels.extend(part for part in re.split(r"[（(]/", diagnosis) if part)
+        labels.extend(_diagnosis_aliases(diagnosis))
     return [label.strip() for label in labels if len(label.strip()) >= MIN_LABEL_LENGTH]
 
 

@@ -3,7 +3,7 @@ import logging
 import time
 from typing import Any
 
-from openai import OpenAI
+from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI
 
 from app.core import ai_audit
 from app.core.ai_runtime import ai_runtime
@@ -12,9 +12,12 @@ from app.core.llm_config import (
     LLM_API_KEY,
     LLM_BASE_URL,
     LLM_MAX_RETRIES,
+    LLM_MAX_TOKENS,
     LLM_MODEL,
     LLM_PROVIDER,
+    LLM_REASONING_EFFORT,
     LLM_TIMEOUT_SECONDS,
+    thinking_mode_active,
 )
 from app.llm.prompts.evaluation import (
     GUIDELINE_RATIONALE_SYSTEM_PROMPT,
@@ -27,6 +30,76 @@ from app.llm.prompts.insight import TEACHER_INSIGHT_SYSTEM_PROMPT, TEACHER_INSIG
 from app.llm.prompts.pathway import RECOMMENDATION_EXPLANATION_SYSTEM_PROMPT, RECOMMENDATION_EXPLANATION_USER_TEMPLATE
 
 logger = logging.getLogger("clinpath.llm")
+
+# A tiny, deterministic, non-thinking request: the probe answers "is the
+# provider reachable?", never "how well does it reason?".
+PROBE_PROMPT = "Reply exactly: ok"
+PROBE_MAX_TOKENS = 16
+
+# Transient provider failures worth another attempt. Everything else (bad
+# request, bad key, empty balance, invalid parameters) is permanent: retrying it
+# only delays the honest degraded result.
+RETRYABLE_STATUS_CODES = frozenset({408, 409, 429, 500, 502, 503, 504})
+RETRY_BACKOFF_SECONDS = 0.5
+RETRY_BACKOFF_CAP_SECONDS = 4.0
+
+
+def classify_provider_error(error: BaseException) -> tuple[str, bool]:
+    """Return ``(error_type, retryable)`` using the official error semantics.
+
+    400/401/402/422 are permanent; 429/5xx and network problems are transient.
+    Content-level failures (empty body, unparseable JSON) are reported as their
+    own type and are worth one retry before the rule fallback takes over.
+    """
+
+    if isinstance(error, APITimeoutError):
+        return "Timeout", True
+    if isinstance(error, APIConnectionError):
+        return "ConnectionError", True
+    status = getattr(error, "status_code", None)
+    if isinstance(status, int):
+        return f"HTTP{status}", status in RETRYABLE_STATUS_CODES
+    if isinstance(error, (json.JSONDecodeError, ValueError)):
+        return "EmptyResponse", True
+    if isinstance(error, APIStatusError):  # pragma: no cover - status_code is set in practice
+        return type(error).__name__, False
+    return type(error).__name__, True
+
+
+def build_chat_kwargs(
+    messages: list[dict],
+    temperature: float = 0.3,
+    response_format: dict | None = None,
+    thinking: bool | None = None,
+    max_tokens: int | None = None,
+) -> dict:
+    """Assemble provider request kwargs. The one place Thinking Mode is decided.
+
+    - Thinking Mode (DeepSeek) is requested explicitly instead of relying on the
+      provider default, and carries ``reasoning_effort``.
+    - ``temperature`` is omitted while thinking is on: the provider ignores it,
+      so sending it would only imply control the caller does not have.
+    - ``max_tokens`` is always sent, so a JSON answer cannot be silently
+      truncated by a provider-side default.
+    """
+
+    deepseek = LLM_PROVIDER == "deepseek"
+    wants_thinking = thinking_mode_active(LLM_PROVIDER) if thinking is None else (deepseek and thinking)
+    kwargs: dict = {
+        "model": LLM_MODEL,
+        "messages": _sanitised(messages),
+        "timeout": LLM_TIMEOUT_SECONDS,
+        "max_tokens": max_tokens if max_tokens is not None else LLM_MAX_TOKENS,
+    }
+    if deepseek:
+        kwargs["extra_body"] = {"thinking": {"type": "enabled" if wants_thinking else "disabled"}}
+    if wants_thinking:
+        kwargs["reasoning_effort"] = LLM_REASONING_EFFORT
+    else:
+        kwargs["temperature"] = temperature
+    if response_format:
+        kwargs["response_format"] = response_format
+    return kwargs
 
 
 def prompt_json(payload: Any) -> str:
@@ -45,15 +118,21 @@ class OpenAICompatibleClient:
         self.api_key = LLM_API_KEY
         self.model = LLM_MODEL
 
-    def chat(self, messages: list[dict], temperature: float = 0.3, response_format: dict | None = None):
-        kwargs = {
-            "model": self.model,
-            "messages": _sanitised(messages),
-            "temperature": temperature,
-            "timeout": LLM_TIMEOUT_SECONDS,
-        }
-        if response_format:
-            kwargs["response_format"] = response_format
+    def chat(
+        self,
+        messages: list[dict],
+        temperature: float = 0.3,
+        response_format: dict | None = None,
+        thinking: bool | None = None,
+        max_tokens: int | None = None,
+    ):
+        kwargs = build_chat_kwargs(
+            messages,
+            temperature=temperature,
+            response_format=response_format,
+            thinking=thinking,
+            max_tokens=max_tokens,
+        )
         return OpenAI(
             api_key=self.api_key,
             base_url=self.base_url,
@@ -158,20 +237,33 @@ class LLMService:
             [
                 {
                     "role": "system",
-                    "content": f"{system_prompt}\n必须只输出合法 JSON，不要输出 markdown 或解释。",
+                    # The JSON Output contract requires the prompt to mention JSON
+                    # and to show the expected shape, not just to ask for "no
+                    # markdown". Truncated or empty output is a provider failure.
+                    "content": (
+                        f"{system_prompt}\n必须只输出一个合法 JSON object，不要输出 markdown 或解释。"
+                        "如果无法完成，返回空对象而不是解释文字。"
+                    ),
                 },
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0.2,
             response_format={"type": "json_object"},
         )
-        parsed = json.loads(response.choices[0].message.content or "")
+        content = response.choices[0].message.content
+        if not content or not content.strip():
+            # DeepSeek documents that JSON Output can occasionally return empty
+            # content; that is a provider failure, never a valid evaluation.
+            raise ValueError("LLM returned empty JSON content")
+        parsed = json.loads(content)
         return parsed if isinstance(parsed, (dict, list)) else fallback
 
     def _with_retries(self, operation, fallback: Any, operation_name: str = "chat") -> Any:
         last_error: Exception | None = None
+        last_error_type: str | None = None
         started = time.monotonic()
-        for attempt in range(max(1, LLM_MAX_RETRIES + 1)):
+        max_attempts = max(1, LLM_MAX_RETRIES + 1)
+        for attempt in range(max_attempts):
             attempt_started = time.monotonic()
             try:
                 result = operation()
@@ -184,53 +276,59 @@ class LLMService:
                     )
                     return result
                 last_error = ValueError("LLM returned an empty response")
-                ai_audit.report_call(
-                    success=False,
-                    fallback_used=False,
-                    latency_ms=round((time.monotonic() - attempt_started) * 1000),
-                    error_type="EmptyResponse",
-                )
+                last_error_type, retryable = "EmptyResponse", True
             except Exception as error:
                 last_error = error
-                ai_audit.report_call(
-                    success=False,
-                    fallback_used=False,
-                    latency_ms=round((time.monotonic() - attempt_started) * 1000),
-                    error_type=type(error).__name__,
-                )
-                logger.warning(
-                    "LLM degraded provider=%s model=%s operation=%s failure_type=%s retry=%s latency_ms=%s",
-                    LLM_PROVIDER, LLM_MODEL, operation_name, type(error).__name__, attempt,
-                    round((time.monotonic() - started) * 1000),
-                )
-                continue
+                last_error_type, retryable = classify_provider_error(error)
+            ai_audit.report_call(
+                success=False,
+                fallback_used=False,
+                latency_ms=round((time.monotonic() - attempt_started) * 1000),
+                error_type=last_error_type,
+            )
+            logger.warning(
+                "LLM degraded provider=%s model=%s operation=%s failure_type=%s attempt=%s retryable=%s latency_ms=%s",
+                LLM_PROVIDER, LLM_MODEL, operation_name, last_error_type, attempt, retryable,
+                round((time.monotonic() - started) * 1000),
+            )
+            if not retryable:
+                logger.warning("LLM permanent failure, not retrying operation=%s", operation_name)
+                break
+            if attempt < max_attempts - 1:
+                time.sleep(min(RETRY_BACKOFF_SECONDS * (2**attempt), RETRY_BACKOFF_CAP_SECONDS))
         if last_error:
             logger.warning("LLM fallback used operation=%s", operation_name)
-            ai_runtime.record_call("rule_fallback", type(last_error).__name__)
+            ai_runtime.record_call("rule_fallback", last_error_type)
             ai_audit.report_call(
                 success=False,
                 fallback_used=True,
                 latency_ms=0,
-                error_type=type(last_error).__name__,
+                error_type=last_error_type,
             )
         return fallback
 
     def probe(self) -> dict:
-        """One real, minimal request. Never returns or logs provider output."""
+        """One real, minimal, non-thinking request. Never returns provider output."""
 
         if not LLM_API_KEY:
             ai_runtime.record_probe(False, None, "NotConfigured")
             return {"reachable": False, "latency_ms": None, "error_type": "NotConfigured"}
         started = time.monotonic()
         try:
-            self._client().chat([{"role": "user", "content": "Reply: ok"}], temperature=0)
+            self._client().chat(
+                [{"role": "user", "content": PROBE_PROMPT}],
+                temperature=0,
+                thinking=False,
+                max_tokens=PROBE_MAX_TOKENS,
+            )
             latency_ms = round((time.monotonic() - started) * 1000)
             ai_runtime.record_probe(True, latency_ms, None)
             return {"reachable": True, "latency_ms": latency_ms, "error_type": None}
         except Exception as error:
             latency_ms = round((time.monotonic() - started) * 1000)
-            ai_runtime.record_probe(False, latency_ms, type(error).__name__)
-            return {"reachable": False, "latency_ms": latency_ms, "error_type": type(error).__name__}
+            error_type, _ = classify_provider_error(error)
+            ai_runtime.record_probe(False, latency_ms, error_type)
+            return {"reachable": False, "latency_ms": latency_ms, "error_type": error_type}
 
     def _client(self) -> OpenAICompatibleClient:
         return OpenAICompatibleClient()

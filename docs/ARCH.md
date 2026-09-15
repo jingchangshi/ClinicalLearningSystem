@@ -137,16 +137,56 @@ role-based navigation
 LLM_PROVIDER         deepseek | openai | openai-compatible
 LLM_API_KEY
 LLM_BASE_URL
-LLM_MODEL
+LLM_MODEL            deepseek 默认 deepseek-flash
 LLM_TIMEOUT_SECONDS  default 12
 LLM_MAX_RETRIES      default 2
+LLM_THINKING_ENABLED default true
+LLM_REASONING_EFFORT default high（none/low/high/max，兼容 low-high 之外的别名）
+LLM_MAX_TOKENS       default 4096
 ```
 
 - 兼容别名（deprecated）：`DEEPSEEK_*`、`OPENAI_*`。
 - 解析顺序：canonical 名优先，其次 provider 别名；唯一实现位于 `app/core/llm_config.py`。
 - `provider` 不再硬编码；未显式设置时由所用变量名 / base_url host 推断。
 - `llm_config_summary()` 只输出非敏感诊断信息（provider、model、base_url host、来源变量名、
-  timeout/retries、仍在使用的 deprecated 变量），用于日志与教师 runtime 卡片。
+  timeout/retries、thinking/effort/max_tokens、仍在使用的 deprecated 变量），用于日志与
+  教师 runtime 卡片。思考开关只进入服务端配置，不下发给前端。
+
+### 5.1.1 DeepSeek 官方接口对齐（当前契约）
+
+DeepSeek 已下线 `deepseek-chat` / `deepseek-reasoner` 这一组模型名；生产默认模型是
+`deepseek-flash`（OpenAI 兼容的 Chat Completions 接口）：
+
+```text
+base URL   https://api.deepseek.com
+endpoint   POST /chat/completions          （Authorization: Bearer <key>）
+model      deepseek-flash                  （deepseek-v4-pro 可显式选择）
+thinking   extra_body={"thinking": {"type": "enabled"|"disabled"}}
+effort     reasoning_effort=<none|low|high|max>
+JSON        response_format={"type": "json_object"}
+```
+
+实现只落在传输层（`app/services/llm_service.py` 的 `build_chat_kwargs()`），scoring、
+tutor、recommendation、route 里没有 provider 分支：
+
+- **Thinking Mode 显式声明**：不再依赖 provider 的隐式默认值。开启时同时发送
+  `thinking.type=enabled` 与 `reasoning_effort`；`LLM_REASONING_EFFORT=none` 表示明确关闭。
+- **温度**：Thinking Mode 忽略 `temperature`（官方文档：不报错但无效），因此开启思考时
+  **不发送** `temperature`；非思考模式或其它 OpenAI 兼容 provider 仍按原语义发送。
+- **max_tokens**：始终显式发送（默认 4096）。官方默认值是「非思考 8K / 思考 64K」，把
+  输出长度交给隐式默认值会让 JSON 结果在中途被截断而无法归因。
+- **思考轨迹不外泄**：只读取 `choices[0].message.content`；`reasoning_content`
+  不落库、不回传学生、不写审计、不进日志。`ai_invocations` 依旧只有元数据。
+- **探针**：`/api/system/ai-probe` 只回答「能不能连通」，因此显式
+  `thinking=disabled` + 极小 `max_tokens` + 固定提示词，且只返回
+  `reachable / latency_ms / provider / model / error_type`，绝不返回 provider 正文。
+- **JSON 契约**：所有 JSON 任务都发送 `response_format={"type": "json_object"}`，prompt
+  中显式出现 `JSON` 并给出目标 schema；空正文与非法 JSON 一律视为 provider 失败，
+  走重试/回退，绝不当作有效 AI 评价。
+- **重试语义**：400/401/402/422 属永久失败，不重试直接降级；429/5xx 与网络超时按
+  `LLM_MAX_RETRIES` 有界重试（短退避）。降级契约不变：
+  `rule_fallback` + `degraded=true`，审计如实记录 `calls/failures/success/fallback_used/
+  error_type/latency_ms`。
 
 ### 5.2 Runtime observability
 
@@ -482,6 +522,11 @@ E2E_RUN_MUTATING=1 E2E_TEACHER_USERNAME=<staff> E2E_TEACHER_PASSWORD=<secret> np
 ```text
 E2E_EXPECT_FALLBACK=1        针对没有 provider key 的部署，断言结果页显示「规则降级评价」
 E2E_EXPECT_NO_JWT_SECRET=1   针对未配置 JWT_SECRET 的前端，断言受保护路由返回 503 而不是信任未验证声明
+E2E_EXPECT_REAL_AI=1         针对已配置真实 provider 的生产部署，断言结果页显示「AI 语义评价」，
+                             且 evaluation_mode=ai / degraded=false / provider=deepseek /
+                             model=deepseek-flash / ai_score 非空；同时核对 ai_invocations 里
+                             case_evaluation 与 tutor_question 的 calls>0、success=true、
+                             fallback_used=false。DeepSeek 不可用时该门禁必须失败，不允许静默回退。
 ```
 
 ### 14.2 部署一致性
@@ -489,6 +534,9 @@ E2E_EXPECT_NO_JWT_SECRET=1   针对未配置 JWT_SECRET 的前端，断言受保
 `./scripts/verify_deploy.sh`（只读）一次核对：HEAD / 未提交文件数 / 本地与线上源码指纹 /
 schema 是否为迁移 head / systemd 状态 / 公网入口 / 后端与前端 JWT_SECRET 摘要是否 MATCH。
 它同时覆盖「未提交的工作树」这一情形，因此比单看 git SHA 更可靠。
+**每一项必需检查都参与最终 exit code**：服务未 active、公网入口不可达、`/api/health`
+不健康、指纹/SHA/schema/JWT 任一不符都会以非 0 退出——输出好看但退出 0 的「假绿」
+本身就是缺陷，其判定逻辑由 `backend/tests/test_verify_deploy_script.py` 覆盖。
 
 ### 14.3 生产 AI 验收（不看文风，只看元数据）
 

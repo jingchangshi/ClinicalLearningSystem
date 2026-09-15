@@ -1,6 +1,11 @@
 import { expect, test } from "@playwright/test";
+import type { Browser, Page } from "@playwright/test";
 
 test.skip(!process.env.E2E_RUN_MUTATING, "Set E2E_RUN_MUTATING=1 to run a training flow against a disposable deployment.");
+
+// Production real-AI acceptance: with this gate on, a rule fallback is a failure,
+// not an acceptable alternative.  See docs/ARCH.md §14.3.
+const EXPECT_REAL_AI = Boolean(process.env.E2E_EXPECT_REAL_AI);
 
 test("SP encounter works while hidden history stays hidden", async ({ page }) => {
   await login(page);
@@ -77,6 +82,76 @@ async function answersForStep(page: import("@playwright/test").Page, sessionId: 
   );
 }
 
+type Invocation = {
+  task_type: string;
+  provider: string | null;
+  model: string | null;
+  session_id: number | null;
+  calls: number;
+  failures: number;
+  success: boolean;
+  fallback_used: boolean;
+};
+
+async function realInvocationsFor(page: Page, sessionId: number, taskTypes: string[]): Promise<Invocation[]> {
+  return page.evaluate(
+    async ([id, types]) => {
+      const response = await fetch("/api/system/ai-invocations?limit=100", { credentials: "include" });
+      if (!response.ok) return [];
+      const payload = (await response.json()) as { recent: Invocation[] };
+      return payload.recent.filter(
+        (row) =>
+          (types as string[]).includes(row.task_type) &&
+          row.session_id === id &&
+          row.provider === "deepseek" &&
+          row.model === "deepseek-flash" &&
+          row.calls > 0 &&
+          row.success === true &&
+          row.fallback_used === false,
+      );
+    },
+    [sessionId, taskTypes] as const,
+  );
+}
+
+/**
+ * The badge can be right while the audit is wrong, so the real-AI gate proves the
+ * provider call itself: a teacher session reads the same `ai_invocations` rows the
+ * runtime page shows.  The audit writer is asynchronous, hence the polling.
+ */
+async function expectRealDeepSeekInvocations(browser: Browser, sessionId: number, taskTypes: string[]) {
+  const username = process.env.E2E_TEACHER_USERNAME;
+  const password = process.env.E2E_TEACHER_PASSWORD;
+  expect(username && password, "E2E_EXPECT_REAL_AI needs teacher credentials to read the audit trail").toBeTruthy();
+
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  try {
+    await page.goto("/login");
+    await page.getByLabel("用户名").fill(username!);
+    await page.getByLabel("密码").fill(password!);
+    await page.getByRole("button", { name: "登录并进入系统" }).click();
+    await expect(page).toHaveURL(/\/teacher\/dashboard$/);
+
+    let found: Invocation[] = [];
+    await expect
+      .poll(
+        async () => {
+          found = await realInvocationsFor(page, sessionId, taskTypes);
+          return found.map((row) => row.task_type).sort().join(",");
+        },
+        { timeout: 30_000, message: "ai_invocations must prove real DeepSeek calls" },
+      )
+      .toBe([...taskTypes].sort().join(","));
+
+    for (const row of found) {
+      expect(row.failures, `${row.task_type} had provider failures`).toBe(0);
+    }
+  } finally {
+    await context.close();
+  }
+}
+
 test("re-saving one step keeps a single logical answer", async ({ page }) => {
   await login(page);
   await page.goto("/student/case/1");
@@ -115,7 +190,7 @@ test("submitting with missing steps is rejected and nothing is scored", async ({
   await expect(page).not.toHaveURL(/\/student\/result\//);
 });
 
-test("student completes a case with Coach and receives formative feedback", async ({ page }) => {
+test("student completes a case with Coach and receives formative feedback", async ({ page, browser }) => {
   await login(page);
   await page.goto("/student/case/1");
 
@@ -175,7 +250,24 @@ test("student completes a case with Coach and receives formative feedback", asyn
 
   // The indicator must state which engine actually produced the score.
   const indicator = page.getByTestId("evaluation-mode");
-  if (summary.evaluation_mode === "ai" && !summary.degraded) {
+  if (EXPECT_REAL_AI) {
+    // Production acceptance: a rule result is a failure here, not a variant.
+    expect(summary.evaluation_mode, "E2E_EXPECT_REAL_AI requires a real DeepSeek evaluation").toBe("ai");
+    expect(summary.degraded).toBe(false);
+    await expect(indicator).toContainText("AI 语义评价");
+    await expect(indicator).not.toContainText("规则降级评价");
+
+    const resultSessionId = Number(page.url().split("/").pop());
+    const result = await page.evaluate(async (id) => {
+      const response = await fetch(`/api/sessions/${id}/result`, { credentials: "include" });
+      return await response.json();
+    }, resultSessionId);
+    expect(result.score.evaluation_mode).toBe("ai");
+    expect(result.score.degraded).toBe(false);
+    expect(result.score.provider).toBe("deepseek");
+    expect(result.score.model).toBe("deepseek-flash");
+    expect(result.score.ai_score).not.toBeNull();
+  } else if (summary.evaluation_mode === "ai" && !summary.degraded) {
     await expect(indicator).toContainText("AI 语义评价");
     // Cross-check the API provenance behind the badge: a real model call records
     // provider, model and an AI score.
@@ -197,6 +289,11 @@ test("student completes a case with Coach and receives formative feedback", asyn
   await expect(page.getByText("更新后的能力画像")).toBeVisible();
   await page.getByRole("link", { name: "返回学习路径" }).click();
   await expect(page).toHaveURL(/\/student\/pathway$/);
+
+  if (EXPECT_REAL_AI) {
+    expect(submittedSessionId, "the submitted session id is required by the audit gate").toBeGreaterThan(0);
+    await expectRealDeepSeekInvocations(browser, submittedSessionId, ["case_evaluation", "tutor_question"]);
+  }
 });
 
 test("teacher confirms six dimensions and the review is recorded", async ({ page }) => {

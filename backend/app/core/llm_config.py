@@ -3,7 +3,8 @@
 Canonical variables (provider-neutral, preferred everywhere):
 
     LLM_PROVIDER, LLM_API_KEY, LLM_BASE_URL, LLM_MODEL,
-    LLM_TIMEOUT_SECONDS, LLM_MAX_RETRIES
+    LLM_TIMEOUT_SECONDS, LLM_MAX_RETRIES,
+    LLM_THINKING_ENABLED, LLM_REASONING_EFFORT, LLM_MAX_TOKENS
 
 Legacy provider-specific aliases stay honoured so existing deployments keep
 working, but they are deprecated and reported as such by ``llm_config_summary``:
@@ -14,6 +15,12 @@ working, but they are deprecated and reported as such by ``llm_config_summary``:
 Resolution order per value: canonical name, then the provider-specific alias. A
 newer canonical variable always wins, so a configuration can no longer look
 successful while actually calling a different endpoint or model.
+
+Thinking Mode is a DeepSeek capability
+(https://api-docs.deepseek.com/guides/thinking_mode): it is on by default, it
+ignores ``temperature``, and its reasoning trace (``reasoning_content``) must
+never leave the transport layer. The three variables above make that behaviour
+explicit instead of relying on the provider's implicit defaults.
 """
 
 import os
@@ -25,9 +32,20 @@ DEFAULT_BASE_URLS = {
 }
 
 DEFAULT_MODELS = {
-    "deepseek": "deepseek-chat",
+    "deepseek": "deepseek-flash",
     "openai": "gpt-4o-mini",
 }
+
+# DeepSeek retires model names: ``deepseek-chat`` / ``deepseek-reasoner`` are no
+# longer listed for the current API. ``deepseek-flash`` is the documented
+# default; ``deepseek-v4-pro`` stays selectable through LLM_MODEL.
+DEFAULT_MAX_TOKENS = 4096
+DEFAULT_REASONING_EFFORT = "high"
+REASONING_EFFORTS = ("none", "low", "high", "max")
+# Spellings the API accepts for compatibility and maps onto the range above.
+REASONING_EFFORT_ALIASES = {"minimal": "low", "medium": "high", "xhigh": "high", "ultra": "max"}
+
+TRUTHY = {"1", "true", "yes", "on"}
 
 DEPRECATED_ALIASES = {
     "LLM_API_KEY": ("DEEPSEEK_API_KEY", "OPENAI_API_KEY"),
@@ -79,7 +97,38 @@ if LLM_MODEL is None and LLM_PROVIDER in DEFAULT_MODELS:
 LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "12"))
 LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))
 
+
+def _flag(name: str, default: bool) -> bool:
+    raw = (os.getenv(name) or "").strip().lower()
+    return default if not raw else raw in TRUTHY
+
+
+def _reasoning_effort() -> tuple[str, str]:
+    raw = (os.getenv("LLM_REASONING_EFFORT") or "").strip().lower()
+    if not raw:
+        return DEFAULT_REASONING_EFFORT, "default"
+    mapped = REASONING_EFFORT_ALIASES.get(raw, raw)
+    if mapped not in REASONING_EFFORTS:
+        # A typo must not silently become an undocumented effort level.
+        return DEFAULT_REASONING_EFFORT, "default:invalid LLM_REASONING_EFFORT"
+    return mapped, "LLM_REASONING_EFFORT"
+
+
+LLM_THINKING_ENABLED = _flag("LLM_THINKING_ENABLED", True)
+LLM_REASONING_EFFORT, LLM_REASONING_EFFORT_SOURCE = _reasoning_effort()
+LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", str(DEFAULT_MAX_TOKENS)))
+
 LLM_CONFIGURED = bool(LLM_API_KEY and LLM_BASE_URL and LLM_MODEL)
+
+
+def thinking_mode_active(provider: str | None = None) -> bool:
+    """True when requests to this provider should carry DeepSeek Thinking Mode.
+
+    ``reasoning_effort=none`` is the provider's own way of turning thinking off,
+    so it wins over LLM_THINKING_ENABLED instead of contradicting it.
+    """
+
+    return (provider or LLM_PROVIDER) == "deepseek" and LLM_THINKING_ENABLED and LLM_REASONING_EFFORT != "none"
 
 
 def llm_config_summary() -> dict:
@@ -103,5 +152,8 @@ def llm_config_summary() -> dict:
         "api_key_source": LLM_API_KEY_SOURCE,
         "timeout_seconds": LLM_TIMEOUT_SECONDS,
         "max_retries": LLM_MAX_RETRIES,
+        "thinking_enabled": LLM_THINKING_ENABLED,
+        "reasoning_effort": LLM_REASONING_EFFORT,
+        "max_tokens": LLM_MAX_TOKENS,
         "deprecated_variables_in_use": deprecated_in_use,
     }

@@ -248,15 +248,25 @@ curl http://129.153.118.58:8101/api/knowledge
 export LLM_PROVIDER=deepseek            # deepseek | openai | openai-compatible
 export LLM_API_KEY=your_api_key
 export LLM_BASE_URL=https://api.deepseek.com
-export LLM_MODEL=deepseek-chat
+export LLM_MODEL=deepseek-flash          # 当前官方默认模型
 export LLM_TIMEOUT_SECONDS=12
 export LLM_MAX_RETRIES=2
+export LLM_THINKING_ENABLED=true         # DeepSeek Thinking Mode（显式声明，不依赖默认值）
+export LLM_REASONING_EFFORT=high         # none 表示关闭思考；也接受 low | max
+export LLM_MAX_TOKENS=4096               # 思考模式下官方默认 64K，这里显式收窄
 ```
 
 兼容别名（deprecated，请尽快迁移）：`DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` /
 `DEEPSEEK_MODEL` 以及 `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL`。
 canonical 变量优先；`app/core/llm_config.py` 是唯一解析实现，
 `llm_config_summary()` 会在教师 Runtime 页面提示仍在使用的旧变量名。
+
+DeepSeek 走 OpenAI 兼容的 Chat Completions（`https://api.deepseek.com`，
+`POST /chat/completions`）。生产默认模型是 `deepseek-flash`；`deepseek-chat` /
+`deepseek-reasoner` 已不在官方当前模型列表中，不再作为默认值。开启 Thinking Mode 时
+请求显式携带 `thinking.type=enabled` 与 `reasoning_effort`，并且不发送 `temperature`
+（官方文档：思考模式忽略该参数）；`reasoning_content` 只留在传输层，绝不落库、回传学生
+或写进审计。链路细节见 `docs/ARCH.md` §5.1.1。
 
 ### 其它运行开关
 
@@ -329,6 +339,8 @@ E2E_RUN_MUTATING=1 E2E_TEACHER_USERNAME=<staff> E2E_TEACHER_PASSWORD=<secret> np
 # 两个环境门禁默认跳过，只在对应环境里运行，跳过数必须如实上报：
 E2E_EXPECT_FALLBACK=1 npx playwright test -g fallback      # 无 provider key 的部署：结果页必须显示「规则降级评价」
 E2E_EXPECT_NO_JWT_SECRET=1 npx playwright test -g "no JWT_SECRET"   # 未配置 JWT_SECRET 的前端：受保护路由返回 503
+# 生产真实 AI 门禁：DeepSeek 不可用时必须失败，不允许静默回退成规则分
+E2E_RUN_MUTATING=1 E2E_EXPECT_REAL_AI=1 E2E_TEACHER_USERNAME=<staff> E2E_TEACHER_PASSWORD=<secret> npx playwright test
 ```
 
 生产 AI 验收看元数据而不是文风：`POST /api/system/ai-probe` 必须

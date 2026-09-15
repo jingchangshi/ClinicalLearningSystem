@@ -1,5 +1,7 @@
 """The tutor must stay Socratic, bounded, and silent about hidden answers."""
 
+import pytest
+
 from app.core.reasoning_steps import REQUIRED_STEP_KEYS
 from app.models import TutorTurn
 from app.services import tutor_service
@@ -89,6 +91,65 @@ def test_legitimate_disease_related_questions_are_allowed():
         "你会先做哪项检查来验证活动度？",
     ):
         assert not leaks_hidden_answer(question, case), question
+
+
+# The seed cases carry compound diagnoses. Matching only the whole string let the
+# tutor state the leading diagnosis, because the hidden label is longer than the
+# phrase the student is shown.
+SEED_COMPOUND_DIAGNOSES = {
+    "系统性红斑狼疮，疑似狼疮肾炎。": ("系统性红斑狼疮", "狼疮肾炎"),
+    "ANCA相关血管炎，倾向肉芽肿性多血管炎，肺肾受累。": ("ANCA相关血管炎", "肉芽肿性多血管炎"),
+    "抗合成酶综合征，皮肌炎伴间质性肺病。": ("抗合成酶综合征", "皮肌炎", "间质性肺病"),
+}
+
+
+@pytest.mark.parametrize("diagnosis,labels", list(SEED_COMPOUND_DIAGNOSES.items()))
+def test_compound_seed_diagnosis_labels_are_all_hidden_answers(diagnosis, labels):
+    case = {"standard_diagnosis": diagnosis}
+    for label in labels:
+        for question in (
+            f"你的诊断应该是{label}。",
+            f"标准诊断是{label}",
+            f"考虑{label}，请继续说明依据。",
+        ):
+            assert leaks_hidden_answer(question, case), question
+
+
+def test_compound_diagnosis_leak_is_rejected_and_still_allows_socratic_questions():
+    case = {"standard_diagnosis": "ANCA相关血管炎，倾向肉芽肿性多血管炎，肺肾受累。"}
+    assert leaks_hidden_answer("你的诊断可能是肉芽肿性多血管炎。", case)
+    assert leaks_hidden_answer("考虑ANCA相关血管炎。", case)
+    # Generic clinical descriptions are not hidden answers: asking about them is
+    # exactly the Socratic questioning the tutor must keep doing.
+    for question in (
+        "这个患者的肺肾受累情况会怎样改变你的处理？",
+        "你的鉴别诊断里，哪一项感染风险最高？",
+        "你会先做哪项检查来验证疾病活动？",
+        "请按危险程度排列你的鉴别诊断，并说明最先排除哪一个。",
+    ):
+        assert not leaks_hidden_answer(question, case), question
+
+
+def test_compound_diagnosis_label_is_allowed_once_the_student_said_it():
+    case = {"standard_diagnosis": "系统性红斑狼疮，疑似狼疮肾炎。"}
+    student = "我考虑系统性红斑狼疮，尿蛋白提示可能累及肾脏。"
+    assert not leaks_hidden_answer("你考虑系统性红斑狼疮的依据是什么？", case, student_text=student)
+    # A label the student never mentioned stays hidden even in the same question.
+    assert leaks_hidden_answer("你会不会考虑狼疮肾炎？", case, student_text=student)
+
+
+def test_rule_fallback_never_quotes_a_hidden_label(monkeypatch):
+    """The deterministic question must not leak what the model output was denied."""
+
+    case = {"standard_diagnosis": "系统性红斑狼疮，疑似狼疮肾炎。"}
+    state = {"missing_reasoning_elements": ["狼疮肾炎"], "asked_about": [], "misconceptions": []}
+    monkeypatch.setattr(tutor_service.llm_service, "chat_completion", lambda *_args: "")
+
+    question = tutor_service.next_tutor_question(case, "examination", "", state)
+
+    assert question
+    assert "狼疮肾炎" not in question
+    assert "系统性红斑狼疮" not in question
 
 
 def test_tutor_falls_back_to_a_rule_question_on_a_label_leak(db_factory, client, monkeypatch):

@@ -5,12 +5,18 @@
 #
 # Answers the question "which code is the browser actually running?" without
 # touching data, restarting services, or printing any secret.
+#
+# Every required check below feeds the final exit status: a green-looking report
+# with a dead frontend or an unreachable public entry must not exit 0.
 set -uo pipefail
 
-REPO_ROOT="/home/jcshi/workspace/clinical_learning_system"
+REPO_ROOT="${CLINPATH_REPO_ROOT:-/home/jcshi/workspace/clinical_learning_system}"
 PUBLIC_BASE="${CLINPATH_PUBLIC_BASE:-http://129.153.118.58:8101}"
 INTERNAL="${CLINPATH_INTERNAL_API:-http://127.0.0.1:8100}"
-status=0
+failures=0
+
+pass() { echo "OK: $*"; }
+fail() { echo "FAIL: $*"; failures=$((failures + 1)); }
 
 echo "== git =="
 local_sha="$(git -C "$REPO_ROOT" rev-parse HEAD)"
@@ -29,37 +35,44 @@ echo "expected       : ${local_fingerprint:-unavailable}"
 echo
 echo "== services =="
 for unit in clinical-backend.service clinical-frontend.service; do
-  printf '%-26s: %s\n' "$unit" "$(systemctl --user is-active "$unit")"
+  unit_state="$(systemctl --user is-active "$unit" 2>/dev/null || true)"
+  printf '%-26s: %s\n' "$unit" "${unit_state:-unknown}"
+  if [ "$unit_state" != "active" ]; then
+    fail "$unit is ${unit_state:-unknown}, not active"
+  fi
 done
 
 echo
 echo "== running backend =="
 version_json="$(curl -fsS "$INTERNAL/api/system/version" 2>/dev/null)"
 if [ -z "$version_json" ]; then
-  echo "FAIL: $INTERNAL/api/system/version unreachable"
-  exit 1
+  fail "$INTERNAL/api/system/version unreachable"
+  running_sha=""
+  running_dirty=""
+  running_fingerprint=""
+  running_schema=""
+  running_env=""
+else
+  running_sha="$(printf '%s' "$version_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['git_sha'])")"
+  running_dirty="$(printf '%s' "$version_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['git_dirty'])")"
+  running_fingerprint="$(printf '%s' "$version_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['backend_source_fingerprint'])")"
+  running_schema="$(printf '%s' "$version_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['schema_revision'])")"
+  running_env="$(printf '%s' "$version_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['environment'])")"
+  echo "git_sha        : $running_sha"
+  echo "git_dirty      : $running_dirty"
+  echo "fingerprint    : $running_fingerprint"
+  echo "schema         : $running_schema"
+  echo "environment    : $running_env"
 fi
-running_sha="$(printf '%s' "$version_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['git_sha'])")"
-running_dirty="$(printf '%s' "$version_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['git_dirty'])")"
-running_fingerprint="$(printf '%s' "$version_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['backend_source_fingerprint'])")"
-running_schema="$(printf '%s' "$version_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['schema_revision'])")"
-running_env="$(printf '%s' "$version_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['environment'])")"
-echo "git_sha        : $running_sha"
-echo "git_dirty      : $running_dirty"
-echo "fingerprint    : $running_fingerprint"
-echo "schema         : $running_schema"
-echo "environment    : $running_env"
 
 echo
 echo "== verdict =="
 if [ "$running_sha" != "$local_sha" ]; then
-  echo "FAIL: running commit differs from this checkout"
-  status=1
+  fail "running commit ($running_sha) differs from this checkout ($local_sha)"
 elif [ -n "$local_fingerprint" ] && [ "$running_fingerprint" != "$local_fingerprint" ]; then
-  echo "FAIL: running source differs from this checkout (restart/redeploy the backend)"
-  status=1
+  fail "running source differs from this checkout (restart/redeploy the backend)"
 else
-  echo "OK: running backend matches this checkout (commit + source fingerprint)"
+  pass "running backend matches this checkout (commit + source fingerprint)"
 fi
 # Migration head is derived by scanning the versions directory, so this check
 # needs no alembic install and no database connection.
@@ -85,22 +98,35 @@ print(heads[0] if len(heads) == 1 else ','.join(heads))
 )"
 echo "expected head  : ${local_head:-unavailable}"
 if [ -z "$local_head" ] || [ "$running_schema" != "$local_head" ]; then
-  echo "FAIL: running schema revision is not the migration head"
-  status=1
+  fail "running schema revision (${running_schema:-unknown}) is not the migration head (${local_head:-unavailable})"
 else
-  echo "OK: schema revision is at migration head"
+  pass "schema revision is at migration head"
 fi
 
 echo
 echo "== public entry =="
-printf 'home           : %s\n' "$(curl -fsS -o /dev/null -w '%{http_code}' "$PUBLIC_BASE/" || echo unreachable)"
-printf 'login          : %s\n' "$(curl -fsS -o /dev/null -w '%{http_code}' "$PUBLIC_BASE/login" || echo unreachable)"
-printf 'api proxy      : %s\n' "$(curl -fsS "$PUBLIC_BASE/api/health" || echo unreachable)"
+check_public_page() {
+  local label="$1" url="$2"
+  local code
+  code="$(curl -fsS -o /dev/null -m 15 -w '%{http_code}' "$url" 2>/dev/null || true)"
+  printf '%-15s: %s\n' "$label" "${code:-unreachable}"
+  if [ "$code" != "200" ]; then
+    fail "$label $url returned ${code:-unreachable}, expected 200"
+  fi
+}
+check_public_page home "$PUBLIC_BASE/"
+check_public_page login "$PUBLIC_BASE/login"
+
+public_health="$(curl -fsS -m 15 "$PUBLIC_BASE/api/health" 2>/dev/null || true)"
+printf '%-15s: %s\n' "api proxy" "${public_health:-unreachable}"
+if ! printf '%s' "$public_health" | grep -q '"status"[[:space:]]*:[[:space:]]*"ok"'; then
+  fail "$PUBLIC_BASE/api/health did not report a healthy backend through the proxy"
+fi
 
 echo
 echo "== shared secret parity (values are never printed) =="
-python3 - "${CLINPATH_BACKEND_ENV:-$HOME/.config/clinpath/backend.env}" \
-         "${CLINPATH_FRONTEND_ENV:-$HOME/.config/clinpath/frontend.env}" <<'PY'
+if ! python3 - "${CLINPATH_BACKEND_ENV:-$HOME/.config/clinpath/backend.env}" \
+              "${CLINPATH_FRONTEND_ENV:-$HOME/.config/clinpath/frontend.env}" <<'PY'
 import hashlib
 import os
 import sys
@@ -126,8 +152,15 @@ else:
     print("verdict        : MISMATCH - the proxy cannot verify backend cookies")
     sys.exit(1)
 PY
-if [ $? -ne 0 ]; then
-  status=1
+then
+  fail "JWT_SECRET parity is not MATCH"
 fi
 
-exit "$status"
+echo
+echo "== summary =="
+if [ "$failures" -gt 0 ]; then
+  echo "DEPLOY VERIFICATION FAILED: $failures check(s) failed"
+  exit 1
+fi
+echo "DEPLOY VERIFICATION PASSED: running $(git -C "$REPO_ROOT" rev-parse HEAD) is serving the public entry"
+exit 0
