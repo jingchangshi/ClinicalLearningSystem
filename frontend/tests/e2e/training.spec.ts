@@ -211,14 +211,16 @@ test("student completes a case with Coach and receives formative feedback", asyn
     if (first) {
       const sessionId = await sessionIdFromUrl(page);
       await page.getByRole("button", { name: "开始追问" }).click();
-      await expect(page.getByTestId("tutor-panel")).toBeVisible();
-      await expect(page.getByTestId("tutor-turn-tutor").first()).toBeVisible();
+      // The first question is a real provider call (DeepSeek Thinking Mode), so it
+      // can take well over the 5s default before the panel has anything to render.
+      await expect(page.getByTestId("tutor-panel")).toBeVisible({ timeout: 90_000 });
+      await expect(page.getByTestId("tutor-turn-tutor").first()).toBeVisible({ timeout: 30_000 });
       await page
         .getByPlaceholder("回答导师的问题（例如：为什么、依据是什么、如何排除）")
         .fill("因为患者发热伴皮疹和ANA阳性，我优先考虑自身免疫病，但需要先排除感染。");
       await page.getByRole("button", { name: "继续追问" }).click();
-      await expect(page.getByTestId("tutor-turn-student")).toHaveCount(1);
-      await expect(page.getByTestId("tutor-turn-tutor")).toHaveCount(2);
+      await expect(page.getByTestId("tutor-turn-student")).toHaveCount(1, { timeout: 90_000 });
+      await expect(page.getByTestId("tutor-turn-tutor")).toHaveCount(2, { timeout: 90_000 });
       const coached = await answersForStep(page, sessionId, "key_information");
       expect(coached).toHaveLength(1);
 
@@ -235,7 +237,12 @@ test("student completes a case with Coach and receives formative feedback", asyn
 
   const submit = page.getByRole("button", { name: "提交病例并生成反馈" });
   await expect(submit).toBeEnabled();
-  const submission = page.waitForResponse((response) => response.url().includes("/api/sessions/") && response.url().endsWith("/submit"));
+  // A real semantic evaluation runs a Thinking-Mode request across five answers,
+  // so the submit round trip is minutes-scale in the worst case, not seconds.
+  const submission = page.waitForResponse(
+    (response) => response.url().includes("/api/sessions/") && response.url().endsWith("/submit"),
+    { timeout: 240_000 },
+  );
   await submit.click();
   expect((await submission).status()).toBe(200);
   const summary = (await (await submission).json()).summary as { evaluation_mode: string; degraded: boolean };

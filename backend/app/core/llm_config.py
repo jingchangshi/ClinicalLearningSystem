@@ -39,7 +39,12 @@ DEFAULT_MODELS = {
 # DeepSeek retires model names: ``deepseek-chat`` / ``deepseek-reasoner`` are no
 # longer listed for the current API. ``deepseek-flash`` is the documented
 # default; ``deepseek-v4-pro`` stays selectable through LLM_MODEL.
-DEFAULT_MAX_TOKENS = 4096
+#
+# Measured against the live API on the real case-evaluation prompt: a Thinking
+# Mode answer spends ~2.9k-3.3k tokens on ``reasoning_content`` before it writes
+# the JSON body, so 4096 sometimes ends the generation with an empty ``content``
+# and finish_reason=length. 8192 leaves room for both halves of the answer.
+DEFAULT_MAX_TOKENS = 8192
 DEFAULT_REASONING_EFFORT = "high"
 REASONING_EFFORTS = ("none", "low", "high", "max")
 # Spellings the API accepts for compatibility and maps onto the range above.

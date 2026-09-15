@@ -249,11 +249,11 @@ export LLM_PROVIDER=deepseek            # deepseek | openai | openai-compatible
 export LLM_API_KEY=your_api_key
 export LLM_BASE_URL=https://api.deepseek.com
 export LLM_MODEL=deepseek-flash          # 当前官方默认模型
-export LLM_TIMEOUT_SECONDS=12
-export LLM_MAX_RETRIES=2
+export LLM_TIMEOUT_SECONDS=60            # 实测单次思考评测约 17–31 秒
+export LLM_MAX_RETRIES=1                 # 有界重试：最坏约 2 次尝试
 export LLM_THINKING_ENABLED=true         # DeepSeek Thinking Mode（显式声明，不依赖默认值）
 export LLM_REASONING_EFFORT=high         # none 表示关闭思考；也接受 low | max
-export LLM_MAX_TOKENS=4096               # 思考模式下官方默认 64K，这里显式收窄
+export LLM_MAX_TOKENS=8192               # 思考轨迹约 3k tokens；4096 会截断 JSON 正文
 ```
 
 兼容别名（deprecated，请尽快迁移）：`DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` /

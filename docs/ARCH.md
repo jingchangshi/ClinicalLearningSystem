@@ -138,11 +138,11 @@ LLM_PROVIDER         deepseek | openai | openai-compatible
 LLM_API_KEY
 LLM_BASE_URL
 LLM_MODEL            deepseek 默认 deepseek-flash
-LLM_TIMEOUT_SECONDS  default 12
+LLM_TIMEOUT_SECONDS  default 12（生产实测值见 5.1.1）
 LLM_MAX_RETRIES      default 2
 LLM_THINKING_ENABLED default true
 LLM_REASONING_EFFORT default high（none/low/high/max，兼容 low-high 之外的别名）
-LLM_MAX_TOKENS       default 4096
+LLM_MAX_TOKENS       default 8192
 ```
 
 - 兼容别名（deprecated）：`DEEPSEEK_*`、`OPENAI_*`。
@@ -173,8 +173,14 @@ tutor、recommendation、route 里没有 provider 分支：
   `thinking.type=enabled` 与 `reasoning_effort`；`LLM_REASONING_EFFORT=none` 表示明确关闭。
 - **温度**：Thinking Mode 忽略 `temperature`（官方文档：不报错但无效），因此开启思考时
   **不发送** `temperature`；非思考模式或其它 OpenAI 兼容 provider 仍按原语义发送。
-- **max_tokens**：始终显式发送（默认 4096）。官方默认值是「非思考 8K / 思考 64K」，把
-  输出长度交给隐式默认值会让 JSON 结果在中途被截断而无法归因。
+- **max_tokens**：始终显式发送（默认 8192）。官方默认值是「非思考 8K / 思考 64K」，
+  把输出长度交给隐式默认值会让 JSON 结果在中途被截断而无法归因。这个默认值不是猜的：
+  用真实评测 prompt 打线上接口实测（每次一次调用），Thinking Mode 会在 `reasoning_content`
+  上先花掉约 2.9k–3.3k tokens（reasoning 约 8.8k 字符），正文再占约 0.7k–1.3k tokens；
+  配置 4096 时出现过 `finish_reason=length` + `content` 为空（即降级路径），8192 稳定返回
+  合法 JSON。同一批实测的单次耗时约 17–31 秒，因此生产把 `LLM_TIMEOUT_SECONDS` 设为 60、
+  `LLM_MAX_RETRIES` 设为 1：单次请求最坏约 2 次尝试，既容得下偶发的空正文重试，
+  又不会让用户请求无限期挂住。
 - **思考轨迹不外泄**：只读取 `choices[0].message.content`；`reasoning_content`
   不落库、不回传学生、不写审计、不进日志。`ai_invocations` 依旧只有元数据。
 - **探针**：`/api/system/ai-probe` 只回答「能不能连通」，因此显式
