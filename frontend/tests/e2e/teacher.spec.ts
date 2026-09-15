@@ -67,3 +67,27 @@ test("a teacher can probe the AI runtime without leaking secrets", async ({ page
   const text = await body.innerText();
   expect(text).not.toMatch(/sk-[A-Za-z0-9]{10,}/);
 });
+
+test("teacher logout clears access and the audit rollup lists real invocations", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByLabel("用户名").fill(teacher.username!);
+  await page.getByLabel("密码").fill(teacher.password!);
+  await page.getByRole("button", { name: "登录并进入系统" }).click();
+  await expect(page).toHaveURL(/\/teacher\/dashboard$/, { timeout: 20_000 });
+
+  // Matrix K: the audit surface lists the capability rollup, and no prompt or
+  // response body is exposed anywhere on the page.
+  await page.goto("/teacher/runtime");
+  const audit = page.getByTestId("ai-audit");
+  await expect(audit).toBeVisible();
+  await expect(audit).toContainText("task_type");
+  await expect(audit).toContainText(/case_evaluation|tutor_question|recommendation_explanation|teacher_insight/);
+  const auditText = await audit.innerText();
+  expect(auditText).not.toMatch(/"(messages|prompt|completion|body)"/);
+
+  // Matrix M: logout then a protected route must land on the login page.
+  await page.getByRole("button", { name: "Logout" }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await page.goto("/teacher/dashboard");
+  await expect(page).toHaveURL(/\/login/);
+});

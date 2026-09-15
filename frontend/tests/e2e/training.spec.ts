@@ -120,11 +120,19 @@ test("student completes a case with Coach and receives formative feedback", asyn
   await page.goto("/student/case/1");
 
   let first = true;
+  let lastSaved = false;
   for (const step of STEPS) {
     await page.getByRole("button", { name: step.label, exact: true }).click();
     await page.locator("textarea").fill(step.text);
-    await page.getByRole("button", { name: "保存回答" }).click();
-    await expect(page.getByText("已保存")).toBeVisible();
+    // Matrix H: leave the final step unsaved on purpose. Submitting must persist
+    // the dirty textarea rather than dropping the last answer.
+    const isLastStep = step === STEPS[STEPS.length - 1];
+    if (!isLastStep) {
+      await page.getByRole("button", { name: "保存回答" }).click();
+      await expect(page.getByText("已保存")).toBeVisible();
+    } else {
+      lastSaved = true;
+    }
     if (first) {
       const sessionId = await sessionIdFromUrl(page);
       await page.getByRole("button", { name: "开始追问" }).click();
@@ -141,6 +149,7 @@ test("student completes a case with Coach and receives formative feedback", asyn
       first = false;
     }
   }
+  expect(lastSaved).toBe(true);
 
   const submit = page.getByRole("button", { name: "提交病例并生成反馈" });
   await expect(submit).toBeEnabled();
@@ -148,12 +157,31 @@ test("student completes a case with Coach and receives formative feedback", asyn
   await submit.click();
   expect((await submission).status()).toBe(200);
   const summary = (await (await submission).json()).summary as { evaluation_mode: string; degraded: boolean };
+  const submittedSessionId = Number(page.url().match(/sessionId=(\d+)/)?.[1] ?? 0);
+  if (submittedSessionId) {
+    // The unsaved final answer must have been persisted by the submit path.
+    const persisted = await answersForStep(page, submittedSessionId, "treatment");
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0].answer_text).toContain("激素");
+  }
   await expect(page).toHaveURL(/\/student\/result\//);
 
   // The indicator must state which engine actually produced the score.
   const indicator = page.getByTestId("evaluation-mode");
   if (summary.evaluation_mode === "ai" && !summary.degraded) {
     await expect(indicator).toContainText("AI 语义评价");
+    // Cross-check the API provenance behind the badge: a real model call records
+    // provider, model and an AI score.
+    const resultSessionId = Number(page.url().split("/").pop());
+    const result = await page.evaluate(async (id) => {
+      const response = await fetch(`/api/sessions/${id}/result`, { credentials: "include" });
+      return await response.json();
+    }, resultSessionId);
+    expect(result.score.evaluation_mode).toBe("ai");
+    expect(result.score.degraded).toBe(false);
+    expect(result.score.provider).toBeTruthy();
+    expect(result.score.model).toBeTruthy();
+    expect(result.score.ai_score).not.toBeNull();
   } else {
     await expect(indicator).toContainText("规则降级评价");
   }
