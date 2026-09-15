@@ -17,6 +17,18 @@ export async function proxy(request: NextRequest) {
   if (!isProtected) return NextResponse.next();
 
   const token = request.cookies.get(AUTH_COOKIE)?.value;
+
+  // Without the shared secret no claim can be verified, so a token-bearing
+  // request must fail loudly instead of being trusted or silently bounced
+  // between /login and the dashboard.
+  if (token && !process.env.JWT_SECRET) {
+    console.error("proxy: JWT_SECRET is not configured; refusing unverified route access");
+    return new NextResponse(
+      "Deployment misconfigured: JWT_SECRET is required for route protection.",
+      { status: 503, headers: { "content-type": "text/plain; charset=utf-8" } },
+    );
+  }
+
   const claims = token ? await readClaims(token) : null;
   const role = typeof claims?.role === "string" ? claims.role : null;
   const wantsStudent = pathname.startsWith("/student");
@@ -45,15 +57,9 @@ function redirectTo(request: NextRequest, pathname: string) {
 
 async function readClaims(token: string): Promise<TokenClaims | null> {
   const secret = process.env.JWT_SECRET;
-  const claims = secret ? await verifyHs256(token, secret) : null;
-  if (claims) return claims;
-  if (!secret) {
-    // Misconfigured deployment: keep the previous, presence-based behaviour
-    // rather than locking every signed-in user out of the app.
-    console.error("proxy: JWT_SECRET is not configured; role routing is not verified");
-    return decodeClaims(token);
-  }
-  return null;
+  // Callers guarantee a secret is present; a missing one is handled before this
+  // point. Role claims are only ever read from a verified token.
+  return secret ? await verifyHs256(token, secret) : null;
 }
 
 async function verifyHs256(token: string, secret: string): Promise<TokenClaims | null> {
@@ -88,11 +94,6 @@ async function verifyHs256(token: string, secret: string): Promise<TokenClaims |
   if (!claims) return null;
   if (typeof claims.exp === "number" && claims.exp * 1000 <= Date.now()) return null;
   return claims;
-}
-
-function decodeClaims(token: string): TokenClaims | null {
-  const payload = token.split(".")[1];
-  return payload ? decodeJson(payload) : null;
 }
 
 function decodeJson(value: string): (TokenClaims & { alg?: string }) | null {

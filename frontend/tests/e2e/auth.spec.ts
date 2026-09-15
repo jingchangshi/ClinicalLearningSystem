@@ -50,19 +50,66 @@ test("protected routes send anonymous visitors to login with a next target", asy
   await expect(page).toHaveURL(/\/login/);
 });
 
-test("a forged token cannot claim the teacher role", async ({ page, context, baseURL }) => {
-  const host = new URL(baseURL ?? "http://127.0.0.1:8101").hostname;
-  const forged = [
-    encode({ alg: "HS256", typ: "JWT" }),
-    encode({ sub: "1", username: "student1", role: "teacher", exp: Math.floor(Date.now() / 1000) + 3600 }),
-    "not-a-valid-signature",
-  ].join(".");
-  await context.addCookies([{ name: "access_token", value: forged, domain: host, path: "/" }]);
+const forgedTokens = {
+  "bad signature": () => {
+    const header = encode({ alg: "HS256", typ: "JWT" });
+    const payload = encode(teacherClaims());
+    return `${header}.${payload}.not-a-valid-signature`;
+  },
+  "alg != HS256": () => {
+    const header = encode({ alg: "RS256", typ: "JWT" });
+    const payload = encode(teacherClaims());
+    return `${header}.${payload}.${"A".repeat(43)}`;
+  },
+  "expired token": () => {
+    const header = encode({ alg: "HS256", typ: "JWT" });
+    const payload = encode({
+      sub: "1",
+      username: "student1",
+      role: "teacher",
+      exp: Math.floor(Date.now() / 1000) - 60,
+    });
+    return `${header}.${payload}.${"A".repeat(43)}`;
+  },
+  "no signature segment": () => `${encode({ alg: "HS256", typ: "JWT" })}.${encode(teacherClaims())}.`,
+  "unsigned alg=none": () => {
+    const header = encode({ alg: "none", typ: "JWT" });
+    const payload = encode(teacherClaims());
+    return `${header}.${payload}.`;
+  },
+};
 
+function teacherClaims() {
+  return {
+    sub: "1",
+    username: "student1",
+    role: "teacher",
+    exp: Math.floor(Date.now() / 1000) + 3600,
+  };
+}
+
+for (const [label, build] of Object.entries(forgedTokens)) {
+  test(`a token with ${label} cannot claim the teacher role`, async ({ page, context, baseURL }) => {
+    const host = new URL(baseURL ?? "http://127.0.0.1:8101").hostname;
+    await context.addCookies([{ name: "access_token", value: build(), domain: host, path: "/" }]);
+
+    await page.goto("/teacher/dashboard");
+    await expect(page).toHaveURL(/\/login/);
+    await page.goto("/student/dashboard");
+    await expect(page).toHaveURL(/\/login/);
+  });
+}
+
+test("an authenticated student token still reaches only the student area", async ({ page, context, baseURL }) => {
+  // A real login produces a genuinely signed cookie; the proxy must accept it and
+  // still route by the verified role.
+  await login(page);
+  await expect(page).toHaveURL(/\/student\/dashboard$/);
+  const cookies = await context.cookies();
+  expect(cookies.some((cookie) => cookie.name === "access_token")).toBe(true);
+  expect(new URL(baseURL ?? "http://127.0.0.1:8101").hostname).toBeTruthy();
   await page.goto("/teacher/dashboard");
-  await expect(page).toHaveURL(/\/login/);
-  await page.goto("/student/dashboard");
-  await expect(page).toHaveURL(/\/login/);
+  await expect(page).toHaveURL(/\/student\/dashboard$/);
 });
 
 test("a student in the teacher area is routed to their own dashboard", async ({ page }) => {
