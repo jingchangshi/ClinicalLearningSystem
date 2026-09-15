@@ -833,3 +833,103 @@ scripts/measure_page_latency.py  认证后页面延迟采样（before/after）
 backend/tools/ai_benchmark.py    逐任务策略的延迟/质量对比（会消耗真实额度）
 backend/tools/ai_concurrency.py  有界真实 provider 并发
 ```
+
+## 17. 演示层与学习过程复盘（本阶段新增）
+
+上一阶段把系统做成"能跑对"；本阶段把它做成"临床教师看得懂"。两者不是一回事：
+数据结构和 API contract 保持稳定英文 key，**人类读到的内容由展示语义层统一定义**。
+
+### 17.1 展示语义层（display labels）
+
+`app/services/display_labels.py` 是唯一的业务中文词表：
+
+- 模块：`knowledge → 基础知识学习`、`skill → 临床技能训练`、`case → 病例推理训练`、
+  `guideline → 指南循证学习`、`sp → SP模拟问诊`（同时覆盖 catalog key
+  `knowledge_unit` / `clinical_skill` / `sp_case`）。
+- 路径阶段：`阶段N：<title>` 由 `recommendation_service.PATHWAY_STAGES` **推导**，
+  不另写一份，避免两处定义漂移（阶段 3 的 canonical title 因此统一为「临床决策训练」）。
+- 能力维度沿用 `serializers.ABILITY_LABELS`。
+- 学习事件类型：`case_session_scored → 病例推理训练完成` 等。
+
+`serialize_student()` 会附带 `current_stage_label`，所以任何页面都不需要自己把
+`stage_1_basic_recognition` 变成中文——也就没有第二个地方可以写错。
+前端因此不再新增一份中文 map；`lib/abilityLabels.ts`（能力维度与评价方式）与
+`lib/format.ts`（时间格式）是仅有的两个前端本地展示工具。
+
+不变量：**开发内部 key 不出现在教师/学生页面可见文本里**。由
+`tests/test_presentation_surfaces.py` 与 `frontend/tests/e2e/demo-readiness.spec.ts`
+两侧固定（后端断言 payload，浏览器断言可见文本）。
+
+### 17.2 学习证据与趋势必须可解释
+
+- `build_student_evidence_events()` 输出 `module_label`、`activity_title`
+  （按 `session_id` / `source_id` 批量回查病例、知识单元、技能、指南、SP 的标题）、
+  `event_label` 与 `competency_changes[{key,label,before,after,delta}]`。
+  `source_table` / `source_id` / `evidence_payload` 不再返回给教师端。
+- `build_growth_trend()` 返回**真正的时间序列**：只包含有分数、有能力变化的训练事件，
+  按时间升序，最多保留最近 `GROWTH_TREND_POINT_LIMIT=40` 个点；
+  `teacher_score_confirmed` 是既有结果的可信度来源，不是一次新训练，因此不作为数据点。
+  页面标题是「阶段性学习表现趋势」而不是「综合能力成长曲线」——底层数据不代表全局胜任力指数。
+- 列表默认只展示最近 `EVIDENCE_EVENT_PAGE_SIZE` 条（页面用 `<details>` 展开全部）；
+  这是展示裁剪，底层证据一行都没有删除。
+
+### 17.3 研究数据页：预览 ≠ 完整数据集
+
+`GET /api/teacher/export/research-data` 保持匿名字段契约不变，并新增：
+
+- `summary`：学生数、记录数、覆盖模块、数据时间范围、`preview_limit`；
+- `preview_rows`：按时间**倒序**的最近 20 条。
+
+完整数据集仍然在 `rows` 中返回，并且新增
+`GET /api/teacher/export/research-data.csv`（`text/csv` + UTF-8 BOM，Excel 中文环境可直接打开，
+内容为全量记录）。页面显式声明「当前显示 x / 筛选后 y 条 · 完整研究数据共 z 条」，
+避免把预览当成研究数据。匿名化不变：只输出 `S<student_id:04d>` 与班级，绝不输出学生姓名。
+
+### 17.4 学习记录与病例复盘（新的历史读路径）
+
+新增 `GET /api/student/history`（`/student/history` 页面）与扩展
+`GET /api/sessions/{id}/result` 的 `reasoning_review`：
+
+| 项目 | 事实源 | 说明 |
+| --- | --- | --- |
+| 五阶段回答 | `StudentAnswer` | 按 `REQUIRED_REASONING_STEPS` 顺序输出，`step_title` 为 canonical 中文 |
+| 导师对话 | `TutorTurn` | 一次查询 `WHERE session_id=? ORDER BY step, turn_index`，Python 分组，避免 5 次 N+1 |
+| 评分 | `Score` | 沿用既有 `serialize_score`，含 `evaluation_mode` / `provider` / `model` |
+
+硬约束（由测试固定）：
+
+1. **不新增 transcript 表**：`StudentAnswer` + `TutorTurn` 已是历史事实源。
+2. **历史读取不调用 provider**：`/api/student/history` 与 `/api/sessions/{id}/result`
+   在 `tests/test_read_paths_never_call_provider.py` 中断言 `provider_call_count == 0`，
+   且不产生任何 `ai_invocations` 事件。
+3. **不泄露隐藏答案**：`tutor_state_json`、`standard_diagnosis`、`treatment_plan`、`rubric`
+   与 SP 隐藏病史都不在响应中；`tests/test_presentation_surfaces.py` 同时检查字段名与值。
+4. **权限**：list 由 token 决定（`_current_student_id`），单条 result 走
+   `require_student_access`；学生 A 读学生 B 的 session 返回 403，匿名返回 401。
+
+### 17.5 教师驾驶舱布局
+
+视频演示的桌面视口是 1440×900 / 1920×1080：热力图占满内容宽度，
+「班级能力画像」位于其下方并在内部横向排布（雷达 + 短板卡片网格），
+避免旧版左右分栏造成的右侧长条与下方大面积空白。
+`frontend/tests/e2e/demo-readiness.spec.ts` 用 bounding box 断言
+「画像 top ≥ 热力图 bottom」、画像宽度接近热力图宽度、且页面无横向滚动。
+
+### 17.6 演示数据治理工具
+
+`scripts/prepare_presentation_data.py`（`--dry-run` 默认 / `--apply`）：
+
+1. 先审计数据库，只要出现无法识别为非演示数据的学生账号就**拒绝执行**；
+2. 前置检查计划引用的目录记录（病例/知识单元/技能/指南/SP）是否齐全，缺失则整体中止；
+3. 执行前强制 `scripts/backup_db.sh` 生成时间戳备份；
+4. 只删除 4 名演示学生的合成学习记录，不触碰账号、密码、目录数据与其他学生；
+5. 将学生能力画像重置为声明的基线，再**通过真实路由代码**重放 16 次学习活动
+   （知识测验 / 技能步骤 / 病例五步作答 + 导师追问 / 指南 PICO / SP 问诊）；
+6. 把新建记录重新盖章到计划日期——这个数据集被明确声明为 synthetic，
+   `created_at` 的构造是它的目的，不是对真实历史的改写；
+7. 重算路径阶段与 AI 说明。
+
+评分仍来自真实模型调用：未配置 provider 时脚本**拒绝执行**，避免把规则输出写成 AI。
+因此演示数据集的每一行 AI 评分都能追溯到 `ai_invocations`。
+反复执行是幂等的：第二次运行会删除并重建同一批记录，
+`tests/test_prepare_presentation_data.py` 断言两次运行后的行数完全一致。
