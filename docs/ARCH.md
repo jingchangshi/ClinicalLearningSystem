@@ -464,7 +464,47 @@ server {
 `tests/test_seed_migration_semantics.py` 用真实子进程覆盖三种场景：
 全新库、被人为改旧的库（缺列必须被迁移补回）、已是最新的库（重复执行幂等）。
 
-## 14. 目标架构全景（最终形态）
+## 14. 验证与验收（怎么证明它真的在跑）
+
+本节说明「改完怎么证明」，与 §12 债务区分开：这里是可执行的验收清单。
+
+### 14.1 本地门禁
+
+```bash
+cd backend && uv run --python 3.11 --with-requirements requirements.txt pytest -q
+cd frontend && npm run typecheck && npm run lint && npm run build
+cd frontend && npx playwright test                      # 非破坏性
+E2E_RUN_MUTATING=1 E2E_TEACHER_USERNAME=<staff> E2E_TEACHER_PASSWORD=<secret> npx playwright test
+```
+
+两个环境门禁默认跳过，只在对应环境里执行（跳过数必须如实上报）：
+
+```text
+E2E_EXPECT_FALLBACK=1        针对没有 provider key 的部署，断言结果页显示「规则降级评价」
+E2E_EXPECT_NO_JWT_SECRET=1   针对未配置 JWT_SECRET 的前端，断言受保护路由返回 503 而不是信任未验证声明
+```
+
+### 14.2 部署一致性
+
+`./scripts/verify_deploy.sh`（只读）一次核对：HEAD / 未提交文件数 / 本地与线上源码指纹 /
+schema 是否为迁移 head / systemd 状态 / 公网入口 / 后端与前端 JWT_SECRET 摘要是否 MATCH。
+它同时覆盖「未提交的工作树」这一情形，因此比单看 git SHA 更可靠。
+
+### 14.3 生产 AI 验收（不看文风，只看元数据）
+
+```text
+1. POST /api/system/ai-probe（教师会话）
+   -> configured=true, provider=deepseek, model!=null, reachable=true, latency_ms>0, error_type=null
+2. 在浏览器里真实完成一次五步病例训练并提交
+   -> scores: evaluation_mode=ai, degraded=false, provider/model 非空, ai_score 非空
+3. 若使用导师：GET/审计里出现 tutor_question
+   -> ai_invocations: calls>0, success=true, fallback_used=false
+```
+
+规则回退不算通过「真实 AI 验收」；回退路径由单元测试与 §14.1 的
+`E2E_EXPECT_FALLBACK` 单独覆盖，UI 必须显示「规则降级评价」，不得伪装成 AI。
+
+## 15. 目标架构全景（最终形态）
 
 §2 描述的是当前真实运行的系统；本节是它要演进到的整体形态，两者差异必须在
 §12 债务中可见，不允许把「目标」当成「已实现」。

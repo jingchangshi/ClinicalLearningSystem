@@ -320,6 +320,22 @@ cd /home/jcshi/workspace/clinical_learning_system
 uv run --with-requirements backend/requirements.txt python scripts/smoke_no_api_key.py
 ```
 
+### 端到端验收
+
+```bash
+cd frontend && npx playwright test                     # 非破坏性
+E2E_RUN_MUTATING=1 E2E_TEACHER_USERNAME=<staff> E2E_TEACHER_PASSWORD=<secret> npx playwright test
+
+# 两个环境门禁默认跳过，只在对应环境里运行，跳过数必须如实上报：
+E2E_EXPECT_FALLBACK=1 npx playwright test -g fallback      # 无 provider key 的部署：结果页必须显示「规则降级评价」
+E2E_EXPECT_NO_JWT_SECRET=1 npx playwright test -g "no JWT_SECRET"   # 未配置 JWT_SECRET 的前端：受保护路由返回 503
+```
+
+生产 AI 验收看元数据而不是文风：`POST /api/system/ai-probe` 必须
+`reachable=true`；一次真实五步训练的分数必须是 `evaluation_mode=ai`、`degraded=false`、
+`provider/model` 与 `ai_score` 非空；导师调用在 `ai_invocations` 里
+`calls>0 / success=true / fallback_used=false`。细节见 `docs/ARCH.md` §14。
+
 ## 核心页面
 
 - `/`：角色入口，选择展示模式、学生端或教师端
