@@ -1,4 +1,6 @@
 import argparse
+import logging
+import os
 
 from sqlalchemy import inspect, text
 
@@ -20,13 +22,21 @@ from app.models import (
 from app.services.recommendation_service import determine_pathway_stage
 from app.services.serializers import dumps_json, serialize_case_summary, serialize_profile
 
+logger = logging.getLogger("clinpath.seed")
+
 
 def init_db(reset: bool = False) -> None:
     if reset:
         Base.metadata.drop_all(bind=engine)
+    # Decide before create_all touches anything: stamping is only ever correct for
+    # a database this run created from scratch.
+    brand_new = _database_is_empty()
     Base.metadata.create_all(bind=engine)
     _ensure_compatible_schema()
-    _stamp_migrations()
+    if brand_new:
+        _stamp_migrations()
+    else:
+        _upgrade_migrations()
 
     db = SessionLocal()
     try:
@@ -176,41 +186,45 @@ def _seed_learning_modules(db) -> None:
 
 
 def _seed_default_users(db) -> None:
+    """Seed teaching *data* and, optionally, restricted student demo logins.
+
+    Privileged staff accounts are never seeded: a fixed teacher/admin password in
+    a public repository is a standing compromise. Provision them locally with
+    ``python -m app.manage_users create-teacher|create-admin``.
+    """
+
     teacher = db.query(Teacher).filter(Teacher.teacher_no == "T2026001").first()
     if not teacher:
         teacher = Teacher(name="张老师", teacher_no="T2026001", department="风湿免疫科")
         db.add(teacher)
         db.flush()
 
+    if not _demo_student_logins_enabled():
+        logger.info("seed_data: student demo logins disabled (SEED_DEMO_STUDENT_ACCOUNTS=false)")
+        logger.info("seed_data: staff accounts must be provisioned with app.manage_users")
+        return
+
+    demo_password = os.getenv("SEED_DEMO_STUDENT_PASSWORD", "student123")
     for student in db.query(Student).all():
         username = f"student{student.id}"
         if not db.query(User).filter(User.username == username).first():
             db.add(
                 User(
                     username=username,
-                    password_hash=hash_password("student123"),
+                    password_hash=hash_password(demo_password),
                     role="student",
                     student_id=student.id,
                 )
             )
 
-    if not db.query(User).filter(User.username == "teacher").first():
-        db.add(
-            User(
-                username="teacher",
-                password_hash=hash_password("teacher123"),
-                role="teacher",
-                teacher_id=teacher.id,
-            )
-        )
-    if not db.query(User).filter(User.username == "admin").first():
-        db.add(
-            User(
-                username="admin",
-                password_hash=hash_password("admin123"),
-                role="admin",
-            )
-        )
+    logger.info("seed_data: seeded restricted student demo logins; no staff credentials are created")
+
+
+def _demo_student_logins_enabled() -> bool:
+    value = os.getenv("SEED_DEMO_STUDENT_ACCOUNTS")
+    if value is None:
+        return True
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _make_knowledge_unit(payload: dict) -> KnowledgeUnit:
@@ -271,16 +285,45 @@ def _stamp_migrations() -> None:
 
     ``create_all`` already builds the current schema, so leaving the database
     unversioned would make the next ``alembic upgrade head`` replay historic
-    migrations against an up-to-date schema.
+    migrations against an up-to-date schema. Only call this for a database that
+    was just created: stamping an existing database would silently claim it is
+    current without applying the migrations it is missing.
     """
 
+    command = _alembic_command()
+    command.stamp(_alembic_config(), "head")
+    logger.info("seed_data: stamped a freshly created database at migration head")
+
+
+def _upgrade_migrations() -> None:
+    """Bring an existing database up to date by running migrations, never by stamping."""
+
+    command = _alembic_command()
+    command.upgrade(_alembic_config(), "head")
+    logger.info("seed_data: applied migrations to an existing database")
+
+
+def _alembic_config():
     from pathlib import Path
 
-    from alembic import command
     from alembic.config import Config
 
-    config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
-    command.stamp(config, "head")
+    return Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+
+
+def _alembic_command():
+    from alembic import command
+
+    return command
+
+
+def _database_is_empty() -> bool:
+    """True when the target database has no application tables yet."""
+
+    from sqlalchemy import inspect
+
+    tables = set(inspect(engine).get_table_names())
+    return not tables
 
 
 def _ensure_compatible_schema() -> None:
