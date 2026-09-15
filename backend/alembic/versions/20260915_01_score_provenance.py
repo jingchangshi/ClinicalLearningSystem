@@ -19,19 +19,28 @@ def upgrade() -> None:
         import app.models  # noqa: F401
         Base.metadata.create_all(bind=bind)
         return
-    with op.batch_alter_table("scores") as batch:
-        batch.add_column(sa.Column("evaluation_mode", sa.String(30), nullable=False, server_default="rule_fallback"))
-        batch.add_column(sa.Column("provider", sa.String(50), nullable=True))
-        batch.add_column(sa.Column("model", sa.String(100), nullable=True))
-        batch.add_column(sa.Column("prompt_version", sa.String(50), nullable=False, server_default="case-evaluation-v1"))
-        batch.add_column(sa.Column("rubric_version", sa.String(50), nullable=False, server_default="case-rubric-v1"))
-        batch.add_column(sa.Column("evaluator_version", sa.String(50), nullable=False, server_default="hybrid-v1"))
-        batch.add_column(sa.Column("rule_score", sa.Float(), nullable=True))
-        batch.add_column(sa.Column("ai_score", sa.Float(), nullable=True))
-        batch.add_column(sa.Column("degraded", sa.Boolean(), nullable=False, server_default=sa.false()))
-        batch.add_column(sa.Column("evaluation_detail_json", sa.Text(), nullable=False, server_default="{}"))
-        batch.add_column(sa.Column("teacher_confirmed_score", sa.Float(), nullable=True))
-        batch.add_column(sa.Column("teacher_override_reason", sa.Text(), nullable=True))
+    # Add column by column and skip what already exists: a database created from
+    # the current declarative schema already has these columns, and a single
+    # batch operation over many missing columns trips SQLite batch mode.
+    existing = {column["name"] for column in inspector.get_columns("scores")}
+    new_columns = [
+        sa.Column("evaluation_mode", sa.String(30), nullable=False, server_default="rule_fallback"),
+        sa.Column("provider", sa.String(50), nullable=True),
+        sa.Column("model", sa.String(100), nullable=True),
+        sa.Column("prompt_version", sa.String(50), nullable=False, server_default="case-evaluation-v1"),
+        sa.Column("rubric_version", sa.String(50), nullable=False, server_default="case-rubric-v1"),
+        sa.Column("evaluator_version", sa.String(50), nullable=False, server_default="hybrid-v1"),
+        sa.Column("rule_score", sa.Float(), nullable=True),
+        sa.Column("ai_score", sa.Float(), nullable=True),
+        sa.Column("degraded", sa.Boolean(), nullable=False, server_default=sa.false()),
+        sa.Column("evaluation_detail_json", sa.Text(), nullable=False, server_default="{}"),
+        sa.Column("teacher_confirmed_score", sa.Float(), nullable=True),
+        sa.Column("teacher_override_reason", sa.Text(), nullable=True),
+    ]
+    for column in new_columns:
+        if column.name in existing:
+            continue
+        op.add_column("scores", column)
 
 
 def downgrade() -> None:

@@ -103,6 +103,9 @@ class CaseSession(Base):
     ai_messages: Mapped[list["AIMessage"]] = relationship(
         back_populates="session", cascade="all, delete-orphan"
     )
+    tutor_turns: Mapped[list["TutorTurn"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan"
+    )
     score: Mapped["Score"] = relationship(
         back_populates="session", uselist=False, cascade="all, delete-orphan"
     )
@@ -110,12 +113,18 @@ class CaseSession(Base):
 
 class StudentAnswer(Base):
     __tablename__ = "student_answers"
+    __table_args__ = (
+        UniqueConstraint("session_id", "step", name="uq_student_answers_session_step"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     session_id: Mapped[int] = mapped_column(ForeignKey("case_sessions.id"), nullable=False)
     step: Mapped[str] = mapped_column(String(100), nullable=False)
     answer_text: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
 
     session: Mapped["CaseSession"] = relationship(back_populates="answers")
 
@@ -131,6 +140,55 @@ class AIMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     session: Mapped["CaseSession"] = relationship(back_populates="ai_messages")
+
+
+class TutorTurn(Base):
+    """One turn of the step-level Socratic tutor conversation.
+
+    Every tutor turn stores the reasoning state it was generated from, so a
+    step's coaching history is auditable instead of a single overwritten message.
+    """
+
+    __tablename__ = "tutor_turns"
+    __table_args__ = (
+        UniqueConstraint("session_id", "step", "turn_index", name="uq_tutor_turns_session_step_index"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("case_sessions.id"), nullable=False)
+    step: Mapped[str] = mapped_column(String(100), nullable=False)
+    turn_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    tutor_state_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    session: Mapped["CaseSession"] = relationship(back_populates="tutor_turns")
+
+
+class AIInvocation(Base):
+    """Audit trail for one AI task invocation across every AI capability.
+
+    No prompt or response bodies are stored, only references and machine facts.
+    """
+
+    __tablename__ = "ai_invocations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    task_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    prompt_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    evidence_ref: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    session_id: Mapped[int | None] = mapped_column(ForeignKey("case_sessions.id"), nullable=True)
+    student_id: Mapped[int | None] = mapped_column(ForeignKey("students.id"), nullable=True)
+    calls: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    success: Mapped[bool] = mapped_column(nullable=False, default=False)
+    fallback_used: Mapped[bool] = mapped_column(nullable=False, default=False)
+    latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class Score(Base):
