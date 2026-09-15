@@ -5,6 +5,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_student_access, student_id_from_user
+from app.core.access_policy import MAX_SP_MESSAGES_PER_SESSION
+from app.core.ai_audit import ai_invocation
+from app.core.rate_limit import enforce
 from app.database import get_db
 from app.models import SPCase, SPSession, Student, User
 from app.services.competency_update_service import update_competency_from_sp
@@ -12,6 +15,7 @@ from app.services.serializers import (
     dumps_json,
     loads_json,
     serialize_sp_case,
+    serialize_sp_case_for_student,
     serialize_sp_case_summary,
     serialize_sp_session,
 )
@@ -42,12 +46,14 @@ def list_sp_cases(db: Session = Depends(get_db), _user: User = Depends(get_curre
 def get_sp_case(
     sp_case_id: int,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ) -> dict:
     sp_case = db.get(SPCase, sp_case_id)
     if not sp_case:
         raise HTTPException(status_code=404, detail="SP case not found")
-    return serialize_sp_case(sp_case)
+    if user.role in {"teacher", "admin"}:
+        return serialize_sp_case(sp_case)
+    return serialize_sp_case_for_student(sp_case)
 
 
 @router.post("/sp-sessions/start")
@@ -90,17 +96,29 @@ def send_sp_message(
     require_student_access(session.student_id, user)
     if session.status == "completed":
         raise HTTPException(status_code=400, detail="SP session already completed")
+    enforce("sp_message", f"user:{user.id}")
     transcript = loads_json(session.transcript, [])
     student_message = payload.message.strip()
     if not student_message:
         raise HTTPException(status_code=400, detail="Message is required")
+    if len(transcript) >= MAX_SP_MESSAGES_PER_SESSION:
+        raise HTTPException(
+            status_code=429,
+            detail=f"SP conversation limit reached ({MAX_SP_MESSAGES_PER_SESSION} messages).",
+        )
 
     transcript.append({"role": "student", "message": student_message})
-    patient_reply = generate_patient_reply(
-        load_sp_case_payload(session.sp_case),
-        transcript,
-        student_message,
-    )
+    with ai_invocation(
+        "sp_patient",
+        session_id=session.id,
+        student_id=session.student_id,
+        evidence_ref=f"sp_session:{session.id}:turn:{len(transcript)}",
+    ):
+        patient_reply = generate_patient_reply(
+            load_sp_case_payload(session.sp_case),
+            transcript,
+            student_message,
+        )
     transcript.append({"role": "patient", "message": patient_reply})
     session.transcript = dumps_json(transcript)
     db.commit()
@@ -118,11 +136,17 @@ def submit_sp_session(
     session = _get_sp_session(db, session_id)
     require_student_access(session.student_id, user)
     transcript = loads_json(session.transcript, [])
-    scoring = score_sp_session(
-        load_sp_case_payload(session.sp_case),
-        transcript,
-        payload.diagnosis_summary,
-    )
+    with ai_invocation(
+        "sp_evaluation",
+        session_id=session.id,
+        student_id=session.student_id,
+        evidence_ref=f"sp_session:{session.id}",
+    ):
+        scoring = score_sp_session(
+            load_sp_case_payload(session.sp_case),
+            transcript,
+            payload.diagnosis_summary,
+        )
     session.diagnosis_summary = payload.diagnosis_summary
     session.communication_score = scoring["communication_score"]
     session.history_taking_score = scoring["history_taking_score"]

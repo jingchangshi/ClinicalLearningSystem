@@ -1,8 +1,13 @@
+import logging
+import os
+
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, require_role
+from app.core.ai_audit import ai_invocation
+from app.core.deidentify import scan_case_payload
 from app.database import get_db
 from app.models import (
     Case,
@@ -43,6 +48,8 @@ from app.services.serializers import (
     serialize_student,
 )
 
+logger = logging.getLogger("clinpath.teacher")
+
 router = APIRouter(
     prefix="/api/teacher",
     tags=["teacher"],
@@ -79,11 +86,12 @@ def get_teacher_dashboard(db: Session = Depends(get_db)) -> dict:
     weak_dimensions = _weak_dimensions(averages)
     training_summary = build_class_training_summary(db)
     teaching_interventions = _teaching_interventions(weak_dimensions)
-    teaching_insight_summary = llm_service.generate_teacher_insight(
-        weak_dimensions,
-        training_summary,
-        _teaching_insight_fallback(weak_dimensions, training_summary),
-    )
+    with ai_invocation("teacher_insight", evidence_ref="teacher_dashboard"):
+        teaching_insight_summary = llm_service.generate_teacher_insight(
+            weak_dimensions,
+            training_summary,
+            _teaching_insight_fallback(weak_dimensions, training_summary),
+        )
     return {
         "student_count": len(students),
         "completed_session_count": len(completed),
@@ -302,7 +310,8 @@ def teacher_list_cases(db: Session = Depends(get_db)) -> list[dict]:
 
 @router.post("/cases")
 def teacher_create_case(payload: dict, db: Session = Depends(get_db)) -> dict:
-    return serialize_case(create_case_from_payload(payload, db))
+    report = _deidentification_gate(payload)
+    return {**serialize_case(create_case_from_payload(payload, db)), "deidentification": report}
 
 
 @router.put("/cases/{case_id}")
@@ -310,7 +319,32 @@ def teacher_update_case(case_id: int, payload: dict, db: Session = Depends(get_d
     case = db.get(Case, case_id)
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
-    return serialize_case(update_case_from_payload(case, payload, db))
+    report = _deidentification_gate(payload)
+    return {**serialize_case(update_case_from_payload(case, payload, db)), "deidentification": report}
+
+
+def _deidentification_gate(payload: dict) -> dict:
+    """Warn on identifier-shaped input; block it only when the deployment asks.
+
+    The model boundary is already enforced (``llm_service`` redacts every prompt),
+    so this is about what enters the case bank itself.
+    """
+
+    report = scan_case_payload(payload)
+    if not report["clean"]:
+        logger.warning(
+            "case authoring: possible identifiers in fields %s",
+            [finding["field"] for finding in report["findings"]],
+        )
+        if os.getenv("REQUIRE_CASE_DEIDENTIFICATION", "false").strip().lower() in {"1", "true", "yes", "on"}:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "detail": "Case text appears to contain patient identifiers",
+                    "fields": report["findings"],
+                },
+            )
+    return report
 
 
 @router.delete("/cases/{case_id}")

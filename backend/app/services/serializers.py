@@ -165,6 +165,7 @@ def _profile_value(profile: CompetencyProfile, key: str, fallback: float) -> flo
 
 
 def serialize_score(score: Score) -> dict:
+    evaluation_detail = loads_json(score.evaluation_detail_json, {})
     return {
         "id": score.id,
         "total_score": score.total_score,
@@ -188,7 +189,8 @@ def serialize_score(score: Score) -> dict:
         "teacher_confirmed_score": score.teacher_confirmed_score,
         "teacher_override_reason": score.teacher_override_reason,
         "degraded": score.degraded,
-        "evaluation_detail": loads_json(score.evaluation_detail_json, {}),
+        "evaluation_detail": evaluation_detail,
+        "safety_flags": evaluation_detail.get("safety_flags", []),
         "created_at": score.created_at,
         "chart_data": [
             {"dimension": ABILITY_LABELS[key], "score": getattr(score, key)}
@@ -210,6 +212,16 @@ def serialize_knowledge_unit(unit: KnowledgeUnit) -> dict:
         "related_case_ids": loads_json(unit.related_case_ids, []),
         "created_at": unit.created_at,
     }
+
+
+def serialize_knowledge_unit_for_student(unit: KnowledgeUnit) -> dict:
+    """Questions are shown, answer keys are not: the quiz is graded server-side."""
+
+    payload = serialize_knowledge_unit(unit)
+    payload["quiz_items"] = [
+        {"question": item.get("question", "")} for item in payload["quiz_items"]
+    ]
+    return payload
 
 
 def serialize_knowledge_summary(unit: KnowledgeUnit) -> dict:
@@ -250,6 +262,18 @@ def serialize_skill(skill: ClinicalSkill) -> dict:
         "scoring_rubric": loads_json(skill.scoring_rubric, {}),
         "created_at": skill.created_at,
     }
+
+
+def serialize_skill_for_student(skill: ClinicalSkill) -> dict:
+    """Student-facing skill detail: the OSCE-style checklist is not published.
+
+    Scoring stays server-side; students practise from the steps and common errors
+    rather than from the grading checklist.
+    """
+
+    payload = serialize_skill(skill)
+    payload.pop("scoring_rubric", None)
+    return payload
 
 
 def serialize_skill_summary(skill: ClinicalSkill) -> dict:
@@ -337,6 +361,13 @@ def serialize_sp_case(sp_case: SPCase) -> dict:
 
 
 def serialize_sp_case_summary(sp_case: SPCase) -> dict:
+    """What a student may see: no hidden history, no OSCE rubric.
+
+    The patient's hidden answers must be *discovered* by asking questions during
+    the encounter; exposing them (or the scoring rubric) through the API would let
+    a student skip the exercise entirely.
+    """
+
     return {
         "id": sp_case.id,
         "title": sp_case.title,
@@ -346,6 +377,13 @@ def serialize_sp_case_summary(sp_case: SPCase) -> dict:
         "opening_statement": sp_case.opening_statement,
         "emotional_style": sp_case.emotional_style,
         "expected_tasks": loads_json(sp_case.expected_tasks, []),
+    }
+
+
+def serialize_sp_case_for_student(sp_case: SPCase) -> dict:
+    return {
+        **serialize_sp_case_summary(sp_case),
+        "scoring_dimensions": sorted(loads_json(sp_case.scoring_rubric, {}).keys()),
     }
 
 

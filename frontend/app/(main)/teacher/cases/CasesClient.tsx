@@ -5,6 +5,7 @@ import { Edit, Plus, Trash2 } from "lucide-react";
 
 import {
   CaseDetail,
+  DeidentificationReport,
   teacherCreateCase,
   teacherDeleteCase,
   teacherListCases,
@@ -39,6 +40,7 @@ export function CasesClient() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<CaseForm>(emptyForm);
   const [busy, setBusy] = useState(false);
+  const [deidentification, setDeidentification] = useState<DeidentificationReport | null>(null);
 
   useEffect(() => {
     refresh();
@@ -63,12 +65,14 @@ export function CasesClient() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
+    setDeidentification(null);
     try {
       const payload = toPayload(form);
-      if (editingId) {
-        await teacherUpdateCase(editingId, payload);
-      } else {
-        await teacherCreateCase(payload);
+      const saved = editingId
+        ? await teacherUpdateCase(editingId, payload)
+        : await teacherCreateCase(payload);
+      if (!saved.deidentification?.clean) {
+        setDeidentification(saved.deidentification);
       }
       setEditingId(null);
       setForm(emptyForm);
@@ -158,6 +162,15 @@ export function CasesClient() {
           <TextArea label="鉴别诊断，每行一项" value={form.differential_diagnosis} onChange={(value) => setForm({ ...form, differential_diagnosis: value })} />
           <TextArea label="治疗方案" value={form.treatment_plan} onChange={(value) => setForm({ ...form, treatment_plan: value })} />
           <TextArea label="评分Rubric，JSON格式" value={form.rubric} onChange={(value) => setForm({ ...form, rubric: value })} />
+          {deidentification && !deidentification.clean ? (
+            <p
+              data-testid="deidentification-warning"
+              className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800"
+            >
+              {deidentification.message}
+              涉及字段：{deidentification.findings.map((finding) => finding.label).join("、")}。
+            </p>
+          ) : null}
           <div className="flex gap-2">
             <button disabled={busy} className="inline-flex items-center gap-2 rounded-md bg-clinic px-4 py-2 text-white disabled:bg-slate-300">
               <Plus className="h-4 w-4" />

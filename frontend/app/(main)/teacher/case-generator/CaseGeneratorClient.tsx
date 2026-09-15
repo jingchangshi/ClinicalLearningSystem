@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, Wand2 } from "lucide-react";
 
-import { approveGeneratedCase, CaseDetail, generateTeacherCase } from "@/lib/api";
+import { approveGeneratedCase, CaseDetail, DeidentificationReport, generateTeacherCase } from "@/lib/api";
 
 type GeneratorForm = {
   disease_category: string;
@@ -26,6 +26,7 @@ export function CaseGeneratorClient() {
   const [form, setForm] = useState<GeneratorForm>(defaultForm);
   const [draftId, setDraftId] = useState<number | null>(null);
   const [draftJson, setDraftJson] = useState("");
+  const [deidentification, setDeidentification] = useState<DeidentificationReport | null>(null);
   const [approvedCase, setApprovedCase] = useState<CaseDetail | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,6 +46,7 @@ export function CaseGeneratorClient() {
       });
       setDraftId(response.draft_id);
       setDraftJson(JSON.stringify(response.generated_payload, null, 2));
+      setDeidentification(response.deidentification?.clean === false ? response.deidentification : null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "病例生成失败");
     } finally {
@@ -137,6 +139,15 @@ export function CaseGeneratorClient() {
           className="mt-4 h-[620px] w-full rounded-md border border-slate-300 p-3 font-mono text-sm outline-none focus:border-clinic focus:ring-2 focus:ring-clinic-soft"
           placeholder="生成后将在此显示病例 JSON"
         />
+        {deidentification ? (
+          <p
+            data-testid="deidentification-warning"
+            className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800"
+          >
+            {deidentification.message}
+            涉及字段：{deidentification.findings.map((finding) => finding.label).join("、")}。
+          </p>
+        ) : null}
         {error ? <p className="mt-3 text-sm text-alert">{error}</p> : null}
         {approvedCase ? (
           <div className="mt-4 rounded-md bg-clinic-soft p-4 text-sm text-teal-950">

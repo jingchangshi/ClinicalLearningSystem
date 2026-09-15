@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.llm.prompts.evaluation import SKILL_FEEDBACK_SYSTEM_PROMPT, SKILL_FEEDBACK_USER_TEMPLATE
 from app.auth import get_current_user, require_student_access, student_id_from_user
+from app.core.ai_audit import ai_invocation
 from app.database import get_db
 from app.models import ClinicalSkill, SkillSession, Student, User
 from app.services.competency_update_service import update_competency_from_skill
@@ -13,6 +14,7 @@ from app.services.serializers import (
     dumps_json,
     loads_json,
     serialize_skill,
+    serialize_skill_for_student,
     serialize_skill_session,
     serialize_skill_summary,
 )
@@ -35,11 +37,13 @@ def list_skills(db: Session = Depends(get_db), _user: User = Depends(get_current
 
 
 @router.get("/skills/{skill_id}")
-def get_skill(skill_id: int, db: Session = Depends(get_db), _user: User = Depends(get_current_user)) -> dict:
+def get_skill(skill_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict:
     skill = db.get(ClinicalSkill, skill_id)
     if not skill:
         raise HTTPException(status_code=404, detail="Skill not found")
-    return serialize_skill(skill)
+    if user.role in {"teacher", "admin"}:
+        return serialize_skill(skill)
+    return serialize_skill_for_student(skill)
 
 
 @router.post("/skills/{skill_id}/sessions/start")
@@ -195,13 +199,14 @@ def _skill_feedback(score: float, missed_steps: list[str], safety_score: float, 
 
 def _skill_feedback_with_llm(score: float, missed_steps: list[str], safety_score: float, errors: list[str]) -> str:
     fallback = _skill_feedback(score, missed_steps, safety_score, errors)
-    return llm_service.chat_completion(
-        SKILL_FEEDBACK_SYSTEM_PROMPT,
-        SKILL_FEEDBACK_USER_TEMPLATE.format(
-            score=score,
-            safety_score=safety_score,
-            missed_steps=missed_steps,
-            errors=errors,
-        ),
-        fallback,
-    )
+    with ai_invocation("skill_feedback", evidence_ref="skill_session"):
+        return llm_service.chat_completion(
+            SKILL_FEEDBACK_SYSTEM_PROMPT,
+            SKILL_FEEDBACK_USER_TEMPLATE.format(
+                score=score,
+                safety_score=safety_score,
+                missed_steps=missed_steps,
+                errors=errors,
+            ),
+            fallback,
+        )

@@ -1,8 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.auth import require_role
+from app.core.ai_audit import ai_invocation
+from app.core.deidentify import scan_case_payload
+from app.core.rate_limit import client_identity, enforce
 from app.database import get_db
 from app.models import Case, GeneratedCaseDraft
 from app.services.case_generator import generate_case_payload, validate_case_payload
@@ -28,8 +31,15 @@ class CaseApproveRequest(BaseModel):
 
 
 @router.post("/generate")
-def generate_case(payload: CaseGenerateRequest, db: Session = Depends(get_db)) -> dict:
-    generated_payload = generate_case_payload(payload.model_dump())
+def generate_case(payload: CaseGenerateRequest, request: Request, db: Session = Depends(get_db)) -> dict:
+    enforce("case_generate", client_identity(request))
+    prompt_report = scan_case_payload(
+        {"teaching_goal": payload.teaching_goal, "disease_category": payload.disease_category,
+         "required_elements": payload.required_elements},
+        fields=("teaching_goal", "disease_category"),
+    )
+    with ai_invocation("case_generation", evidence_ref=f"disease:{payload.disease_category}"):
+        generated_payload = generate_case_payload(payload.model_dump())
     draft = GeneratedCaseDraft(
         teacher_prompt=dumps_json(payload.model_dump()),
         generated_payload=dumps_json(generated_payload),
@@ -38,7 +48,11 @@ def generate_case(payload: CaseGenerateRequest, db: Session = Depends(get_db)) -
     db.add(draft)
     db.commit()
     db.refresh(draft)
-    return {"draft_id": draft.id, "generated_payload": generated_payload}
+    return {
+        "draft_id": draft.id,
+        "generated_payload": generated_payload,
+        "deidentification": prompt_report,
+    }
 
 
 @router.post("/{draft_id}/approve")

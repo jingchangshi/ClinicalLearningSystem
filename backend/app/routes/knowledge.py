@@ -13,6 +13,7 @@ from app.services.serializers import (
     serialize_knowledge_progress,
     serialize_knowledge_summary,
     serialize_knowledge_unit,
+    serialize_knowledge_unit_for_student,
 )
 
 router = APIRouter(prefix="/api", tags=["knowledge"])
@@ -32,12 +33,14 @@ def list_knowledge(db: Session = Depends(get_db), _user: User = Depends(get_curr
 def get_knowledge(
     unit_id: int,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ) -> dict:
     unit = db.get(KnowledgeUnit, unit_id)
     if not unit:
         raise HTTPException(status_code=404, detail="Knowledge unit not found")
-    return serialize_knowledge_unit(unit)
+    if user.role in {"teacher", "admin"}:
+        return serialize_knowledge_unit(unit)
+    return serialize_knowledge_unit_for_student(unit)
 
 
 @router.get("/students/{student_id}/knowledge-progress")
