@@ -5,6 +5,12 @@ cd /home/jcshi/workspace/clinical_learning_system/backend
 
 export PATH="/home/jcshi/.local/bin:/home/jcshi/Software/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
 export FRONTEND_ORIGINS="${FRONTEND_ORIGINS:-http://129.153.118.58:8101,http://localhost:8101,http://127.0.0.1:8101}"
+# Read endpoints are synchronous, so one process runs Python-level work one
+# request at a time (measured: p95 6-10s for 100 concurrent readers). Four
+# workers brought the same load to p95 ~0.19s at 2.3/4 cores of CPU.
+# Consequence to keep in mind: the in-memory rate limiter and the ai_runtime
+# counters are per process now (docs/ARCH.md §12).
+export CLINPATH_BACKEND_WORKERS="${CLINPATH_BACKEND_WORKERS:-4}"
 
 # A pending migration must never touch the live database without a snapshot first.
 current_revision="$(uv run --python 3.11 --with-requirements requirements.txt alembic current 2>/dev/null | tail -n 1 | awk '{print $1}')"
@@ -22,4 +28,5 @@ uv run --python 3.11 --with-requirements requirements.txt alembic upgrade head
 # server-side timeout comfortably longer makes the server never be the one that
 # closes an idle connection.
 exec uv run --python 3.11 --with-requirements requirements.txt \
-  uvicorn app.main:app --host 0.0.0.0 --port 8100 --timeout-keep-alive 75
+  uvicorn app.main:app --host 0.0.0.0 --port 8100 --timeout-keep-alive 75 \
+  --workers "$CLINPATH_BACKEND_WORKERS"

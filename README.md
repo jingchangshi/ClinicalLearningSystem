@@ -197,6 +197,19 @@ systemctl --user restart clinical-backend.service clinical-frontend.service
 后端启动脚本会在检测到待执行迁移时自动先备份数据库，再 `alembic upgrade head`。
 禁止用删除数据库 / `seed_data --reset` 的方式演进生产 schema。
 
+后端默认以 4 个 worker 启动（`CLINPATH_BACKEND_WORKERS`）。读接口是同步函数，
+单进程一次只能执行一个请求的 Python 工作：100 并发读实测单进程 p95 6–10s、4 worker
+p95 ≈0.19s。代价是进程内的限流窗口与 `ai_runtime` 计数变为 per-process
+（`docs/ARCH.md` §12、§16；测量与复现在 `docs/PILOT_READINESS_REPORT.md`）。
+
+试点前请先跑一遍容量与页面前后对比（只读脚本，不写生产数据）：
+
+```bash
+python3 scripts/measure_page_latency.py --samples 3    # 认证后的页面延迟
+./scripts/start_staging_8200.sh                        # 一次性 staging 后端（生产库副本）
+k6 run -e BASE_URL=http://127.0.0.1:8200 loadtest/k6_navigation.js
+```
+
 查看状态和日志：
 
 ```bash
