@@ -26,7 +26,9 @@ test("teacher surfaces load without console errors or 5xx", async ({ page }) => 
   await page.getByLabel("用户名").fill(teacher.username!);
   await page.getByLabel("密码").fill(teacher.password!);
   await page.getByRole("button", { name: "登录并进入系统" }).click();
-  await expect(page).toHaveURL(/\/teacher\/dashboard$/);
+  // The teacher dashboard is server-rendered and can include a real AI insight
+  // call: measured 3.4-4.3s against the old 5s default.
+  await expect(page).toHaveURL(/\/teacher\/dashboard$/, { timeout: 60_000 });
 
   await page.goto("/teacher/students");
   await expect(page.getByRole("heading", { name: /学生|Students/ }).first()).toBeVisible();
@@ -57,7 +59,7 @@ test("a teacher can probe the AI runtime without leaking secrets", async ({ page
   await page.getByLabel("用户名").fill(teacher.username!);
   await page.getByLabel("密码").fill(teacher.password!);
   await page.getByRole("button", { name: "登录并进入系统" }).click();
-  await expect(page).toHaveURL(/\/teacher\/dashboard$/);
+  await expect(page).toHaveURL(/\/teacher\/dashboard$/, { timeout: 60_000 });
 
   await page.goto("/teacher/runtime");
   await page.getByRole("button", { name: "测试连通性" }).click();

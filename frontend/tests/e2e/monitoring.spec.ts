@@ -49,7 +49,9 @@ test("anonymous首页、登录页、学生导航：无 console 报错、无 5xx"
     ["Profile", /\/student\/profile$/],
   ] as const) {
     await page.getByRole("link", { name: label }).click();
-    await expect(page).toHaveURL(path, { timeout: 15_000 });
+    // /student/pathway is server-rendered and its recommendation reason is a real
+    // model call: measured 11.6-14.1s, so the old 15s budget sat on the edge.
+    await expect(page).toHaveURL(path, { timeout: 60_000 });
   }
 
   await page.reload();
