@@ -93,6 +93,41 @@ type Invocation = {
   fallback_used: boolean;
 };
 
+type FlowRecorder = {
+  consoleErrors: string[];
+  pageErrors: string[];
+  serverErrors: string[];
+  unauthorizedMe: number;
+};
+
+/**
+ * The browser acceptance rule from docs/ARCH.md §14.3: a flow that looks right
+ * while emitting uncaught errors, unexpected 5xx, hydration failures or an auth
+ * probe loop is not accepted.  The training flow is the one that matters most,
+ * so it carries the same recorder as the lighter navigation suites.
+ */
+function recordFlow(page: Page): FlowRecorder {
+  const recorder: FlowRecorder = { consoleErrors: [], pageErrors: [], serverErrors: [], unauthorizedMe: 0 };
+  page.on("console", (message) => {
+    if (message.type() !== "error") return;
+    const text = message.text();
+    const source = message.location()?.url ?? "";
+    // The login page probes /api/auth/me before a session exists, so the browser
+    // logs "Failed to load resource … 401" for a request the app expects and
+    // handles.  Every other console error — including hydration failures — fails.
+    if (text.includes("Failed to load resource") && source.endsWith("/api/auth/me")) return;
+    recorder.consoleErrors.push(`${text} @ ${source}`);
+  });
+  page.on("pageerror", (error) => recorder.pageErrors.push(String(error)));
+  page.on("response", (response) => {
+    const url = new URL(response.url());
+    if (!url.pathname.startsWith("/api/")) return;
+    if (response.status() >= 500) recorder.serverErrors.push(`${response.status()} ${url.pathname}`);
+    if (response.status() === 401 && url.pathname === "/api/auth/me") recorder.unauthorizedMe += 1;
+  });
+  return recorder;
+}
+
 async function realInvocationsFor(page: Page, sessionId: number, taskTypes: string[]): Promise<Invocation[]> {
   return page.evaluate(
     async ([id, types]) => {
@@ -131,7 +166,9 @@ async function expectRealDeepSeekInvocations(browser: Browser, sessionId: number
     await page.getByLabel("用户名").fill(username!);
     await page.getByLabel("密码").fill(password!);
     await page.getByRole("button", { name: "登录并进入系统" }).click();
-    await expect(page).toHaveURL(/\/teacher\/dashboard$/);
+    // This login happens right after a five-step flow with real model calls; the
+    // server-rendered redirect needs more than the 5s default under that load.
+    await expect(page).toHaveURL(/\/teacher\/dashboard$/, { timeout: 30_000 });
 
     let found: Invocation[] = [];
     await expect
@@ -193,6 +230,7 @@ test("submitting with missing steps is rejected and nothing is scored", async ({
 });
 
 test("student completes a case with Coach and receives formative feedback", async ({ page, browser }) => {
+  const recorder = recordFlow(page);
   await login(page);
   await page.goto("/student/case/1");
 
@@ -305,6 +343,12 @@ test("student completes a case with Coach and receives formative feedback", asyn
     expect(submittedSessionId, "the submitted session id is required by the audit gate").toBeGreaterThan(0);
     await expectRealDeepSeekInvocations(browser, submittedSessionId, ["case_evaluation", "tutor_question"]);
   }
+
+  // docs/ARCH.md §14.3: the flow is not accepted on looks alone.
+  expect(recorder.pageErrors, `uncaught page errors: ${recorder.pageErrors.join(" | ")}`).toEqual([]);
+  expect(recorder.serverErrors, `unexpected 5xx: ${recorder.serverErrors.join(" | ")}`).toEqual([]);
+  expect(recorder.consoleErrors, `critical console errors: ${recorder.consoleErrors.join(" | ")}`).toEqual([]);
+  expect(recorder.unauthorizedMe, "an authenticated session must not loop on /api/auth/me").toBeLessThan(3);
 });
 
 test("teacher confirms six dimensions and the review is recorded", async ({ page }) => {
