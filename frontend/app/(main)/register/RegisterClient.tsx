@@ -6,6 +6,8 @@ import { UserPlus } from "lucide-react";
 
 import { useAuth } from "@/components/AuthProvider";
 
+const registrationOpen = process.env.NEXT_PUBLIC_ALLOW_PUBLIC_REGISTRATION !== "false";
+
 export function RegisterClient() {
   const { register, loading } = useAuth();
   const [username, setUsername] = useState("");
@@ -36,6 +38,11 @@ export function RegisterClient() {
 
       <form onSubmit={submit} className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm">
         <h2 className="text-2xl font-semibold text-ink">注册</h2>
+        {registrationOpen ? null : (
+          <p className="mt-4 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            当前部署已关闭公开注册。请使用已有账号登录；教师账号由系统管理员在服务器端开通。
+          </p>
+        )}
         <label className="mt-6 block text-sm font-medium text-slate-600">
           用户名
           <input

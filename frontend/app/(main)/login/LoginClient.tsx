@@ -7,16 +7,20 @@ import { ShieldCheck } from "lucide-react";
 
 import { useAuth } from "@/components/AuthProvider";
 
-const demoAccounts = [
-  { label: "学生账号", username: "student1", password: "student123" },
-  { label: "教师账号", username: "teacher", password: "teacher123" },
-];
+// Only a restricted student demo account may ever be published. Teacher and
+// admin credentials are provisioned server-side and must never appear here.
+const demoAccounts =
+  process.env.NEXT_PUBLIC_SHOW_DEMO_ACCOUNTS === "false"
+    ? []
+    : [{ label: "学生演示账号", username: "student1", password: "student123" }];
+
+const showRegistration = process.env.NEXT_PUBLIC_ALLOW_PUBLIC_REGISTRATION !== "false";
 
 export function LoginClient() {
   const searchParams = useSearchParams();
   const { login, loading } = useAuth();
-  const [username, setUsername] = useState("student1");
-  const [password, setPassword] = useState("student123");
+  const [username, setUsername] = useState(demoAccounts[0]?.username ?? "");
+  const [password, setPassword] = useState(demoAccounts[0]?.password ?? "");
   const [error, setError] = useState<string | null>(null);
 
   async function submit(event: FormEvent) {
@@ -37,8 +41,13 @@ export function LoginClient() {
         </div>
         <h1 className="mt-6 text-4xl font-semibold">ClinPath 账户登录</h1>
         <p className="mt-4 leading-7 text-cyan-50">
-          系统已启用 JWT 认证与角色权限控制。学生只能访问自己的学习数据，教师和管理员可进入教学管理与研究分析入口。
+          系统已启用 JWT 认证与角色权限控制。学生只能访问自己的学习数据；教师与管理员账号由系统管理员在服务器端开通，可进入教学管理与研究分析入口。
         </p>
+        {demoAccounts.length > 0 ? (
+          <p className="mt-2 text-sm text-cyan-100">
+            公开页面只提供只读演示用的学生账号，不提供任何具有写入权限的教师账号。
+          </p>
+        ) : null}
         <div className="mt-8 grid gap-3">
           {demoAccounts.map((account) => (
             <button
@@ -83,12 +92,14 @@ export function LoginClient() {
         >
           {loading ? "登录中..." : "登录并进入系统"}
         </button>
-        <p className="mt-4 text-center text-sm text-slate-500">
-          还没有账号？{" "}
-          <Link href="/register" className="font-medium text-clinic hover:underline">
-            注册新账号
-          </Link>
-        </p>
+        {showRegistration ? (
+          <p className="mt-4 text-center text-sm text-slate-500">
+            还没有账号？{" "}
+            <Link href="/register" className="font-medium text-clinic hover:underline">
+              注册新账号
+            </Link>
+          </p>
+        ) : null}
       </form>
     </div>
   );

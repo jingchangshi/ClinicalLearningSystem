@@ -7,6 +7,9 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=/home/jcshi/workspace/clinical_learning_system/frontend
 Environment=INTERNAL_API_BASE_URL=http://127.0.0.1:8100
+# Server-side only: JWT_SECRET lets proxy.ts verify cookie signatures before
+# trusting a role, plus the public UI flags. No model credentials live here.
+EnvironmentFile=%h/.config/clinpath/frontend.env
 ExecStart=/home/jcshi/workspace/clinical_learning_system/scripts/start_frontend_8101.sh
 Restart=always
 RestartSec=5

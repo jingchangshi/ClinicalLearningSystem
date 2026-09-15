@@ -1,11 +1,13 @@
 import os
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.auth import create_access_token, get_current_user, hash_password, serialize_user, verify_password
+from app.core.access_policy import ALLOW_PUBLIC_REGISTRATION
+from app.core.rate_limit import client_identity, enforce
 from app.database import get_db
 from app.models import CompetencyProfile, Student, Teacher, User
 
@@ -40,7 +42,15 @@ def _auth_response(response: Response, user: User) -> dict:
 
 
 @router.post("/register")
-def register(payload: RegisterRequest, response: Response, db: Session = Depends(get_db)) -> dict:
+def register(
+    payload: RegisterRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> dict:
+    if not ALLOW_PUBLIC_REGISTRATION:
+        raise HTTPException(status_code=403, detail="Public registration is disabled")
+    enforce("register", client_identity(request))
     if db.query(User).filter(User.username == payload.username).first():
         raise HTTPException(status_code=409, detail="Username already exists")
     student_id = payload.student_id
@@ -100,7 +110,8 @@ def _unique_no(db: Session, model: type[Student], field: str, prefix: str) -> st
 
 
 @router.post("/login")
-def login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)) -> dict:
+def login(payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)) -> dict:
+    enforce("login", f"{client_identity(request)}:{payload.username}")
     user = db.query(User).filter(User.username == payload.username).first()
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid username or password")
