@@ -544,6 +544,22 @@ schema 是否为迁移 head / systemd 状态 / 公网入口 / 后端与前端 JW
 不健康、指纹/SHA/schema/JWT 任一不符都会以非 0 退出——输出好看但退出 0 的「假绿」
 本身就是缺陷，其判定逻辑由 `backend/tests/test_verify_deploy_script.py` 覆盖。
 
+### 14.2.1 Web 层的等待预算必须大于传输层的最坏耗时
+
+Next.js 的 rewrite 代理对每个转发请求有 `experimental.proxyTimeout`，未配置时默认
+**30 秒**（`next/dist/server/lib/router-utils/proxy-request.js`）。真实 DeepSeek
+Thinking Mode 的一次病例评测实测 15–25 秒，于是出现过：后端已经写出 `scores` 行、
+浏览器却收到 500 —— 代理先判了超时。因此：
+
+```text
+proxyTimeout (frontend/next.config.ts)  >  LLM_TIMEOUT_SECONDS × (LLM_MAX_RETRIES + 1)
+       300s                                    60s × 2 次（生产实测取值）
+```
+
+后端对自己的模型调用有界（超时 + 有界重试 + 短退避），Web 层不得成为「更早失败」
+的那一层。这条不变量由 `backend/tests/test_proxy_timeout_budget.py` 守住：把
+`proxyTimeout` 调回 30s 会让该测试失败。
+
 ### 14.3 生产 AI 验收（不看文风，只看元数据）
 
 ```text

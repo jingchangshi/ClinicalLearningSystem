@@ -29,6 +29,15 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_BUILD_SHA: buildSha(),
   },
+  experimental: {
+    // Rewrite-proxied requests are aborted after 30s by default
+    // (next/dist/server/lib/router-utils/proxy-request.js). A real DeepSeek
+    // Thinking-Mode case evaluation measured 15-25s, so the browser received a
+    // 500 for a submit whose work the backend had already completed. The backend
+    // bounds itself (LLM_TIMEOUT_SECONDS x (LLM_MAX_RETRIES + 1)); the proxy must
+    // not be the layer that decides a model-backed request failed.
+    proxyTimeout: 300_000,
+  },
   async rewrites() {
     return [
       {
