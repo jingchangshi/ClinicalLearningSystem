@@ -254,3 +254,43 @@ test("teacher case authoring warns about identifiers and can undo the draft", as
   }, `E2E 去标识化验证 ${suffix}`);
   expect(removed).toBe("200");
 });
+
+// Run against a deployment with no provider key (ai_configured=false), e.g. a
+// disposable stack started without LLM_API_KEY:
+//   E2E_EXPECT_FALLBACK=1 E2E_BASE_URL=http://127.0.0.1:18301 npx playwright test -g fallback
+test("a keyless deployment shows the rule fallback honestly", async ({ page }) => {
+  test.skip(!process.env.E2E_EXPECT_FALLBACK, "Set E2E_EXPECT_FALLBACK=1 for a keyless deployment.");
+
+  await login(page);
+  await page.goto("/student/case/1");
+
+  for (const step of STEPS) {
+    await page.getByRole("button", { name: step.label, exact: true }).click();
+    await page.locator("textarea").first().fill(step.text);
+    await page.getByRole("button", { name: "保存回答" }).click();
+    await expect(page.getByText("已保存")).toBeVisible();
+  }
+
+  const submission = page.waitForResponse(
+    (response) => response.url().includes("/api/sessions/") && response.url().endsWith("/submit"),
+  );
+  await page.getByRole("button", { name: "提交病例并生成反馈" }).click();
+  expect((await submission).status()).toBe(200);
+  await expect(page).toHaveURL(/\/student\/result\//);
+
+  // The badge must state the degraded engine instead of implying a model call.
+  await expect(page.getByTestId("evaluation-mode")).toContainText("规则降级评价");
+  await expect(page.getByTestId("evaluation-mode")).not.toContainText("AI 语义评价");
+  // The explanation surface still explains the score.
+  await expect(page.getByText("评分依据、遗漏点与安全提示")).toBeVisible();
+
+  const sessionId = Number(page.url().split("/").pop());
+  const result = await page.evaluate(async (id) => {
+    const response = await fetch(`/api/sessions/${id}/result`, { credentials: "include" });
+    return await response.json();
+  }, sessionId);
+  expect(result.score.evaluation_mode).toBe("rule_fallback");
+  expect(result.score.degraded).toBe(true);
+  expect(result.score.ai_score).toBeNull();
+  expect(result.score.rule_score).not.toBeNull();
+});
