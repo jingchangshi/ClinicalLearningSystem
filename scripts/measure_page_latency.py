@@ -39,6 +39,11 @@ STUDENT_TARGETS = (
     ("/api/student/competency", "student profile"),
 )
 
+# The pilot entry sits behind Cloudflare, which rejects the default
+# ``Python-urllib/...`` agent. Identify the harness honestly instead of
+# disguising it.
+USER_AGENT = "ClinPath-pilot-latency-harness/1.0"
+
 TEACHER_TARGETS = (
     ("/api/teacher/dashboard", "teacher dashboard"),
     ("/api/teacher/students/{student_id}/learning-profile", "teacher student profile"),
@@ -96,7 +101,7 @@ def login(base_url: str, username: str, password: str, timeout: float) -> str | 
     request = urllib.request.Request(
         f"{base_url}/api/auth/login",
         data=json.dumps({"username": username, "password": password}).encode(),
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", "User-Agent": USER_AGENT},
         method="POST",
     )
     try:
@@ -113,7 +118,9 @@ def measure(base_url: str, path: str, cookie: str, samples: int, timeout: float)
     timings: list[float] = []
     statuses: list[int] = []
     for _ in range(samples):
-        request = urllib.request.Request(f"{base_url}{path}", headers={"Cookie": cookie})
+        request = urllib.request.Request(
+            f"{base_url}{path}", headers={"Cookie": cookie, "User-Agent": USER_AGENT}
+        )
         started = time.monotonic()
         status, _body = _open(request, timeout)
         timings.append((time.monotonic() - started) * 1000)

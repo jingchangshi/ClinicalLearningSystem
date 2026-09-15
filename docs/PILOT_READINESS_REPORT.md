@@ -176,13 +176,18 @@ evidence/missing_points/feedback/safety_flags 齐全；tutor 校验「是一个�
 同一脚本 `scripts/measure_page_latency.py --samples 3`；「改造后」在
 `https://clinpath.1031989.xyz`（4 worker、公网 HTTPS）实测：
 
-| endpoint | before（d67e9d6，HTTP，1 worker） | after（14862207，HTTPS，4 worker） | 倍数 |
+| endpoint | before（d67e9d6，HTTP 直连，1 worker） | after（源站直连，4 worker） | after（经 HTTPS 边缘，4 worker） |
 | --- | --- | --- | --- |
-| `/api/student/dashboard` | 35–42ms | 23–93ms | 持平 |
-| `/api/student/pathway` | **15958–19676ms** | **23–29ms** | ≈ 700× |
-| `/api/student/competency` | 7–8ms | 8–9ms | 持平 |
-| `/api/teacher/dashboard` | 3491–4171ms | 38–110ms | ≈ 60× |
-| `/api/teacher/students/1/learning-profile` | 3363–8009ms | 34–122ms | ≈ 90× |
+| `/api/student/dashboard` | 35–42ms | 23–93ms | 96–173ms |
+| `/api/student/pathway` | **15958–19676ms** | **23–29ms** | **102–185ms** |
+| `/api/student/competency` | 7–8ms | 8–9ms | 95–125ms |
+| `/api/teacher/dashboard` | 3491–4171ms | 38–110ms | 108–123ms |
+| `/api/teacher/students/1/learning-profile` | 3363–8009ms | 34–122ms | 109–197ms |
+
+两列 after 都是真话，量的是不同路径：源站直连（优化后的确定性读路径本身）与经 HTTPS
+边缘（用户实际路径，含 Cloudflare 边缘 + 隧道往返；本次测量从 VPS 自身发出，
+`cf-ray` 显示走 LAX 边缘，因此这 100ms 量级主要是我方测量路径的往返，不代表远端学生
+的绝对体验）。改造前 pathway 慢 16–20 秒，**与走哪条路无关**，因为瓶颈是模型而不是网络。
 
 ### provider 完全不可达时的导航（staging，路径全部 200）
 
@@ -362,6 +367,8 @@ tests/test_ai_enrichment.py                     4 项：worker 真的能产出�
 ```bash
 # 页面延迟（只读）
 python3 scripts/measure_page_latency.py --samples 3
+# 注意：HTTPS 入口经 Cloudflare，默认的 Python-urllib UA 会被边缘拒绝（403）；
+# 该脚本显式声明自己的 UA，而不是伪装成浏览器。
 
 # 一次性 staging 后端：生产库副本 + 迁移到 head + 4 worker
 ./scripts/start_staging_8200.sh
