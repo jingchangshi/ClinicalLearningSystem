@@ -11,7 +11,11 @@ frontend/playwright-report/
 .env
 .env.*
 backend/clinical_learning.db
+backend/clinical_learning.db-wal
+backend/clinical_learning.db-shm
 backups/
 *.db
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite3

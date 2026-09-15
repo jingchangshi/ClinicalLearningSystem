@@ -26,6 +26,7 @@ def init_db(reset: bool = False) -> None:
         Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     _ensure_compatible_schema()
+    _stamp_migrations()
 
     db = SessionLocal()
     try:
@@ -263,6 +264,23 @@ def _make_sp_case(payload: dict) -> SPCase:
         expected_tasks=dumps_json(payload["expected_tasks"]),
         scoring_rubric=dumps_json(payload["scoring_rubric"]),
     )
+
+
+def _stamp_migrations() -> None:
+    """Mark a freshly created database as being at the current migration head.
+
+    ``create_all`` already builds the current schema, so leaving the database
+    unversioned would make the next ``alembic upgrade head`` replay historic
+    migrations against an up-to-date schema.
+    """
+
+    from pathlib import Path
+
+    from alembic import command
+    from alembic.config import Config
+
+    config = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    command.stamp(config, "head")
 
 
 def _ensure_compatible_schema() -> None:
