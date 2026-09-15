@@ -1,18 +1,14 @@
-import json
 from typing import Any
 
 from app.llm.prompts.evaluation import SP_PATIENT_SYSTEM_TEMPLATE
-from app.services.llm_service import llm_service
+from app.services.llm_service import llm_service, prompt_json
 from app.services.serializers import loads_json
 
 
 def generate_patient_reply(sp_case: dict, transcript: list[dict], student_message: str) -> str:
     fallback = _rule_patient_reply(sp_case, student_message)
     system_prompt = _sp_system_prompt(sp_case)
-    user_prompt = json.dumps(
-        {"transcript": transcript, "student_message": student_message},
-        ensure_ascii=False,
-    )
+    user_prompt = prompt_json({"transcript": transcript, "student_message": student_message})
     return llm_service.chat_completion(system_prompt, user_prompt, fallback)
 
 
@@ -23,7 +19,7 @@ def score_sp_session(sp_case: dict, transcript: list[dict], diagnosis_summary: s
 
 
 def _sp_system_prompt(sp_case: dict) -> str:
-    return SP_PATIENT_SYSTEM_TEMPLATE.format(sp_case_json=json.dumps(sp_case, ensure_ascii=False))
+    return SP_PATIENT_SYSTEM_TEMPLATE.format(sp_case_json=prompt_json(sp_case))
 
 
 def _rule_patient_reply(sp_case: dict, student_message: str) -> str:

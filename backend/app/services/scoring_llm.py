@@ -1,10 +1,8 @@
-import json
-from typing import Literal
-
 from pydantic import BaseModel, Field, ValidationError
 
 from app.llm.prompts.evaluation import CASE_EVALUATION_SYSTEM_PROMPT, CASE_EVALUATION_USER_TEMPLATE
-from app.services.serializers import CORE_ABILITIES
+from app.services.llm_service import prompt_json
+from app.services.serializers import ABILITY_LABELS, CORE_ABILITIES
 
 WEIGHTS = {
     "medical_knowledge": 0.20,
@@ -13,6 +11,21 @@ WEIGHTS = {
     "evidence_integration": 0.15,
     "clinical_decision": 0.15,
     "evidence_based_medicine": 0.10,
+}
+
+DIMENSION_KEYWORDS = {
+    "medical_knowledge": ["SLE", "系统性红斑狼疮", "Still", "AOSD", "ANCA", "血管炎", "皮肌炎", "抗合成酶", "诊断标准"],
+    "key_information": ["发热", "皮疹", "蛋白尿", "ANA", "血细胞减少", "补体", "抗体", "肌痛", "肺间质"],
+    "differential_diagnosis": ["感染", "AOSD", "Still", "HLH", "淋巴瘤", "MCTD", "APS", "血管炎"],
+    "evidence_integration": ["支持", "反对", "排除", "证据", "器官受累", "活动度", "矛盾"],
+    "clinical_decision": ["激素", "免疫抑制剂", "感染筛查", "器官受累评估", "随访", "监测", "不良反应"],
+    "evidence_based_medicine": ["指南", "证据", "文献", "推荐级别", "EULAR", "ACR", "共识"],
+}
+
+SAFETY_SIGNALS = {
+    "未提及感染筛查，免疫抑制前存在安全隐患": ["感染筛查", "感染", "筛查", "结核", "乙肝"],
+    "未提及治疗监测或随访计划": ["监测", "随访", "复查", "不良反应"],
+    "未提及器官受累评估": ["器官受累", "肾功能", "尿蛋白", "肺功能", "神经系统"],
 }
 
 
@@ -24,35 +37,16 @@ def score_with_rules(case: dict, answers: list[dict], rubric: dict) -> dict:
     scores = {
         "medical_knowledge": _score_keywords(all_text, _diagnosis_keywords(diagnosis_text), 58, 12),
         "key_information": _score_keywords(
-            answer_by_step.get("key_information", all_text),
-            ["发热", "皮疹", "蛋白尿", "ANA", "血细胞减少", "补体", "抗体", "肌痛", "肺间质"],
-            50,
-            7,
+            answer_by_step.get("key_information", all_text), DIMENSION_KEYWORDS["key_information"], 50, 7
         ),
         "differential_diagnosis": _score_keywords(
-            answer_by_step.get("differential_diagnosis", all_text),
-            ["感染", "AOSD", "Still", "HLH", "淋巴瘤", "MCTD", "APS", "血管炎"],
-            48,
-            8,
+            answer_by_step.get("differential_diagnosis", all_text), DIMENSION_KEYWORDS["differential_diagnosis"], 48, 8
         ),
-        "evidence_integration": _score_keywords(
-            all_text,
-            ["支持", "反对", "排除", "证据", "器官受累", "活动度", "矛盾"],
-            52,
-            7,
-        ),
+        "evidence_integration": _score_keywords(all_text, DIMENSION_KEYWORDS["evidence_integration"], 52, 7),
         "clinical_decision": _score_keywords(
-            answer_by_step.get("treatment", all_text),
-            ["激素", "免疫抑制剂", "感染筛查", "器官受累评估", "随访", "监测", "不良反应"],
-            50,
-            7,
+            answer_by_step.get("treatment", all_text), DIMENSION_KEYWORDS["clinical_decision"], 50, 7
         ),
-        "evidence_based_medicine": _score_keywords(
-            all_text,
-            ["指南", "证据", "文献", "推荐级别", "EULAR", "ACR", "共识"],
-            45,
-            8,
-        ),
+        "evidence_based_medicine": _score_keywords(all_text, DIMENSION_KEYWORDS["evidence_based_medicine"], 45, 8),
     }
     total = round(sum(scores[key] * WEIGHTS[key] for key in CORE_ABILITIES), 1)
     strengths = _strengths(scores)
@@ -62,11 +56,56 @@ def score_with_rules(case: dict, answers: list[dict], rubric: dict) -> dict:
         "total_score": total,
         "strengths": strengths,
         "weaknesses": weaknesses,
+        "dimensions": _rule_dimensions(answers, all_text),
+        "safety_flags": _safety_flags(all_text),
         "feedback": (
             f"本次总分 {total}。{strengths}；{weaknesses}。"
             "下一步建议围绕低分维度复盘诊断依据、鉴别排除和治疗证据。"
         ),
     }
+
+
+def _rule_dimensions(answers: list[dict], all_text: str) -> dict:
+    """Deterministic per-dimension evidence so the UI can always answer "why this score?"."""
+
+    by_step = {item["step"]: item["answer_text"] for item in answers}
+    sources = {
+        "key_information": by_step.get("key_information", all_text),
+        "differential_diagnosis": by_step.get("differential_diagnosis", all_text),
+        "clinical_decision": by_step.get("treatment", all_text),
+    }
+    dimensions: dict[str, dict] = {}
+    for key in CORE_ABILITIES:
+        text = sources.get(key, all_text)
+        keywords = DIMENSION_KEYWORDS[key]
+        hits = [keyword for keyword in keywords if keyword.lower() in text.lower()]
+        missing = [keyword for keyword in keywords if keyword not in hits]
+        coverage = len(hits) / len(keywords) if keywords else 0
+        dimensions[key] = {
+            "score": None,
+            "confidence": round(min(0.9, 0.35 + coverage * 0.5), 2),
+            "evidence": [f"命中要点：{keyword}" for keyword in hits[:5]] or ["未识别到明确的能力要点表述"],
+            "missing_points": [f"未提及：{keyword}" for keyword in missing[:4]],
+            "feedback": _dimension_feedback(key, hits, missing),
+            "source": "rule",
+        }
+    return dimensions
+
+
+def _dimension_feedback(key: str, hits: list[str], missing: list[str]) -> str:
+    label = ABILITY_LABELS.get(key, key)
+    if not missing:
+        return f"{label}要点覆盖完整，建议补充权重说明。"
+    return f"{label}还需补充：{'、'.join(missing[:3])}。"
+
+
+def _safety_flags(text: str) -> list[str]:
+    lowered = text.lower()
+    return [
+        message
+        for message, keywords in SAFETY_SIGNALS.items()
+        if not any(keyword.lower() in lowered for keyword in keywords)
+    ]
 
 
 class DimensionEvaluation(BaseModel):
@@ -93,8 +132,8 @@ def evaluate_case_submission(case: dict, answers: list[dict], rubric: dict, llm_
         raw = llm_service.chat_json(
             CASE_EVALUATION_SYSTEM_PROMPT,
             CASE_EVALUATION_USER_TEMPLATE.format(
-                case=json.dumps(case, ensure_ascii=False), rubric=json.dumps(rubric, ensure_ascii=False),
-                answers=json.dumps(answers, ensure_ascii=False), rule_evidence=json.dumps(rule_score, ensure_ascii=False),
+                case=prompt_json(case), rubric=prompt_json(rubric),
+                answers=prompt_json(answers), rule_evidence=prompt_json(rule_score),
             ),
             fallback,
         )
@@ -107,15 +146,7 @@ def evaluate_case_submission(case: dict, answers: list[dict], rubric: dict, llm_
         if set(evaluation.dimensions) != set(CORE_ABILITIES):
             raise ValueError("unexpected competency dimensions")
     except (ValidationError, ValueError, TypeError):
-        return {
-            **rule_score,
-            "evaluation_mode": "rule_fallback",
-            "degraded": True,
-            "rule_score": rule_score["total_score"],
-            "ai_score": None,
-            "evaluation_detail": {},
-            "safety_flags": [],
-        }
+        return _rule_fallback_result(rule_score)
 
     scores = {key: round(evaluation.dimensions[key].score, 1) for key in CORE_ABILITIES}
     total = round(sum(scores[key] * WEIGHTS[key] for key in CORE_ABILITIES), 1)
@@ -129,8 +160,45 @@ def evaluate_case_submission(case: dict, answers: list[dict], rubric: dict, llm_
         "degraded": False,
         "rule_score": rule_score["total_score"],
         "ai_score": total,
-        "evaluation_detail": evaluation.model_dump(),
+        "evaluation_detail": {
+            "mode": "ai",
+            "dimensions": {
+                key: {**evaluation.dimensions[key].model_dump(), "source": "ai"} for key in CORE_ABILITIES
+            },
+            "strengths": evaluation.strengths,
+            "priority_gaps": evaluation.priority_gaps,
+            "overall_feedback": evaluation.overall_feedback,
+            "safety_flags": evaluation.safety_flags,
+        },
         "safety_flags": evaluation.safety_flags,
+    }
+
+
+def _rule_fallback_result(rule_score: dict) -> dict:
+    """Same contract as the AI path, but explicitly marked as degraded."""
+
+    dimensions = {
+        key: {**rule_score["dimensions"][key], "score": rule_score[key]} for key in CORE_ABILITIES
+    }
+    return {
+        **{key: rule_score[key] for key in CORE_ABILITIES},
+        "total_score": rule_score["total_score"],
+        "strengths": rule_score["strengths"],
+        "weaknesses": rule_score["weaknesses"],
+        "feedback": rule_score["feedback"],
+        "evaluation_mode": "rule_fallback",
+        "degraded": True,
+        "rule_score": rule_score["total_score"],
+        "ai_score": None,
+        "evaluation_detail": {
+            "mode": "rule_fallback",
+            "dimensions": dimensions,
+            "strengths": [rule_score["strengths"]],
+            "priority_gaps": [rule_score["weaknesses"]],
+            "overall_feedback": rule_score["feedback"],
+            "safety_flags": rule_score["safety_flags"],
+        },
+        "safety_flags": rule_score["safety_flags"],
     }
 
 

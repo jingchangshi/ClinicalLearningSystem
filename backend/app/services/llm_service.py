@@ -5,11 +5,15 @@ from typing import Any
 
 from openai import OpenAI
 
+from app.core import ai_audit
+from app.core.ai_runtime import ai_runtime
+from app.core.deidentify import deidentify, deidentify_text
 from app.core.llm_config import (
     LLM_API_KEY,
     LLM_BASE_URL,
     LLM_MAX_RETRIES,
     LLM_MODEL,
+    LLM_PROVIDER,
     LLM_TIMEOUT_SECONDS,
 )
 from app.llm.prompts.evaluation import (
@@ -25,7 +29,17 @@ from app.llm.prompts.pathway import RECOMMENDATION_EXPLANATION_SYSTEM_PROMPT, RE
 logger = logging.getLogger("clinpath.llm")
 
 
-class DeepSeekClient:
+def prompt_json(payload: Any) -> str:
+    """Serialise a prompt payload for the provider.
+
+    Two guarantees in one choke point: it never fails on a datetime or Decimal,
+    and identifier-shaped content is redacted before the payload leaves the box.
+    """
+
+    return json.dumps(deidentify(payload), ensure_ascii=False, default=str)
+
+
+class OpenAICompatibleClient:
     def __init__(self) -> None:
         self.base_url = LLM_BASE_URL
         self.api_key = LLM_API_KEY
@@ -34,7 +48,7 @@ class DeepSeekClient:
     def chat(self, messages: list[dict], temperature: float = 0.3, response_format: dict | None = None):
         kwargs = {
             "model": self.model,
-            "messages": messages,
+            "messages": _sanitised(messages),
             "temperature": temperature,
             "timeout": LLM_TIMEOUT_SECONDS,
         }
@@ -48,14 +62,28 @@ class DeepSeekClient:
         ).chat.completions.create(**kwargs)
 
 
+def _sanitised(messages: list[dict]) -> list[dict]:
+    """Last mile before the provider: no identifier-shaped content leaves here,
+    whatever path assembled the prompt."""
+
+    return [
+        {**message, "content": deidentify_text(str(message.get("content", "")))}
+        for message in messages
+    ]
+
+
 class LLMService:
     def chat_completion(self, system_prompt: str, user_prompt: str, fallback: str) -> str:
         if not LLM_API_KEY:
+            ai_runtime.record_call("rule_fallback", "NotConfigured")
+            ai_audit.report_call(success=False, fallback_used=True, latency_ms=0, error_type="NotConfigured")
             return fallback
         return self._with_retries(lambda: self._chat_text_once(system_prompt, user_prompt), fallback, "text")
 
     def chat_json(self, system_prompt: str, user_prompt: str, fallback: Any) -> Any:
         if not LLM_API_KEY:
+            ai_runtime.record_call("rule_fallback", "NotConfigured")
+            ai_audit.report_call(success=False, fallback_used=True, latency_ms=0, error_type="NotConfigured")
             return fallback
         return self._with_retries(lambda: self._chat_json_once(system_prompt, user_prompt, fallback), fallback, "json")
 
@@ -78,7 +106,7 @@ class LLMService:
                 "{\"explanations\":{\"task_key\":\"简洁、基于能力画像的训练理由\"}}。"
                 "不得预测未经验证的学习增益。"
             ),
-            json.dumps({"profile": profile, "recent_evidence": recent_evidence, "tasks": tasks}, ensure_ascii=False),
+            prompt_json({"profile": profile, "recent_evidence": recent_evidence, "tasks": tasks}),
             fallback,
         )
         explanations = payload.get("explanations") if isinstance(payload, dict) else None
@@ -89,12 +117,9 @@ class LLMService:
     def generate_sp_feedback(self, sp_case: dict, transcript: list[dict], diagnosis_summary: str, fallback: dict) -> dict:
         payload = self.chat_json(
             (
-                SP_FEEDBACK_SYSTEM_TEMPLATE.format(sp_case_json=json.dumps(sp_case, ensure_ascii=False))
+                SP_FEEDBACK_SYSTEM_TEMPLATE.format(sp_case_json=prompt_json(sp_case))
             ),
-            json.dumps(
-                {"transcript": transcript, "diagnosis_summary": diagnosis_summary},
-                ensure_ascii=False,
-            ),
+            prompt_json({"transcript": transcript, "diagnosis_summary": diagnosis_summary}),
             fallback,
         )
         return payload if isinstance(payload, dict) else fallback
@@ -147,25 +172,68 @@ class LLMService:
         last_error: Exception | None = None
         started = time.monotonic()
         for attempt in range(max(1, LLM_MAX_RETRIES + 1)):
+            attempt_started = time.monotonic()
             try:
                 result = operation()
                 if result:
+                    ai_runtime.record_call("ai")
+                    ai_audit.report_call(
+                        success=True,
+                        fallback_used=False,
+                        latency_ms=round((time.monotonic() - attempt_started) * 1000),
+                    )
                     return result
                 last_error = ValueError("LLM returned an empty response")
+                ai_audit.report_call(
+                    success=False,
+                    fallback_used=False,
+                    latency_ms=round((time.monotonic() - attempt_started) * 1000),
+                    error_type="EmptyResponse",
+                )
             except Exception as error:
                 last_error = error
+                ai_audit.report_call(
+                    success=False,
+                    fallback_used=False,
+                    latency_ms=round((time.monotonic() - attempt_started) * 1000),
+                    error_type=type(error).__name__,
+                )
                 logger.warning(
-                    "LLM degraded provider=deepseek model=%s operation=%s failure_type=%s retry=%s latency_ms=%s",
-                    LLM_MODEL, operation_name, type(error).__name__, attempt,
+                    "LLM degraded provider=%s model=%s operation=%s failure_type=%s retry=%s latency_ms=%s",
+                    LLM_PROVIDER, LLM_MODEL, operation_name, type(error).__name__, attempt,
                     round((time.monotonic() - started) * 1000),
                 )
                 continue
         if last_error:
             logger.warning("LLM fallback used operation=%s", operation_name)
+            ai_runtime.record_call("rule_fallback", type(last_error).__name__)
+            ai_audit.report_call(
+                success=False,
+                fallback_used=True,
+                latency_ms=0,
+                error_type=type(last_error).__name__,
+            )
         return fallback
 
-    def _client(self) -> DeepSeekClient:
-        return DeepSeekClient()
+    def probe(self) -> dict:
+        """One real, minimal request. Never returns or logs provider output."""
+
+        if not LLM_API_KEY:
+            ai_runtime.record_probe(False, None, "NotConfigured")
+            return {"reachable": False, "latency_ms": None, "error_type": "NotConfigured"}
+        started = time.monotonic()
+        try:
+            self._client().chat([{"role": "user", "content": "Reply: ok"}], temperature=0)
+            latency_ms = round((time.monotonic() - started) * 1000)
+            ai_runtime.record_probe(True, latency_ms, None)
+            return {"reachable": True, "latency_ms": latency_ms, "error_type": None}
+        except Exception as error:
+            latency_ms = round((time.monotonic() - started) * 1000)
+            ai_runtime.record_probe(False, latency_ms, type(error).__name__)
+            return {"reachable": False, "latency_ms": latency_ms, "error_type": type(error).__name__}
+
+    def _client(self) -> OpenAICompatibleClient:
+        return OpenAICompatibleClient()
 
 
 llm_service = LLMService()
@@ -184,7 +252,7 @@ def generate_reasoning_question(case: dict, step: str, student_answer: str) -> s
         REASONING_QUESTION_SYSTEM_PROMPT,
         REASONING_QUESTION_USER_TEMPLATE.format(
             title=case.get("title"),
-            case_context=json.dumps(case, ensure_ascii=False),
+            case_context=prompt_json(case),
             step=step,
             student_answer=student_answer,
         ),

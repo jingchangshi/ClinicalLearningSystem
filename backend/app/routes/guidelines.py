@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, student_id_from_user
+from app.core.ai_audit import ai_invocation
 from app.database import get_db
 from app.models import GuidelineDocument, GuidelineLearningSession, Student, User
 from app.services.competency_update_service import update_competency_from_guideline
@@ -58,12 +59,17 @@ def submit_pico(
 
     recommendations = loads_json(guideline.recommendations, [])
     pico_examples = loads_json(guideline.pico_examples, [])
-    result = score_guideline_pico(
-        serialize_guideline(guideline),
-        payload.model_dump(),
-        recommendations,
-        pico_examples,
-    )
+    with ai_invocation(
+        "guideline_rationale",
+        student_id=student_id,
+        evidence_ref=f"guideline:{guideline_id}",
+    ):
+        result = score_guideline_pico(
+            serialize_guideline(guideline),
+            payload.model_dump(),
+            recommendations,
+            pico_examples,
+        )
 
     session = GuidelineLearningSession(
         student_id=student_id,

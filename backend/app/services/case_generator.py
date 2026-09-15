@@ -1,8 +1,7 @@
-import json
 from typing import Any
 
 from app.llm.prompts.case_generation import CASE_GENERATION_SYSTEM_PROMPT
-from app.services.llm_service import llm_service
+from app.services.llm_service import llm_service, prompt_json
 
 REQUIRED_CASE_FIELDS = [
     "title",
@@ -94,7 +93,7 @@ def fallback_rule_case(prompt: dict) -> dict:
 
 
 def _case_user_prompt(prompt: dict) -> str:
-    return json.dumps(
+    return prompt_json(
         {
             "生成要求": prompt,
             "必须字段": REQUIRED_CASE_FIELDS,
@@ -106,8 +105,7 @@ def _case_user_prompt(prompt: dict) -> str:
                 "clinical_decision",
                 "evidence_based_medicine",
             ],
-        },
-        ensure_ascii=False,
+        }
     )
 
 
