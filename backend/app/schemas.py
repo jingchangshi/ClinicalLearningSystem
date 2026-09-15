@@ -70,6 +70,11 @@ class CoachRequest(BaseModel):
     answer_text: str
 
 
+class TutorRequest(BaseModel):
+    step: str
+    message: str | None = None
+
+
 class ScoreRead(BaseModel):
     id: int
     total_score: float

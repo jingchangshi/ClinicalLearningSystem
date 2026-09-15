@@ -5,6 +5,7 @@ from sqlalchemy.orm import sessionmaker
 from app.database import Base, get_db
 from app.main import app
 from app.auth import hash_password
+from app.core.reasoning_steps import REQUIRED_STEP_KEYS
 import pytest
 
 from app.models import Case, CaseSession, CompetencyProfile, LearningEvidenceEvent, Score, Student, Teacher, TeacherScoreReview, User
@@ -124,7 +125,19 @@ def test_teacher_review_reprojects_from_authoritative_score(tmp_path):
         with TestClient(app) as student_client:
             assert student_client.post("/api/auth/register", json={"username": "learner", "password": "secret1", "role": "student"}).status_code == 200
             session_id = student_client.post("/api/sessions/start", json={"case_id": 1}).json()["id"]
-            assert student_client.post(f"/api/sessions/{session_id}/answers", json={"step": "reasoning", "answer_text": "fever rash ANA"}).status_code == 200
+            for step, text in zip(
+                REQUIRED_STEP_KEYS,
+                [
+                    "发热、皮疹、ANA阳性，需评估器官受累。",
+                    "考虑SLE，依据症状与抗体。",
+                    "需排除感染、淋巴瘤与HLH。",
+                    "补充补体、尿蛋白与肺功能检查。",
+                    "激素联合免疫抑制剂，治疗前感染筛查并随访监测。",
+                ],
+            ):
+                assert student_client.post(
+                    f"/api/sessions/{session_id}/answers", json={"step": step, "answer_text": text}
+                ).status_code == 200
             assert student_client.post(f"/api/sessions/{session_id}/submit").status_code == 200
             assert student_client.get("/api/teacher/reviewable-evidence").status_code == 403
 
