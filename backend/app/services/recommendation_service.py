@@ -1,3 +1,5 @@
+from app.core.ai_audit import ai_invocation
+from app.services.catalog_tags import MODULE_LABELS, item_tags
 from app.services.llm_service import llm_service
 from app.services.serializers import ALL_COMPETENCIES, ABILITY_LABELS, CORE_ABILITIES
 
@@ -23,6 +25,23 @@ PATHWAY_STAGES = [
         "description": "将指南、证据等级和研究结论纳入临床决策。",
     },
 ]
+
+
+MODULE_ACTIVITY_KEYS = {
+    "case": "cases",
+    "knowledge_unit": "knowledge_units",
+    "clinical_skill": "clinical_skills",
+    "guideline": "guidelines",
+    "sp_case": "sp_cases",
+}
+
+REASON_TEMPLATES = {
+    "knowledge_unit": "医学知识得分 {score}，先补齐核心概念再做题。",
+    "clinical_skill": "技能操作得分 {score}，通过步骤训练补足操作与安全要点。",
+    "case": "该病例的推理目标直接命中当前能力缺口（{score}），用于迁移应用。",
+    "guideline": "循证医学得分 {score}，通过指南 PICO 训练证据等级与推荐表达。",
+    "sp_case": "信息采集与沟通得分 {score}，通过标准化病人问诊训练。",
+}
 
 
 def determine_pathway_stage(profile: dict) -> str:
@@ -55,31 +74,31 @@ def choose_recommendation(profile: dict, recent_scores: list[dict], cases: list[
 def explain_recommendation_with_llm(profile: dict, latest_scores: dict, task: dict, fallback: str) -> str:
     weak_keys = weakest_abilities(profile, limit=3, use_expanded=True) if profile else []
     weak_text = "、".join(f"{ABILITY_LABELS.get(key, key)}={profile.get(key)}" for key in weak_keys) or "由当前任务优先级和训练类型判断"
-    return llm_service.explain_recommendation(
-        {"主要能力缺口": weak_text, **profile},
-        latest_scores,
-        task,
-        fallback,
-    )
+    with ai_invocation("recommendation_explanation", evidence_ref=f"case:{task.get('id')}"):
+        return llm_service.explain_recommendation(
+            {"主要能力缺口": weak_text, **profile},
+            latest_scores,
+            task,
+            fallback,
+        )
 
 
 def build_learning_pathway(student_profile: dict, recent_activity: dict) -> dict:
     current_stage = determine_pathway_stage(student_profile)
     weak_keys = weakest_abilities(student_profile, limit=5, use_expanded=True)
-    recommended_tasks: list[dict] = []
-
-    for key in weak_keys:
-        recommended_tasks.extend(_tasks_for_ability(key, student_profile, recent_activity))
-
-    unique_tasks = _dedupe_tasks(recommended_tasks)[:3]
-    explanations = llm_service.explain_recommendation_batch(
-        student_profile,
-        recent_activity.get("recent_evidence", {}),
-        [
-            {"task_key": _task_key(task), "title": task["title"], "type": task["type"], "priority": task["priority"], "fallback_reason": task["reason"]}
-            for task in unique_tasks
-        ],
-    )
+    # Learner gap -> candidate generator -> constraint filter -> ranker.
+    candidates = generate_candidates(weak_keys, recent_activity)
+    admissible = apply_constraints(candidates, student_profile)
+    unique_tasks = rank_candidates(admissible, student_profile, weak_keys)[:3]
+    with ai_invocation("recommendation_explanation", evidence_ref="learning_pathway"):
+        explanations = llm_service.explain_recommendation_batch(
+            student_profile,
+            recent_activity.get("recent_evidence", {}),
+            [
+                {"task_key": _task_key(task), "title": task["title"], "type": task["type"], "priority": task["priority"], "fallback_reason": task["reason"]}
+                for task in unique_tasks
+            ],
+        )
     for task in unique_tasks:
         task["reason"] = explanations.get(_task_key(task), task["reason"])
     return {
@@ -89,27 +108,168 @@ def build_learning_pathway(student_profile: dict, recent_activity: dict) -> dict
     }
 
 
+def generate_candidates(weak_abilities_order: list[str], recent_activity: dict) -> list[dict]:
+    """Every catalog item whose own tags target one of the learner's weak abilities."""
+
+    candidates: list[dict] = []
+    for module_type, activity_key in MODULE_ACTIVITY_KEYS.items():
+        for item in recent_activity.get(activity_key) or []:
+            tags = item_tags(module_type, item)
+            for ability in weak_abilities_order:
+                if ability in tags["abilities"]:
+                    candidates.append(
+                        {
+                            "type": module_type,
+                            "id": item["id"],
+                            "title": item["title"],
+                            "matched_ability": ability,
+                            "tags": tags,
+                        }
+                    )
+                    break
+    return candidates
+
+
+def apply_constraints(candidates: list[dict], profile: dict) -> list[dict]:
+    """Drop candidates whose difficulty the learner is not ready for.
+
+    A weak learner is not handed advanced material it cannot act on yet; a strong
+    learner is not handed material that no longer produces information.
+    """
+
+    admissible: list[dict] = []
+    for candidate in candidates:
+        tags = candidate["tags"]
+        score = profile.get(candidate["matched_ability"], 100)
+        rank = tags["difficulty_rank"]
+        if score < 70 and rank >= 3:
+            continue
+        if score >= 80 and rank < 2:
+            continue
+        if any(profile.get(key, 0) < required for key, required in tags["prerequisites"].items()):
+            continue
+        admissible.append(candidate)
+    return admissible or candidates
+
+
+def rank_candidates(candidates: list[dict], profile: dict, weak_keys: list[str]) -> list[dict]:
+    """Score by gap match, difficulty fit and module diversity; deterministic ties."""
+
+    scored: list[tuple[float, str, int, dict]] = []
+    for candidate in candidates:
+        ability = candidate["matched_ability"]
+        score = profile.get(ability, 100)
+        rank = candidate["tags"]["difficulty_rank"]
+        value = 0.0
+        value += 3 if weak_keys and ability == weak_keys[0] else 0
+        value += 2 if ability in weak_keys[:3] else 0
+        # Difficulty fit: a weak learner gets foundational material, a stronger one
+        # gets material that still produces information.
+        value += _difficulty_fit(score, rank)
+        value += min(1.0, max(0.0, (100 - score) / 100))
+        scored.append((round(value, 3), candidate["type"], candidate["id"], candidate))
+
+    ranked = [item for _, _, _, item in sorted(scored, key=lambda row: (-row[0], row[1], row[2]))]
+
+    # Prefer a spread of module types in the final shortlist.
+    selected: list[dict] = []
+    seen_types: set[str] = set()
+    for candidate in ranked:
+        if candidate["type"] in seen_types:
+            continue
+        selected.append(candidate)
+        seen_types.add(candidate["type"])
+    for candidate in ranked:
+        if candidate not in selected:
+            selected.append(candidate)
+
+    return [_task_payload(item, profile) for item in selected[:3]]
+
+
+def _task_payload(candidate: dict, profile: dict) -> dict:
+    module_type = candidate["type"]
+    ability = candidate["matched_ability"]
+    score = profile.get(ability, 100)
+    template = REASON_TEMPLATES.get(module_type, "能力画像提示{ability}需要优先干预。")
+    reason = template.format(score=score, ability=ABILITY_LABELS.get(ability, ability))
+    return {
+        "type": module_type,
+        "id": candidate["id"],
+        "title": candidate["title"],
+        "reason": reason,
+        "priority": _priority_from_gap(score),
+        "target_abilities": candidate["tags"]["ability_labels"],
+        "source_evidence": (
+            f"能力画像：{ABILITY_LABELS.get(ability, ability)} {score}"
+            f"（{MODULE_LABELS.get(module_type, module_type)}的标签命中该能力缺口）。"
+        ),
+        "priority_label": _expected_lift(_priority_from_gap(score)),
+        "difficulty_label": candidate["tags"]["difficulty"] or "自适应",
+        "next_step_label": _next_step_label(module_type),
+    }
+
+
+def _priority_from_gap(score: float) -> int:
+    if score < 55:
+        return 96
+    if score < 65:
+        return 92
+    if score < 75:
+        return 88
+    return 84
+
+
+def readiness_rank(score: float) -> int:
+    """Which difficulty band the learner's current score calls for."""
+
+    if score < 65:
+        return 1
+    if score < 80:
+        return 2
+    return 3
+
+
+def _difficulty_fit(score: float, rank: int) -> float:
+    readiness = readiness_rank(score)
+    if rank == readiness:
+        return 1.0
+    if abs(rank - readiness) == 1:
+        return 0.5
+    return 0.0
+
+
 def _task_key(task: dict) -> str:
     return f"{task['type']}:{task['id']}"
 
 
 def _pick_case(scores: dict, cases: list[dict]) -> dict:
-    title_preference = None
-    if scores.get("differential_diagnosis", 100) < 60:
-        title_preference = ["SLE与感染鉴别病例", "成人Still病病例"]
-    elif scores.get("medical_knowledge", 100) < 60:
-        title_preference = ["SLE基础病例"]
-    elif scores.get("clinical_decision", 100) < 60:
-        title_preference = ["ANCA相关血管炎病例"]
-    elif scores.get("total_score", 0) > 85:
-        title_preference = ["皮肌炎/抗合成酶综合征病例"]
+    """Candidate selection on structured case tags only.
 
-    if title_preference:
-        for title in title_preference:
-            for case in cases:
-                if title in case["title"]:
-                    return case
-    return cases[0]
+    Titles are content; matching on them made the planner depend on how a case
+    happens to be named. This uses the machine-readable tags from
+    ``catalog_tags.item_tags`` (abilities / difficulty / category) instead.
+    """
+
+    if not cases:
+        return {}
+    weakest = min(CORE_ABILITIES, key=lambda key: scores.get(key, 100))
+    ranked = sorted(
+        cases,
+        key=lambda case: (-_case_fit_score(case, weakest), case["id"]),
+    )
+    return ranked[0]
+
+
+def _case_fit_score(case: dict, weakest_ability: str) -> int:
+    tags = item_tags("case", case)
+    if weakest_ability not in tags["abilities"]:
+        return 0
+    rank = tags["difficulty_rank"]
+    # A weak learner starts on basic material; an established gap in reasoning or
+    # evidence handling needs a harder case to be informative.
+    if weakest_ability in {"medical_knowledge", "key_information"}:
+        return 4 if rank <= 1 else 2
+    return 4 if rank >= 2 else 2
 
 
 def _recommendation_reason(scores: dict, case: dict) -> str:
@@ -123,210 +283,6 @@ def _recommendation_reason(scores: dict, case: dict) -> str:
         "evidence_based_medicine": "循证医学意识需要提升",
     }
     return f"{labels[weakest]}，推荐继续训练“{case['title']}”。"
-
-
-def _tasks_for_ability(key: str, profile: dict, recent_activity: dict) -> list[dict]:
-    tasks = []
-    score = profile.get(key, 100)
-    if key == "medical_knowledge":
-        tasks.append(
-            _first_task(
-                recent_activity.get("knowledge_units", []),
-                "knowledge_unit",
-                f"医学知识得分 {score}，建议先补齐核心概念。",
-                95,
-            )
-        )
-        tasks.append(
-            _case_task(
-                recent_activity.get("cases", []),
-                ["基础", "SLE基础", "生成病例"],
-                f"医学知识薄弱，需要通过基础病例迁移应用。",
-                90,
-            )
-        )
-    elif key == "key_information":
-        tasks.append(
-            _first_task(
-                recent_activity.get("sp_cases", []),
-                "sp_case",
-                f"关键信息提取得分 {score}，建议通过 SP 问诊训练信息收集。",
-                95,
-            )
-        )
-        tasks.append(
-            _first_task(
-                recent_activity.get("clinical_skills", []),
-                "clinical_skill",
-                "通过查体或操作流程训练补充体征信息采集能力。",
-                90,
-            )
-        )
-        tasks.append(
-            _case_task(
-                recent_activity.get("cases", []),
-                ["基础", "SLE基础"],
-                "通过基础病例练习关键阳性和关键阴性提取。",
-                88,
-            )
-        )
-    elif key == "differential_diagnosis":
-        tasks.append(
-            _case_task(
-                recent_activity.get("cases", []),
-                ["感染", "成人Still", "鉴别", "进阶"],
-                f"鉴别诊断得分 {score}，建议训练复杂症状群病例。",
-                96,
-            )
-        )
-        tasks.append(
-            _first_task(
-                recent_activity.get("sp_cases", []),
-                "sp_case",
-                "通过 SP 问诊补充鉴别诊断所需病史线索。",
-                86,
-            )
-        )
-    elif key == "evidence_integration":
-        tasks.append(
-            _case_task(
-                recent_activity.get("cases", []),
-                ["血管炎", "感染", "进阶"],
-                f"证据整合得分 {score}，建议训练支持证据与反证权重。",
-                94,
-            )
-        )
-        tasks.append(
-            _first_task(
-                recent_activity.get("guidelines", []),
-                "guideline",
-                "结合指南 PICO 练习提升证据整合。",
-                84,
-            )
-        )
-    elif key == "clinical_decision":
-        tasks.append(
-            _first_task(
-                recent_activity.get("guidelines", []),
-                "guideline",
-                f"临床决策得分 {score}，建议先阅读治疗推荐和风险监测。",
-                94,
-            )
-        )
-        tasks.append(
-            _first_task(
-                recent_activity.get("clinical_skills", []),
-                "clinical_skill",
-                "通过技能站训练将适应证、禁忌证和安全监测纳入决策。",
-                90,
-            )
-        )
-        tasks.append(
-            _case_task(
-                recent_activity.get("cases", []),
-                ["血管炎", "皮肌炎", "高阶", "进阶"],
-                "通过高阶病例练习治疗决策、感染筛查和随访计划。",
-                88,
-            )
-        )
-    elif key == "evidence_based_medicine":
-        tasks.append(
-            _first_task(
-                recent_activity.get("guidelines", []),
-                "guideline",
-                f"循证医学得分 {score}，建议完成指南 PICO 学习任务。",
-                96,
-                source_evidence="指南PICO训练记录提示证据等级和临床适用性表达不足。",
-            )
-        )
-    elif key == "skill_operation":
-        tasks.append(
-            _first_task(
-                recent_activity.get("clinical_skills", []),
-                "clinical_skill",
-                f"技能操作得分 {score}，建议完成临床技能步骤训练。",
-                95,
-                source_evidence="技能步骤评分提示完整性、顺序或安全性仍需加强。",
-            )
-        )
-    elif key == "communication":
-        tasks.append(
-            _first_task(
-                recent_activity.get("sp_cases", []),
-                "sp_case",
-                f"医患沟通得分 {score}，建议通过 SP 问诊训练表达结构与回应方式。",
-                94,
-                source_evidence="SP-OSCE沟通表达评分低于目标水平。",
-            )
-        )
-    elif key == "humanistic_care":
-        tasks.append(
-            _first_task(
-                recent_activity.get("sp_cases", []),
-                "sp_case",
-                f"人文关怀得分 {score}，建议通过标准化病人训练共情回应。",
-                92,
-                source_evidence="SP-OSCE人文关怀维度提示需加强患者担忧回应。",
-            )
-        )
-    return [task for task in tasks if task]
-
-
-def _first_task(
-    items: list[dict],
-    task_type: str,
-    reason: str,
-    priority: int,
-    source_evidence: str | None = None,
-) -> dict | None:
-    if not items:
-        return None
-    item = items[0]
-    return _make_task(task_type, item, reason, priority, source_evidence)
-
-
-def _case_task(cases: list[dict], title_keywords: list[str], reason: str, priority: int) -> dict | None:
-    for keyword in title_keywords:
-        for case in cases:
-            text = f"{case.get('title', '')} {case.get('difficulty', '')} {case.get('disease_category', '')}"
-            if keyword in text:
-                return _make_task("case", case, reason, priority)
-    return _first_task(cases, "case", reason, priority)
-
-
-def _make_task(
-    task_type: str,
-    item: dict,
-    reason: str,
-    priority: int,
-    source_evidence: str | None = None,
-) -> dict:
-    target_abilities = _target_abilities(task_type)
-    fallback_evidence = source_evidence or _source_evidence(task_type, target_abilities)
-    return {
-        "type": task_type,
-        "id": item["id"],
-        "title": item["title"],
-        "reason": reason,
-        "priority": priority,
-        "target_abilities": target_abilities,
-        "source_evidence": fallback_evidence,
-        "priority_label": _expected_lift(priority),
-        "difficulty_label": item.get("difficulty") or item.get("level") or "自适应",
-        "next_step_label": _next_step_label(task_type),
-    }
-
-
-def _dedupe_tasks(tasks: list[dict]) -> list[dict]:
-    seen = set()
-    unique = []
-    for task in sorted(tasks, key=lambda item: item["priority"], reverse=True):
-        key = (task["type"], task["id"])
-        if key in seen:
-            continue
-        seen.add(key)
-        unique.append(task)
-    return unique
 
 
 def _target_abilities(task_type: str) -> list[str]:
