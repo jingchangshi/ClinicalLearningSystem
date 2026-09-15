@@ -5,6 +5,15 @@ const apiBase = process.env.INTERNAL_API_BASE_URL ?? "http://127.0.0.1:8100/api"
 const backendOrigin = apiBase.endsWith("/api") ? apiBase.slice(0, -4) : apiBase;
 
 /**
+ * When the pilot is published over HTTPS, anything that arrives through a
+ * plain-HTTP proxy is bounced to the secure host. The header condition means
+ * this only fires for requests that really came in over HTTP (the tunnel sets
+ * `x-forwarded-proto`); a direct local `http://127.0.0.1:8101` request during
+ * development has no such header and keeps working.
+ */
+const httpsHost = process.env.CLINPATH_HTTPS_HOST;
+
+/**
  * Stamp the build with the source revision at build time, so the running
  * frontend can always be compared with the checkout — even if someone builds
  * with a bare `npm run build` instead of the service script.
@@ -43,6 +52,17 @@ const nextConfig: NextConfig = {
       {
         source: "/api/:path*",
         destination: `${backendOrigin}/api/:path*`,
+      },
+    ];
+  },
+  async redirects() {
+    if (!httpsHost) return [];
+    return [
+      {
+        source: "/:path*",
+        has: [{ type: "header", key: "x-forwarded-proto", value: "http" }],
+        destination: `https://${httpsHost}/:path*`,
+        permanent: false,
       },
     ];
   },

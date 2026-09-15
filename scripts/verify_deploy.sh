@@ -11,7 +11,9 @@
 set -uo pipefail
 
 REPO_ROOT="${CLINPATH_REPO_ROOT:-/home/jcshi/workspace/clinical_learning_system}"
-PUBLIC_BASE="${CLINPATH_PUBLIC_BASE:-http://129.153.118.58:8101}"
+# The pilot entry is HTTPS (Cloudflare tunnel -> 127.0.0.1:8101). Override with
+# CLINPATH_PUBLIC_BASE for a deployment that still serves plain HTTP on 8101.
+PUBLIC_BASE="${CLINPATH_PUBLIC_BASE:-https://clinpath.1031989.xyz}"
 INTERNAL="${CLINPATH_INTERNAL_API:-http://127.0.0.1:8100}"
 failures=0
 

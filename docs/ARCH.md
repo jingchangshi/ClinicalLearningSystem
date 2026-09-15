@@ -488,12 +488,42 @@ quiz/skill/pico 提交），断言任何响应体都不包含隐藏标记；再�
 SP 对话与 transcript —— 那是问诊中「问出来」的内容，并且另有测试证明
 无关提问不会返回整段隐藏病史。
 
-## 11. 公网部署形态（当前 vs 目标）
+## 11. 公网部署形态（当前 = 目标）
 
-当前入口是裸 HTTP：`http://129.153.118.58:8101`（Next.js），后端 `127.0.0.1:8100` 不对外。
-这**不是**理想的生产形态，也不是本文档认可的最终架构。
+试点入口已经是 HTTPS：
 
-目标形态：
+```text
+Internet
+    |
+    v
+https://clinpath.1031989.xyz        (Cloudflare edge TLS)
+    |
+    v
+cloudflared 隧道（出站连接，本机不新监听端口）
+    |
+    v
+Next.js 127.0.0.1:8101              (仅 loopback)
+    |
+    v
+FastAPI 127.0.0.1:8100              (内部；公网 IP:8101 已不再可达)
+```
+
+- TLS 由 Cloudflare 边缘终止，`deploy/cloudflared/clinpath-pilot.yml.example` +
+  `deploy/systemd-user/clinical-https.service` 固定这条路径；**本机不新增监听端口**。
+  这台机器上 443 已被无关服务占用，且没有可用域名证书链，因此没有采用
+  Caddy/Nginx + Let's Encrypt 形态。
+- 明文 HTTP 请求（`x-forwarded-proto: http`）由前端 307 跳转到
+  `https://clinpath.1031989.xyz`（`frontend/next.config.ts`，仅在设置
+  `CLINPATH_HTTPS_HOST` 时启用）。
+- `COOKIE_SECURE=true`（operator 环境文件，不进仓库）：浏览器只在 HTTPS 下保存会话
+  cookie，明文入口失效时是「登录不成功」而不是「明文传输会话」。
+- 前端只监听 loopback（`CLINPATH_FRONTEND_HOST=127.0.0.1`），
+  `http://129.153.118.58:8101` 不再是可用入口；`verify_deploy.sh` 默认检查
+  `https://clinpath.1031989.xyz`，可用 `CLINPATH_PUBLIC_BASE` 覆盖。
+- 回退路径（若隧道不可用）：`CLINPATH_FRONTEND_HOST=0.0.0.0` 重启前端 +
+  `COOKIE_SECURE=false`，即回到旧的裸 HTTP 形态；这只是应急，不再作为目标架构。
+
+历史目标形态（若将来改为自建反代）：
 
 ```text
 Domain

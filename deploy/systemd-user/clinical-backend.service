@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/home/jcshi/workspace/clinical_learning_system/backend
-Environment=FRONTEND_ORIGINS=http://129.153.118.58:8101,http://localhost:8101,http://127.0.0.1:8101
+Environment=FRONTEND_ORIGINS=https://clinpath.1031989.xyz,http://129.153.118.58:8101,http://localhost:8101,http://127.0.0.1:8101
 Environment=CLINPATH_ENV=production
 EnvironmentFile=%h/.config/clinpath/backend.env
 ExecStart=/home/jcshi/workspace/clinical_learning_system/scripts/start_backend_8100.sh

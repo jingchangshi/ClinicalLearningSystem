@@ -324,9 +324,9 @@ def _run(kind: str, student_id: int | None) -> None:
         if kind == KIND_PATHWAY and student_id is not None:
             regenerate_pathway(db, student_id)
         elif kind == KIND_TEACHER_INSIGHT:
-            from app.routes.teacher import build_and_store_teacher_insight
+            from app.routes.teacher import build_teacher_insight_text
 
-            regenerate_teacher_insight(db, build_and_store_teacher_insight)
+            regenerate_teacher_insight(db, build_teacher_insight_text)
     except Exception as error:  # enrichment is optional; never break the request path
         db.rollback()
         logger.warning(

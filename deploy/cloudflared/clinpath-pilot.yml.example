@@ -1,0 +1,24 @@
+# HTTPS entry for the ClinPath pilot.
+#
+# Cloudflare terminates TLS at its edge and the tunnel dials out, so the VPS
+# needs no inbound port (443 on this host is already owned by an unrelated
+# service, and opening it would also need firewall changes we cannot make
+# without the cloud credentials).
+#
+#   cloudflared tunnel create clinpath-pilot
+#   cloudflared tunnel route dns clinpath-pilot clinpath.1031989.xyz
+#   install -m 600 deploy/cloudflared/clinpath-pilot.yml.example ~/.cloudflared/clinpath-pilot.yml
+#   # replace <tunnel-id> below with the id printed by `cloudflared tunnel create`
+#
+# The credentials JSON stays in ~/.cloudflared/ and is never committed.
+
+tunnel: <tunnel-id>
+credentials-file: /home/jcshi/.cloudflared/<tunnel-id>.json
+
+ingress:
+  - hostname: clinpath.1031989.xyz
+    service: http://127.0.0.1:8101
+  # Everything else is refused by this tunnel: it publishes exactly one host.
+  - service: http_status:404
+
+metrics: 127.0.0.1:20300

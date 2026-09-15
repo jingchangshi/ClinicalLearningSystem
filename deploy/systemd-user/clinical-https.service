@@ -1,0 +1,16 @@
+[Unit]
+Description=ClinPath HTTPS entry (Cloudflare tunnel)
+After=network-online.target clinical-frontend.service
+Wants=network-online.target
+
+# Publishes https://clinpath.1031989.xyz -> 127.0.0.1:8101.
+# Cloudflare terminates TLS at its edge; nothing new listens on this host.
+# Setup: deploy/cloudflared/clinpath-pilot.yml.example
+[Service]
+Type=simple
+ExecStart=/home/jcshi/.local/bin/cloudflared --no-autoupdate --config /home/jcshi/.cloudflared/clinpath-pilot.yml tunnel run
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
