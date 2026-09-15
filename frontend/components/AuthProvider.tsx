@@ -37,7 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await apiLogin(username, password);
       const currentUser = await getMe();
       setUser(currentUser);
-      router.replace(safeNextPath(nextPath) ?? dashboardPath(currentUser));
+      router.replace(safeNextPath(nextPath, currentUser) ?? dashboardPath(currentUser));
       router.refresh();
       return currentUser;
     } finally {
@@ -140,9 +140,10 @@ function dashboardPath(user: User) {
   return user.role === "student" ? "/student/dashboard" : "/teacher/dashboard";
 }
 
-function safeNextPath(nextPath?: string | null) {
+function safeNextPath(nextPath: string | null | undefined, user: User) {
   if (!nextPath?.startsWith("/") || nextPath.startsWith("//")) return null;
-  if (nextPath.startsWith("/student") || nextPath.startsWith("/teacher")) return nextPath;
+  if (user.role === "student" && nextPath.startsWith("/student")) return nextPath;
+  if ((user.role === "teacher" || user.role === "admin") && nextPath.startsWith("/teacher")) return nextPath;
   return null;
 }
 

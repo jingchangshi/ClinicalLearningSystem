@@ -11,7 +11,12 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import User
 
-JWT_SECRET = os.getenv("JWT_SECRET", "dev-clinpath-change-me")
+_environment = os.getenv("CLINPATH_ENV", "development").lower()
+JWT_SECRET = os.getenv("JWT_SECRET")
+if not JWT_SECRET:
+    if _environment == "production":
+        raise RuntimeError("JWT_SECRET must be configured when CLINPATH_ENV=production")
+    JWT_SECRET = "dev-clinpath-change-me"
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = int(os.getenv("ACCESS_TOKEN_EXPIRE_HOURS", "12"))
 logger = logging.getLogger("uvicorn.error")
@@ -43,11 +48,6 @@ def get_current_user(
     db: Annotated[Session, Depends(get_db)],
 ) -> User:
     token = request.cookies.get("access_token")
-    logger.info(
-        "auth.me cookie_keys=%s access_token_present=%s",
-        sorted(request.cookies.keys()),
-        bool(token),
-    )
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -56,7 +56,6 @@ def get_current_user(
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         user_id = int(payload["sub"])
-        logger.info("auth.me token_valid=true user_id=%s", user_id)
     except (jwt.PyJWTError, KeyError, ValueError):
         logger.warning("auth.me token_valid=false")
         raise HTTPException(

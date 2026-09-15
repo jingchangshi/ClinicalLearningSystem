@@ -123,6 +123,16 @@ export type Score = {
   feedback: string;
   strengths: string;
   weaknesses: string;
+  evaluation_mode: "ai" | "rule_fallback";
+  rule_score: number | null;
+  ai_score: number | null;
+  teacher_confirmed_score: number | null;
+  teacher_override_reason: string | null;
+  degraded: boolean;
+  evaluation_detail: {
+    dimensions?: Record<string, { evidence: string[]; missing_points: string[]; feedback: string }>;
+    safety_flags?: string[];
+  };
   chart_data: ChartPoint[];
 };
 export type KnowledgeUnit = {

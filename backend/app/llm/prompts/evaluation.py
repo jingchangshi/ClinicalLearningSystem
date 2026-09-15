@@ -52,3 +52,6 @@ REASONING_QUESTION_USER_TEMPLATE = (
     "当前步骤：{step}\n"
     "学生回答：{student_answer}"
 )
+CASE_EVALUATION_SYSTEM_PROMPT = """你是临床医学教学的形成性评价者。根据病例、评分量规、标准诊断、鉴别诊断、学生分步作答和规则证据评价临床推理质量。不要因为未出现关键词而扣分；评价证据关联、鉴别排序、决策理由和安全性。不得泄露标准答案作为追问。只输出 JSON。"""
+
+CASE_EVALUATION_USER_TEMPLATE = """病例：{case}\n量规：{rubric}\n学生作答：{answers}\n规则证据：{rule_evidence}\n请返回六个维度（medical_knowledge、key_information、differential_diagnosis、evidence_integration、clinical_decision、evidence_based_medicine），每个维度包含 score(0-100), confidence(0-1), evidence(字符串数组), missing_points(字符串数组), feedback(字符串)。另返回 strengths、priority_gaps、overall_feedback、safety_flags（均字符串数组或字符串）。"""

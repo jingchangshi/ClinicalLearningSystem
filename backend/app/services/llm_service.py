@@ -1,4 +1,6 @@
 import json
+import logging
+import time
 from typing import Any
 
 from openai import OpenAI
@@ -19,6 +21,8 @@ from app.llm.prompts.evaluation import (
 )
 from app.llm.prompts.insight import TEACHER_INSIGHT_SYSTEM_PROMPT, TEACHER_INSIGHT_USER_TEMPLATE
 from app.llm.prompts.pathway import RECOMMENDATION_EXPLANATION_SYSTEM_PROMPT, RECOMMENDATION_EXPLANATION_USER_TEMPLATE
+
+logger = logging.getLogger("clinpath.llm")
 
 
 class DeepSeekClient:
@@ -48,12 +52,12 @@ class LLMService:
     def chat_completion(self, system_prompt: str, user_prompt: str, fallback: str) -> str:
         if not LLM_API_KEY:
             return fallback
-        return self._with_retries(lambda: self._chat_text_once(system_prompt, user_prompt), fallback)
+        return self._with_retries(lambda: self._chat_text_once(system_prompt, user_prompt), fallback, "text")
 
     def chat_json(self, system_prompt: str, user_prompt: str, fallback: Any) -> Any:
         if not LLM_API_KEY:
             return fallback
-        return self._with_retries(lambda: self._chat_json_once(system_prompt, user_prompt, fallback), fallback)
+        return self._with_retries(lambda: self._chat_json_once(system_prompt, user_prompt, fallback), fallback, "json")
 
     def generate_case(self, system_prompt: str, user_prompt: str, fallback: dict) -> dict:
         payload = self.chat_json(system_prompt, user_prompt, fallback)
@@ -123,9 +127,10 @@ class LLMService:
         parsed = json.loads(response.choices[0].message.content or "")
         return parsed if isinstance(parsed, (dict, list)) else fallback
 
-    def _with_retries(self, operation, fallback: Any) -> Any:
+    def _with_retries(self, operation, fallback: Any, operation_name: str = "chat") -> Any:
         last_error: Exception | None = None
-        for _ in range(max(1, LLM_MAX_RETRIES + 1)):
+        started = time.monotonic()
+        for attempt in range(max(1, LLM_MAX_RETRIES + 1)):
             try:
                 result = operation()
                 if result:
@@ -133,9 +138,14 @@ class LLMService:
                 last_error = ValueError("LLM returned an empty response")
             except Exception as error:
                 last_error = error
+                logger.warning(
+                    "LLM degraded provider=deepseek model=%s operation=%s failure_type=%s retry=%s latency_ms=%s",
+                    LLM_MODEL, operation_name, type(error).__name__, attempt,
+                    round((time.monotonic() - started) * 1000),
+                )
                 continue
         if last_error:
-            raise last_error
+            logger.warning("LLM fallback used operation=%s", operation_name)
         return fallback
 
     def _client(self) -> DeepSeekClient:
@@ -167,9 +177,9 @@ def generate_reasoning_question(case: dict, step: str, student_answer: str) -> s
 
 
 def score_student_answer(case: dict, answers: list[dict], rubric: dict) -> dict:
-    from app.services.scoring_llm import score_with_rules
+    from app.services.scoring_llm import evaluate_case_submission
 
-    return score_with_rules(case, answers, rubric)
+    return evaluate_case_submission(case, answers, rubric, llm_service)
 
 
 def generate_learning_recommendation(profile: dict, recent_scores: list[dict], cases: list[dict]) -> dict:

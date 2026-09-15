@@ -11,6 +11,7 @@ from app.models import (
     LearningEvidenceEvent,
     SPSession,
     Student,
+    Score,
     TeacherScoreReview,
     TeachingIntervention,
 )
@@ -203,11 +204,16 @@ def list_interventions(db: Session = Depends(get_db)) -> list[dict]:
 
 @router.post("/reviews")
 def create_score_review(payload: ReviewCreate, db: Session = Depends(get_db)) -> dict:
-    if not db.get(LearningEvidenceEvent, payload.evidence_event_id):
+    event = db.get(LearningEvidenceEvent, payload.evidence_event_id)
+    if not event:
         raise HTTPException(status_code=404, detail="Evidence event not found")
+    score = db.query(Score).filter(Score.session_id == event.source_id).first() if event.module_type == "case" else None
+    if score:
+        score.teacher_confirmed_score = payload.teacher_score
+        score.teacher_override_reason = payload.comment
     review = TeacherScoreReview(
         evidence_event_id=payload.evidence_event_id,
-        ai_score=payload.ai_score,
+        ai_score=score.ai_score if score and score.ai_score is not None else payload.ai_score,
         teacher_score=payload.teacher_score,
         comment=payload.comment,
         agreement_delta=round(payload.teacher_score - payload.ai_score, 1),

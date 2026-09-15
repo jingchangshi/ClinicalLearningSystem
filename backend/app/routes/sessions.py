@@ -23,6 +23,7 @@ from app.services.llm_service import (
     score_student_answer,
 )
 from app.services.recommendation_service import determine_pathway_stage
+from app.core.llm_config import LLM_API_KEY, LLM_MODEL
 from app.services.serializers import (
     dumps_json,
     serialize_case,
@@ -131,6 +132,8 @@ def submit_session(
 ) -> dict:
     session = _get_session(db, session_id)
     require_student_access(session.student_id, user)
+    if session.status == "completed" and session.score:
+        return _submission_response(session, session.score)
     if not session.answers:
         raise HTTPException(status_code=400, detail="At least one answer is required")
 
@@ -139,10 +142,6 @@ def submit_session(
         {"step": answer.step, "answer_text": answer.answer_text} for answer in session.answers
     ]
     score_payload = score_student_answer(case, answers, case["rubric"])
-    if session.score:
-        db.delete(session.score)
-        db.flush()
-
     score = Score(
         session_id=session.id,
         total_score=score_payload["total_score"],
@@ -155,6 +154,13 @@ def submit_session(
         feedback=score_payload["feedback"],
         strengths=score_payload["strengths"],
         weaknesses=score_payload["weaknesses"],
+        evaluation_mode=score_payload["evaluation_mode"],
+        provider="deepseek" if score_payload["evaluation_mode"] == "ai" else None,
+        model=LLM_MODEL if score_payload["evaluation_mode"] == "ai" and LLM_API_KEY else None,
+        rule_score=score_payload["rule_score"],
+        ai_score=score_payload["ai_score"],
+        degraded=score_payload["degraded"],
+        evaluation_detail_json=dumps_json(score_payload["evaluation_detail"]),
     )
     db.add(score)
     update_competency_from_case(db, session.student_id, score_payload, session.id)
@@ -176,16 +182,7 @@ def submit_session(
     )
     db.commit()
     db.refresh(score)
-    return {
-        "score_id": score.id,
-        "session_id": session.id,
-        "summary": {
-            "total_score": score.total_score,
-            "strengths": score.strengths,
-            "weaknesses": score.weaknesses,
-            "next_recommendation": recommendation,
-        },
-    }
+    return _submission_response(session, score, recommendation)
 
 
 @router.get("/{session_id}/result")
@@ -262,4 +259,19 @@ def _serialize_session(session: CaseSession) -> dict:
             }
             for message in session.ai_messages
         ],
+    }
+
+
+def _submission_response(session: CaseSession, score: Score, recommendation: dict | None = None) -> dict:
+    return {
+        "score_id": score.id,
+        "session_id": session.id,
+        "summary": {
+            "total_score": score.total_score,
+            "strengths": score.strengths,
+            "weaknesses": score.weaknesses,
+            "evaluation_mode": score.evaluation_mode,
+            "degraded": score.degraded,
+            "next_recommendation": recommendation,
+        },
     }

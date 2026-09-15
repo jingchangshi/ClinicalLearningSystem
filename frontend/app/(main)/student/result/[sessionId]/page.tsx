@@ -16,6 +16,7 @@ export default async function ResultPage({ params }: { params: Promise<{ session
           <div>
             <h1 className="text-2xl font-semibold">评分反馈</h1>
             <p className="mt-2 max-w-3xl text-slate-600">{result.score.feedback}</p>
+            <p className="mt-2 text-xs text-slate-500">AI形成性评价，仅供教学参考，教师可复核。</p>
           </div>
           <div className="text-right">
             <div className="text-sm text-slate-500">总分</div>
@@ -34,6 +35,23 @@ export default async function ResultPage({ params }: { params: Promise<{ session
           <CompetencyRadar data={result.competency.chart_data} />
         </section>
       </div>
+
+      <section className="rounded-lg border border-slate-200 bg-white p-5">
+        <h2 className="font-semibold">评价依据与安全提示</h2>
+        <p className="mt-2 text-sm text-slate-600">
+          {result.score.evaluation_mode === "ai" ? "AI 语义量规评价" : "规则降级评价（AI 当前不可用）"}
+          {result.score.teacher_confirmed_score !== null ? `；教师确认总分：${result.score.teacher_confirmed_score}` : ""}
+        </p>
+        {Object.entries(result.score.evaluation_detail.dimensions ?? {}).map(([dimension, detail]) => (
+          <div key={dimension} className="mt-3 rounded-md bg-slate-50 p-3 text-sm text-slate-700">
+            <div className="font-medium">{dimension}</div>
+            <p className="mt-1">{detail.feedback}</p>
+            {detail.evidence.length ? <p className="mt-1">评分依据：{detail.evidence.join("；")}</p> : null}
+            {detail.missing_points.length ? <p className="mt-1">待补充：{detail.missing_points.join("；")}</p> : null}
+          </div>
+        ))}
+        {result.score.evaluation_detail.safety_flags?.length ? <p className="mt-3 text-sm text-alert">安全提示：{result.score.evaluation_detail.safety_flags.join("；")}</p> : null}
+      </section>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-lg border border-slate-200 bg-white p-5">

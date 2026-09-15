@@ -338,12 +338,12 @@ def _source_evidence(task_type: str, target_abilities: list[str]) -> str:
 
 def _expected_lift(priority: int) -> str:
     if priority >= 95:
-        return "+12%"
+        return "高优先级"
     if priority >= 90:
-        return "+10%"
+        return "中高优先级"
     if priority >= 85:
-        return "+8%"
-    return "+5%"
+        return "建议优先训练"
+    return "建议训练"
 
 
 def _next_step_label(task_type: str) -> str:

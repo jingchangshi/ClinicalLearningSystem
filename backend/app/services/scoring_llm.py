@@ -1,3 +1,9 @@
+import json
+from typing import Literal
+
+from pydantic import BaseModel, Field, ValidationError
+
+from app.llm.prompts.evaluation import CASE_EVALUATION_SYSTEM_PROMPT, CASE_EVALUATION_USER_TEMPLATE
 from app.services.serializers import CORE_ABILITIES
 
 WEIGHTS = {
@@ -60,6 +66,68 @@ def score_with_rules(case: dict, answers: list[dict], rubric: dict) -> dict:
             f"本次总分 {total}。{strengths}；{weaknesses}。"
             "下一步建议围绕低分维度复盘诊断依据、鉴别排除和治疗证据。"
         ),
+    }
+
+
+class DimensionEvaluation(BaseModel):
+    score: float = Field(ge=0, le=100)
+    confidence: float = Field(ge=0, le=1)
+    evidence: list[str]
+    missing_points: list[str]
+    feedback: str
+
+
+class CaseEvaluation(BaseModel):
+    dimensions: dict[str, DimensionEvaluation]
+    strengths: list[str]
+    priority_gaps: list[str]
+    overall_feedback: str
+    safety_flags: list[str]
+
+
+def evaluate_case_submission(case: dict, answers: list[dict], rubric: dict, llm_service) -> dict:
+    """Use the semantic rubric when available; deterministic scoring remains a safe fallback."""
+    rule_score = score_with_rules(case, answers, rubric)
+    fallback = {"_fallback": True}
+    raw = llm_service.chat_json(
+        CASE_EVALUATION_SYSTEM_PROMPT,
+        CASE_EVALUATION_USER_TEMPLATE.format(
+            case=json.dumps(case, ensure_ascii=False), rubric=json.dumps(rubric, ensure_ascii=False),
+            answers=json.dumps(answers, ensure_ascii=False), rule_evidence=json.dumps(rule_score, ensure_ascii=False),
+        ),
+        fallback,
+    )
+    try:
+        if raw == fallback:
+            raise ValueError("LLM unavailable")
+        evaluation = CaseEvaluation.model_validate(raw)
+        if set(evaluation.dimensions) != set(CORE_ABILITIES):
+            raise ValueError("unexpected competency dimensions")
+    except (ValidationError, ValueError, TypeError):
+        return {
+            **rule_score,
+            "evaluation_mode": "rule_fallback",
+            "degraded": True,
+            "rule_score": rule_score["total_score"],
+            "ai_score": None,
+            "evaluation_detail": {},
+            "safety_flags": [],
+        }
+
+    scores = {key: round(evaluation.dimensions[key].score, 1) for key in CORE_ABILITIES}
+    total = round(sum(scores[key] * WEIGHTS[key] for key in CORE_ABILITIES), 1)
+    return {
+        **scores,
+        "total_score": total,
+        "strengths": "；".join(evaluation.strengths),
+        "weaknesses": "；".join(evaluation.priority_gaps),
+        "feedback": evaluation.overall_feedback,
+        "evaluation_mode": "ai",
+        "degraded": False,
+        "rule_score": rule_score["total_score"],
+        "ai_score": total,
+        "evaluation_detail": evaluation.model_dump(),
+        "safety_flags": evaluation.safety_flags,
     }
 
 

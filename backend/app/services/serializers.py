@@ -161,6 +161,18 @@ def serialize_score(score: Score) -> dict:
         "feedback": score.feedback,
         "strengths": score.strengths,
         "weaknesses": score.weaknesses,
+        "evaluation_mode": score.evaluation_mode,
+        "provider": score.provider,
+        "model": score.model,
+        "prompt_version": score.prompt_version,
+        "rubric_version": score.rubric_version,
+        "evaluator_version": score.evaluator_version,
+        "rule_score": score.rule_score,
+        "ai_score": score.ai_score,
+        "teacher_confirmed_score": score.teacher_confirmed_score,
+        "teacher_override_reason": score.teacher_override_reason,
+        "degraded": score.degraded,
+        "evaluation_detail": loads_json(score.evaluation_detail_json, {}),
         "created_at": score.created_at,
         "chart_data": [
             {"dimension": ABILITY_LABELS[key], "score": getattr(score, key)}

@@ -8,3 +8,8 @@ frontend/tsconfig.tsbuildinfo
 
 .env
 .env.*
+backend/clinical_learning.db
+backups/
+*.db
+*.sqlite
+*.sqlite3

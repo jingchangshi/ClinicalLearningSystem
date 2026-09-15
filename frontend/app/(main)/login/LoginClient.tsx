@@ -10,7 +10,6 @@ import { useAuth } from "@/components/AuthProvider";
 const demoAccounts = [
   { label: "学生账号", username: "student1", password: "student123" },
   { label: "教师账号", username: "teacher", password: "teacher123" },
-  { label: "管理员", username: "admin", password: "admin123" },
 ];
 
 export function LoginClient() {
