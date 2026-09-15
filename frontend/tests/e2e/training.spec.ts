@@ -138,7 +138,9 @@ async function expectRealDeepSeekInvocations(browser: Browser, sessionId: number
       .poll(
         async () => {
           found = await realInvocationsFor(page, sessionId, taskTypes);
-          return found.map((row) => row.task_type).sort().join(",");
+          // One row per AI task invocation: the tutor legitimately has more than
+          // one turn, so compare the set of capabilities, not the number of rows.
+          return [...new Set(found.map((row) => row.task_type))].sort().join(",");
         },
         { timeout: 30_000, message: "ai_invocations must prove real DeepSeek calls" },
       )
@@ -295,7 +297,9 @@ test("student completes a case with Coach and receives formative feedback", asyn
   await expect(page.getByText("改进建议")).toBeVisible();
   await expect(page.getByText("更新后的能力画像")).toBeVisible();
   await page.getByRole("link", { name: "返回学习路径" }).click();
-  await expect(page).toHaveURL(/\/student\/pathway$/);
+  // The pathway page is server-rendered and its recommendation reason can be a
+  // real model call, so the navigation is not a 5s round trip any more.
+  await expect(page).toHaveURL(/\/student\/pathway$/, { timeout: 90_000 });
 
   if (EXPECT_REAL_AI) {
     expect(submittedSessionId, "the submitted session id is required by the audit gate").toBeGreaterThan(0);

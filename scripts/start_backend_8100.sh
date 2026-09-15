@@ -14,5 +14,12 @@ if [ -n "$head_revision" ] && [ "$current_revision" != "$head_revision" ]; then
   /home/jcshi/workspace/clinical_learning_system/scripts/backup_db.sh
 fi
 uv run --python 3.11 --with-requirements requirements.txt alembic upgrade head
+
+# The Next.js proxy pools keep-alive sockets to this port and drops idle ones on
+# its own shorter timer. With uvicorn's 5s default the server can close a socket
+# first, and the next proxied request (a submit, after a slow model call) dies as
+# "socket hang up / ECONNRESET" and surfaces as an unexpected 500. Keeping the
+# server-side timeout comfortably longer makes the server never be the one that
+# closes an idle connection.
 exec uv run --python 3.11 --with-requirements requirements.txt \
-  uvicorn app.main:app --host 0.0.0.0 --port 8100
+  uvicorn app.main:app --host 0.0.0.0 --port 8100 --timeout-keep-alive 75
