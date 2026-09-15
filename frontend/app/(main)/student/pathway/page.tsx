@@ -24,7 +24,7 @@ export default async function PathwayPage() {
   return (
     <div className="space-y-6">
       <section>
-        <p className="text-sm font-semibold uppercase tracking-[0.22em] text-clinic">Adaptive Learning Pathway</p>
+        <p className="text-sm font-semibold tracking-[0.22em] text-clinic">学习路径</p>
         <h1 className="mt-2 text-3xl font-semibold text-ink">AI个性化学习路径</h1>
         <p className="mt-2 text-slate-600">基于能力画像、训练表现与模块完成情况生成下一阶段学习任务。</p>
       </section>

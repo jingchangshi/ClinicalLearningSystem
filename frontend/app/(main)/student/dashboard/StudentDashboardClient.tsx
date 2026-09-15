@@ -9,6 +9,7 @@ import { CompetencyRadar } from "@/components/CompetencyRadar";
 import { LearningEvidenceCards } from "@/components/LearningEvidenceCards";
 import { LearningGapDiagnosisCard } from "@/components/LearningGapDiagnosisCard";
 import { getMe, getStudentDashboard, startSession } from "@/lib/api";
+import { formatDateTime } from "@/lib/format";
 
 type Dashboard = Awaited<ReturnType<typeof getStudentDashboard>>;
 
@@ -117,7 +118,7 @@ export function StudentDashboardClient() {
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-sm text-slate-500">学生信息</p>
           <h2 className="mt-2 text-xl font-semibold">{dashboard.student.name}</h2>
-          <p className="mt-1 text-sm text-slate-600">{dashboard.student.current_stage}</p>
+          <p className="mt-1 text-sm text-slate-600">{dashboard.student.current_stage_label}</p>
           <div className="mt-5 rounded-2xl bg-teal-50 p-5">
             <p className="text-sm text-slate-500">综合胜任力指数</p>
             <p className="mt-2 text-5xl font-semibold text-clinic">{competencyAverage}</p>
@@ -134,7 +135,7 @@ export function StudentDashboardClient() {
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold">AI Adaptive Learning Recommendation</h2>
+          <h2 className="font-semibold">AI 个性化学习推荐</h2>
           <button
             onClick={() => router.push("/student/pathway")}
             className="text-sm text-clinic hover:underline"
@@ -164,6 +165,42 @@ export function StudentDashboardClient() {
               </span>
             </button>
           ))}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-semibold">最近学习记录</h2>
+            <p className="mt-1 text-sm text-slate-500">完成病例训练后可随时回来复盘自己的推理过程和 AI 导师对话。</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => router.push("/student/history")}
+            className="text-sm font-semibold text-clinic hover:underline"
+          >
+            查看全部学习记录
+          </button>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          {dashboard.recent_case_sessions.length ? (
+            dashboard.recent_case_sessions.map((item) => (
+              <button
+                key={item.session_id}
+                type="button"
+                onClick={() => router.push(`/student/result/${item.session_id}`)}
+                className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-left hover:border-clinic hover:bg-white"
+              >
+                <div className="font-medium text-ink">{item.case_title}</div>
+                <div className="mt-1 text-sm text-slate-500">{formatDateTime(item.completed_at)}</div>
+                <div className="mt-2 text-sm font-semibold text-clinic">
+                  得分 {item.score ?? "待评分"} · 查看复盘
+                </div>
+              </button>
+            ))
+          ) : (
+            <p className="text-sm text-slate-500">还没有完成的病例训练，完成一次后即可在这里复盘。</p>
+          )}
         </div>
       </section>
     </div>

@@ -43,10 +43,11 @@ test("anonymous首页、登录页、学生导航：无 console 报错、无 5xx"
   await expect(page).toHaveURL(/\/student\/dashboard$/, { timeout: 15_000 });
 
   for (const [label, path] of [
-    ["Dashboard", /\/student\/dashboard$/],
-    ["Pathway", /\/student\/pathway$/],
-    ["Knowledge", /\/student\/knowledge$/],
-    ["Profile", /\/student\/profile$/],
+    ["学习首页", /\/student\/dashboard$/],
+    ["学习路径", /\/student\/pathway$/],
+    ["知识学习", /\/student\/knowledge$/],
+    ["能力画像", /\/student\/profile$/],
+    ["学习记录", /\/student\/history$/],
   ] as const) {
     await page.getByRole("link", { name: label }).click();
     // /student/pathway is server-rendered and its recommendation reason is a real
@@ -55,7 +56,7 @@ test("anonymous首页、登录页、学生导航：无 console 报错、无 5xx"
   }
 
   await page.reload();
-  await expect(page).toHaveURL(/\/student\/profile$/, { timeout: 15_000 });
+  await expect(page).toHaveURL(/\/student\/history$/, { timeout: 15_000 });
 
   expect(recorder.pageErrors, `uncaught page errors: ${recorder.pageErrors.join(" | ")}`).toEqual([]);
   expect(recorder.serverErrors, `unexpected 5xx: ${recorder.serverErrors.join(" | ")}`).toEqual([]);

@@ -90,6 +90,8 @@ export type Student = {
   student_no: string;
   class_name: string;
   current_stage: string;
+  /** Chinese stage name, resolved on the server so no page prints the raw key. */
+  current_stage_label: string;
 };
 export type User = {
   id: number;
@@ -355,6 +357,12 @@ export function getStudentDashboard(studentId: number) {
     recommendation_details: { case: CaseSummary; recommendation_reason: string; pathway_stage: string }[];
     recent_advice: string;
     learning_evidence: LearningEvidence[];
+    recent_case_sessions: {
+      session_id: number;
+      case_title: string;
+      completed_at: string | null;
+      score: number | null;
+    }[];
     progress: { completed_cases: number; in_progress_cases: number; average_score: number };
   }>("/api/student/dashboard");
 }
@@ -407,6 +415,14 @@ export function getResult(sessionId: string | number) {
     session: SessionDetail;
     case: CaseSummary;
     answers: { id: number; step: string; answer_text: string; created_at: string }[];
+    reasoning_review: {
+      step: string;
+      step_title: string;
+      prompt: string;
+      answer_text: string;
+      answered_at: string | null;
+      tutor_turns: { role: string; message: string; created_at: string }[];
+    }[];
     score: Score;
     competency: Competency;
     recommendation: { case: CaseSummary; recommendation_reason: string; pathway_stage: string } | null;
@@ -733,6 +749,7 @@ export function getTeacherDashboard() {
       id: number;
       name: string;
       current_stage: string;
+      current_stage_label: string;
       recent_score: number | null;
       weakest_ability: string;
       recommended_training: string;
@@ -764,32 +781,84 @@ export function getTeacherStudentProfile(studentId: string | number) {
     evidence_events: {
       id: number;
       module_type: string;
+      module_label: string;
+      activity_title: string | null;
+      event_label: string;
       score: number | null;
-      competency_updates: Record<string, { before: number; after: number; delta: number; module_score: number }>;
+      competency_changes: { key: string; label: string; before: number | null; after: number | null; delta: number | null }[];
       created_at: string;
     }[];
     recommended_tasks: RecommendedTask[];
     completed_sessions: { session_id: number; case: CaseSummary; score: number | null; completed_at: string | null }[];
     latest_sp: SPSession | null;
     latest_guideline: GuidelineLearningSession | null;
-    growth_trend: { event_id: number; module_type: string; score: number | null; average_after: number; created_at: string }[];
+    growth_trend: {
+      event_id: number;
+      module_type: string;
+      module_label: string;
+      event_type: string;
+      event_label: string;
+      score: number | null;
+      created_at: string;
+      competency_changes: { key: string; label: string; before: number | null; after: number | null; delta: number | null }[];
+    }[];
   }>(`/api/teacher/students/${studentId}/learning-profile`);
 }
+
+export type ResearchDataRow = {
+  student_code: string;
+  class_name: string;
+  module_type: string;
+  module_label: string;
+  score: number | null;
+  competency_before: Record<string, number>;
+  competency_after: Record<string, number>;
+  created_at: string;
+};
+
+export type ResearchDataSummary = {
+  student_count: number;
+  record_count: number;
+  module_labels: string[];
+  date_range: { start: string | null; end: string | null };
+  preview_limit: number;
+  preview_count: number;
+};
 
 export function exportResearchData() {
   return request<{
     format: string;
     anonymous: boolean;
-    rows: {
-      student_code: string;
-      class_name: string;
-      module_type: string;
-      score: number | null;
-      competency_before: Record<string, number>;
-      competency_after: Record<string, number>;
-      created_at: string;
-    }[];
+    rows: ResearchDataRow[];
+    preview_rows: ResearchDataRow[];
+    summary: ResearchDataSummary;
   }>("/api/teacher/export/research-data");
+}
+
+export type LearningHistoryItem = {
+  session_id: number;
+  case_id: number;
+  case_title: string;
+  disease_category: string;
+  started_at: string | null;
+  completed_at: string | null;
+  status: string;
+  status_label: string;
+  total_score: number | null;
+  evaluation_mode: string | null;
+  degraded: boolean | null;
+  model: string | null;
+  tutor_turn_count: number;
+  answer_count: number;
+};
+
+export function getLearningHistory() {
+  return request<{
+    student: Student;
+    current_stage_label: string;
+    count: number;
+    items: LearningHistoryItem[];
+  }>("/api/student/history");
 }
 
 export function listTeachingInterventions() {

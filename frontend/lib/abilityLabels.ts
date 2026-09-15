@@ -22,3 +22,9 @@ export function evaluationModeLabel(mode: string, degraded: boolean): string {
   if (mode === "ai" && !degraded) return "AI 语义评价（真实模型调用）";
   return "规则降级评价（AI 当前不可用）";
 }
+
+/** The same distinction in a table cell, where the long form does not fit. */
+export function evaluationModeShort(mode: string | null, degraded: boolean | null): string {
+  if (mode === "ai" && !degraded) return "AI 语义评价";
+  return "规则降级评价";
+}

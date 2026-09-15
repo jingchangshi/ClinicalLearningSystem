@@ -8,7 +8,7 @@ export default async function TeacherStudentsPage() {
   return (
     <div className="space-y-6">
       <section>
-        <p className="text-sm font-semibold uppercase tracking-[0.22em] text-clinic">Students Overview</p>
+        <p className="text-sm font-semibold tracking-[0.22em] text-clinic">教学驾驶舱 · 学生画像</p>
         <h1 className="mt-2 text-3xl font-semibold text-ink">学生总览</h1>
         <p className="mt-2 text-slate-600">按学生查看最近得分、短板能力与推荐训练方向。</p>
       </section>
@@ -30,7 +30,7 @@ export default async function TeacherStudentsPage() {
               {data.students.map((student) => (
                 <tr key={student.id} className="border-b border-slate-100">
                   <td className="px-3 py-3">{student.name}</td>
-                  <td className="px-3 py-3">{student.current_stage}</td>
+                  <td className="px-3 py-3">{student.current_stage_label}</td>
                   <td className="px-3 py-3">{student.recent_score ?? "待评分"}</td>
                   <td className="px-3 py-3">{student.weakest_ability}</td>
                   <td className="px-3 py-3">{student.recommended_training}</td>

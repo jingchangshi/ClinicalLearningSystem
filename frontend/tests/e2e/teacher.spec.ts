@@ -88,7 +88,7 @@ test("teacher logout clears access and the audit rollup lists real invocations",
   expect(auditText).not.toMatch(/"(messages|prompt|completion|body)"/);
 
   // Matrix M: logout then a protected route must land on the login page.
-  await page.getByRole("button", { name: "Logout" }).click();
+  await page.getByRole("button", { name: "退出登录" }).click();
   await expect(page).toHaveURL(/\/login$/);
   await page.goto("/teacher/dashboard");
   await expect(page).toHaveURL(/\/login/);

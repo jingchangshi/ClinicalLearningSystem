@@ -339,6 +339,29 @@ test("student completes a case with Coach and receives formative feedback", asyn
   // real model call, so the navigation is not a 5s round trip any more.
   await expect(page).toHaveURL(/\/student\/pathway$/, { timeout: 90_000 });
 
+  // 学习记录: the same case must be reopenable from the learner's own history,
+  // with the five answers, the tutor dialogue and the score intact. This is the
+  // difference between a database record and React state that vanished on reload.
+  await page.getByRole("link", { name: "学习记录" }).click();
+  await expect(page).toHaveURL(/\/student\/history$/, { timeout: 60_000 });
+  await expect(page.getByTestId("history-table")).toBeVisible();
+  await page.getByRole("link", { name: "查看学习过程" }).first().click();
+  await expect(page).toHaveURL(/\/student\/result\/\d+$/);
+  const review = page.getByTestId("reasoning-review");
+  await expect(review).toBeVisible();
+  for (const title of ["关键信息提取", "初步诊断及依据", "鉴别诊断", "进一步检查", "治疗方案"]) {
+    await expect(review.getByText(title, { exact: false }).first()).toBeVisible();
+  }
+  await expect(review).toContainText("我的最终回答");
+  await expect(review.getByText("AI 导师").first()).toBeVisible();
+  await expect(review.getByText("我", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("总分")).toBeVisible();
+  const reviewUrl = page.url();
+  await page.reload({ waitUntil: "networkidle" });
+  await expect(page).toHaveURL(reviewUrl);
+  await expect(page.getByTestId("reasoning-review")).toContainText("我的最终回答");
+  await expect(page.getByTestId("reasoning-review").getByText("AI 导师").first()).toBeVisible();
+
   if (EXPECT_REAL_AI) {
     expect(submittedSessionId, "the submitted session id is required by the audit gate").toBeGreaterThan(0);
     await expectRealDeepSeekInvocations(browser, submittedSessionId, ["case_evaluation", "tutor_question"]);

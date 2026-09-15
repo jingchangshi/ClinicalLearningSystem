@@ -16,8 +16,8 @@ test("student login, refresh, wrong-role next, and logout", async ({ page }) => 
   await login(page, "/teacher/dashboard");
   await expect(page).toHaveURL(/\/student\/dashboard$/);
   await page.reload();
-  await expect(page.getByRole("link", { name: "Dashboard" })).toBeVisible();
-  await page.getByRole("button", { name: "Logout" }).click();
+  await expect(page.getByRole("link", { name: "学习首页" })).toBeVisible();
+  await page.getByRole("button", { name: "退出登录" }).click();
   await expect(page).toHaveURL(/\/login$/);
   await page.goto("/student/dashboard");
   await expect(page).toHaveURL(/\/login/);
@@ -27,7 +27,7 @@ test("login lands on the dashboard without a manual refresh", async ({ page }) =
   await login(page);
   // No reload, no second click: the landing URL itself must be the dashboard.
   await expect(page).toHaveURL(/\/student\/dashboard$/, { timeout: 15_000 });
-  await expect(page.getByRole("heading", { name: /学习|Dashboard|ClinPath/ }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: /学习|ClinPath/ }).first()).toBeVisible();
 });
 
 test("the public login page never publishes teacher credentials", async ({ page }) => {

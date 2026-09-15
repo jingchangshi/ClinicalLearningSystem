@@ -16,7 +16,7 @@ export function LearningGapDiagnosisCard({ weakAbilities }: { weakAbilities: Wea
   const rows = weakAbilities.slice(0, 2);
   return (
     <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
-      <h3 className="font-semibold text-amber-900">AI Learning Gap Diagnosis</h3>
+      <h3 className="font-semibold text-amber-900">能力缺口诊断</h3>
       <p className="mt-2 text-sm leading-6 text-slate-700">系统根据能力画像识别当前最低维度，并匹配下一阶段训练模块。</p>
       <div className="mt-4 space-y-3">
         {rows.map((item) => (

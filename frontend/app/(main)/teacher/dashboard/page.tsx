@@ -16,7 +16,7 @@ export default async function TeacherDashboard() {
     <div className="space-y-6">
       <section className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-clinic">Teacher Analytics Dashboard</p>
+          <p className="text-sm font-semibold tracking-[0.22em] text-clinic">教学驾驶舱</p>
           <h1 className="mt-2 text-3xl font-semibold text-ink">教师精准教学驾驶舱</h1>
           <p className="mt-2 text-slate-600">基于班级多模块训练数据进行教学诊断与干预建议。</p>
         </div>
@@ -37,31 +37,45 @@ export default async function TeacherDashboard() {
         <MetricCard title="当前共性短板" value={data.current_common_weakness} note="基于班级能力画像最低维度" icon={Target} />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-        <section>
-          <h2 className="mb-3 font-semibold">班级能力热力图</h2>
-          <ClassHeatmap rows={data.class_heatmap} />
-        </section>
+      {/* The heatmap owns the full content width; the class profile sits under
+          it and lays out sideways, so neither card is a tall narrow column on a
+          1440x900 screen. */}
+      <section data-testid="class-heatmap">
+        <h2 className="mb-3 font-semibold">班级能力热力图</h2>
+        <ClassHeatmap rows={data.class_heatmap} />
+      </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="font-semibold">班级能力画像</h2>
-          <CompetencyRadar data={data.class_competency.expanded_chart_data ?? data.class_competency.chart_data} />
-          <div className="mt-4 space-y-3">
+      <section
+        data-testid="class-competency-profile"
+        className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+      >
+        <h2 className="font-semibold">班级能力画像</h2>
+        <div className="mt-4 grid gap-6 lg:grid-cols-[minmax(280px,360px)_1fr]">
+          <div>
+            <CompetencyRadar data={data.class_competency.expanded_chart_data ?? data.class_competency.chart_data} />
+            <p className="text-center text-sm text-slate-500">
+              全班九维能力均值，环越小说明该项越需要教学干预。
+            </p>
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-slate-600">共性短板与建议</h3>
             {data.weak_dimensions.length ? (
-              data.weak_dimensions.map((item) => (
-                <div key={item.key} className="rounded-xl bg-amber-50 p-3">
-                  <div className="font-medium">{item.label}</div>
-                  <div className="mt-1 text-sm text-slate-500">
-                    {item.level} · 平均 {item.score}
+              <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {data.weak_dimensions.map((item) => (
+                  <div key={item.key} className="rounded-xl bg-amber-50 p-3">
+                    <div className="font-medium">{item.label}</div>
+                    <div className="mt-1 text-sm text-slate-500">
+                      {item.level} · 平均 {item.score}
+                    </div>
                   </div>
-                </div>
-              ))
+                ))}
+              </div>
             ) : (
-              <p className="text-sm text-slate-500">暂无明显短板。</p>
+              <p className="mt-3 text-sm text-slate-500">暂无明显短板。</p>
             )}
           </div>
-        </section>
-      </div>
+        </div>
+      </section>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_0.9fr]">
         <TeachingInterventionPanel interventions={data.teaching_interventions.length ? data.teaching_interventions : data.teaching_focus} />
@@ -103,7 +117,7 @@ export default async function TeacherDashboard() {
               {data.students.map((student) => (
                 <tr key={student.id} className="border-b border-slate-100">
                   <td className="px-3 py-3">{student.name}</td>
-                  <td className="px-3 py-3">{student.current_stage}</td>
+                  <td className="px-3 py-3">{student.current_stage_label}</td>
                   <td className="px-3 py-3">{student.recent_score ?? "待评分"}</td>
                   <td className="px-3 py-3">{student.weakest_ability}</td>
                   <td className="px-3 py-3">{student.recommended_training}</td>
