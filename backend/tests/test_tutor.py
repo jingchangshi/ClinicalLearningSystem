@@ -60,6 +60,64 @@ def test_hidden_answer_guard_rejects_treatment_plan_text():
     assert not leaks_hidden_answer("你的鉴别诊断里哪一个最危险？", case)
 
 
+def test_short_diagnosis_label_leak_is_rejected():
+    case = {"standard_diagnosis": "系统性红斑狼疮"}
+    for question in (
+        "你的诊断应该是系统性红斑狼疮。",
+        "诊断：系统性红斑狼疮",
+        "正确答案是系统性红斑狼疮",
+        "系统性红斑狼疮",
+        "标准诊断是系统性红斑狼疮。",
+    ):
+        assert leaks_hidden_answer(question, case), question
+
+
+def test_short_diagnosis_label_is_allowed_when_the_student_raised_it():
+    case = {"standard_diagnosis": "系统性红斑狼疮"}
+    student = "我考虑系统性红斑狼疮，因为发热伴皮疹和ANA阳性。"
+    # The student already named it, so re-using it adds no information.
+    assert not leaks_hidden_answer("你考虑系统性红斑狼疮的依据是什么？", case, student_text=student)
+    # Without that context the same question would be revealing the answer.
+    assert leaks_hidden_answer("你考虑系统性红斑狼疮的依据是什么？", case)
+
+
+def test_legitimate_disease_related_questions_are_allowed():
+    case = {"standard_diagnosis": "系统性红斑狼疮", "treatment_plan": "激素联合羟氯喹治疗并随访"}
+    for question in (
+        "是否需要先排除感染？依据是什么？",
+        "哪一种器官受累最会改变你的处理决策？",
+        "你会先做哪项检查来验证活动度？",
+    ):
+        assert not leaks_hidden_answer(question, case), question
+
+
+def test_tutor_falls_back_to_a_rule_question_on_a_label_leak(db_factory, client, monkeypatch):
+    db = db_factory()
+    case = make_case(db, diagnosis="系统性红斑狼疮")
+    make_student(db, username="learner")
+    db.commit()
+    db.close()
+
+    _login(client)
+    session_id = _start(client)
+    client.post(
+        f"/api/sessions/{session_id}/answers",
+        json={"step": "initial_diagnosis", "answer_text": "发热皮疹，考虑感染可能。"},
+    )
+
+    monkeypatch.setattr(
+        tutor_service.llm_service,
+        "chat_completion",
+        lambda system_prompt, user_prompt, fallback: "你的诊断应该是系统性红斑狼疮。",
+    )
+    payload = client.post(f"/api/sessions/{session_id}/tutor", json={"step": "initial_diagnosis"}).json()
+    question = payload["tutor_question"]
+    # The leaky model output was rejected and a rule question was used instead.
+    assert question
+    assert "系统性红斑狼疮" not in question
+    assert question != "你的诊断应该是系统性红斑狼疮。"
+
+
 def test_multi_turn_conversation_persists_and_advances(db_factory, client):
     hidden = _seed(db_factory)
     _login(client)

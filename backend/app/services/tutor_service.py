@@ -8,6 +8,7 @@ diagnosis or treatment plan, and stops after a bounded number of turns.
 import json
 import logging
 import os
+import re
 
 from app.core.reasoning_steps import REQUIRED_STEP_KEYS
 from app.services.llm_service import llm_service, prompt_json
@@ -115,17 +116,46 @@ def next_tutor_question(case: dict, step: str, student_answer: str, state: dict)
     question = (question or "").strip()
     if not question:
         return fallback
-    if leaks_hidden_answer(question, case):
+    if leaks_hidden_answer(question, case, student_text=student_answer):
         logger.warning("tutor question rejected: hidden answer leakage step=%s", step)
         return fallback
     return question
 
 
-def leaks_hidden_answer(text: str, case: dict) -> bool:
-    """Reject a tutor question that reproduces hidden case material."""
+# A short label such as "系统性红斑狼疮" is still the answer when the tutor names
+# it. Long hidden material is caught by fragment matching; the standard diagnosis
+# by normalised label matching (allowed only when the student already used it).
+LONG_FRAGMENT_THRESHOLD = 12
+MIN_LABEL_LENGTH = 3
+
+
+def normalize_for_matching(text: str) -> str:
+    """Lower-case, drop punctuation/spacing so near-exact matches are comparable."""
+
+    return re.sub(r"[\s，。、；：？！,.;:?!\"'（）()《》\-—]+", "", (text or "").lower())
+
+
+def _hidden_labels(case: dict) -> list[str]:
+    diagnosis = case.get("standard_diagnosis")
+    labels: list[str] = []
+    if isinstance(diagnosis, str):
+        labels.append(diagnosis)
+        # "系统性红斑狼疮（SLE）" -> also guard the bare disease name.
+        labels.extend(part for part in re.split(r"[（(]/", diagnosis) if part)
+    return [label.strip() for label in labels if len(label.strip()) >= MIN_LABEL_LENGTH]
+
+
+def leaks_hidden_answer(text: str, case: dict, student_text: str = "") -> bool:
+    """Reject a tutor question that reproduces hidden case material.
+
+    - Long hidden values (treatment plan, rubric entries, differential items) are
+      rejected as fragments.
+    - Short labels (the standard diagnosis) are rejected when the question states
+      them, or contains them verbatim. A question that only re-uses a disease name
+      the student already wrote is allowed, because it adds no information.
+    """
 
     hidden_values = [
-        case.get("standard_diagnosis"),
         case.get("treatment_plan"),
         case.get("rubric"),
         case.get("differential_diagnosis"),
@@ -139,9 +169,19 @@ def leaks_hidden_answer(text: str, case: dict) -> bool:
             candidates = [str(value)] if value else []
         for candidate in candidates:
             normalized = candidate.strip()
-            # Only long fragments matter; a bare disease name is not a leak.
-            if len(normalized) >= 12 and normalized in text:
+            if len(normalized) >= LONG_FRAGMENT_THRESHOLD and normalized in text:
                 return True
+
+    normalized_question = normalize_for_matching(text)
+    normalized_student = normalize_for_matching(student_text)
+    for label in _hidden_labels(case):
+        normalized_label = normalize_for_matching(label)
+        if not normalized_label or normalized_label not in normalized_question:
+            continue
+        if normalized_label in normalized_student:
+            # The student already named it; the tutor is not revealing anything.
+            continue
+        return True
     return False
 
 
