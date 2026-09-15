@@ -22,3 +22,56 @@ test("student login, refresh, wrong-role next, and logout", async ({ page }) => 
   await page.goto("/student/dashboard");
   await expect(page).toHaveURL(/\/login/);
 });
+
+test("login lands on the dashboard without a manual refresh", async ({ page }) => {
+  await login(page);
+  // No reload, no second click: the landing URL itself must be the dashboard.
+  await expect(page).toHaveURL(/\/student\/dashboard$/, { timeout: 15_000 });
+  await expect(page.getByRole("heading", { name: /学习|Dashboard|ClinPath/ }).first()).toBeVisible();
+});
+
+test("the public login page never publishes teacher credentials", async ({ page }) => {
+  await page.goto("/login");
+  const body = (await page.locator("body").innerText()).toLowerCase();
+  expect(body).not.toContain("teacher123");
+  expect(body).not.toContain("admin123");
+
+  // The only prefilled shortcut is the restricted student demo account.
+  const demoButtons = page.getByRole("button", { name: /student1/ });
+  await expect(demoButtons).toHaveCount(1);
+  await demoButtons.click();
+  await expect(page.getByLabel("用户名")).toHaveValue("student1");
+});
+
+test("protected routes send anonymous visitors to login with a next target", async ({ page }) => {
+  await page.goto("/student/dashboard");
+  await expect(page).toHaveURL(/\/login\?next=%2Fstudent%2Fdashboard/);
+  await page.goto("/teacher/dashboard");
+  await expect(page).toHaveURL(/\/login/);
+});
+
+test("a forged token cannot claim the teacher role", async ({ page, context, baseURL }) => {
+  const host = new URL(baseURL ?? "http://127.0.0.1:8101").hostname;
+  const forged = [
+    encode({ alg: "HS256", typ: "JWT" }),
+    encode({ sub: "1", username: "student1", role: "teacher", exp: Math.floor(Date.now() / 1000) + 3600 }),
+    "not-a-valid-signature",
+  ].join(".");
+  await context.addCookies([{ name: "access_token", value: forged, domain: host, path: "/" }]);
+
+  await page.goto("/teacher/dashboard");
+  await expect(page).toHaveURL(/\/login/);
+  await page.goto("/student/dashboard");
+  await expect(page).toHaveURL(/\/login/);
+});
+
+test("a student in the teacher area is routed to their own dashboard", async ({ page }) => {
+  await login(page);
+  await expect(page).toHaveURL(/\/student\/dashboard$/);
+  await page.goto("/teacher/dashboard");
+  await expect(page).toHaveURL(/\/student\/dashboard$/);
+});
+
+function encode(value: unknown): string {
+  return Buffer.from(JSON.stringify(value)).toString("base64url");
+}
