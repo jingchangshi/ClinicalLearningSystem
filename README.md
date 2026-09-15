@@ -187,10 +187,15 @@ systemctl --user start clinical-backend.service clinical-frontend.service
 代码更新后重新构建并重启：
 
 ```bash
+cd /home/jcshi/workspace/clinical_learning_system
+./scripts/backup_db.sh          # 任何 schema 变更前的强制步骤
 cd /home/jcshi/workspace/clinical_learning_system/frontend
 npm run build
 systemctl --user restart clinical-backend.service clinical-frontend.service
 ```
+
+后端启动脚本会在检测到待执行迁移时自动先备份数据库，再 `alembic upgrade head`。
+禁止用删除数据库 / `seed_data --reset` 的方式演进生产 schema。
 
 查看状态和日志：
 
@@ -224,7 +229,9 @@ sudo netfilter-persistent save
 
 ```bash
 ss -ltnp | grep -E ':8100|:8101'
+./scripts/verify_deploy.sh          # 只读：HEAD/指纹/schema/systemd/公网入口 一次核对
 curl http://127.0.0.1:8100/api/health
+curl http://127.0.0.1:8100/api/system/version
 curl http://127.0.0.1:8101/api/students
 curl -I http://129.153.118.58:8101/
 curl http://129.153.118.58:8101/api/students
@@ -235,23 +242,76 @@ curl http://129.153.118.58:8101/api/knowledge
 
 默认不需要任何 AI Key，系统使用规则版追问、评分和推荐。
 
-如需接入 OpenAI 兼容 API：
+### Canonical LLM 配置（推荐，唯一事实源）
 
 ```bash
-export OPENAI_API_KEY=your_api_key
-export OPENAI_BASE_URL=https://api.openai.com/v1
-export OPENAI_MODEL=gpt-4o-mini
+export LLM_PROVIDER=deepseek            # deepseek | openai | openai-compatible
+export LLM_API_KEY=your_api_key
+export LLM_BASE_URL=https://api.deepseek.com
+export LLM_MODEL=deepseek-chat
+export LLM_TIMEOUT_SECONDS=12
+export LLM_MAX_RETRIES=2
 ```
 
-预留函数位于 `backend/app/services/llm_client.py`：
+兼容别名（deprecated，请尽快迁移）：`DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` /
+`DEEPSEEK_MODEL` 以及 `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL`。
+canonical 变量优先；`app/core/llm_config.py` 是唯一解析实现，
+`llm_config_summary()` 会在教师 Runtime 页面提示仍在使用的旧变量名。
+
+### 其它运行开关
+
+```bash
+export CLINPATH_ENV=production          # production 时 JWT_SECRET 必填
+export JWT_SECRET=change-me             # 后端与前端 proxy 共用（前端只做粗粒度路由校验）
+export COOKIE_SECURE=true               # 走 HTTPS 时必须为 true
+export ACCESS_TOKEN_EXPIRE_HOURS=12
+export ALLOW_PUBLIC_REGISTRATION=false  # 生产默认关闭匿名注册
+export MAX_COACH_TURNS_PER_SESSION=20
+export MAX_SP_MESSAGES_PER_SESSION=40
+export MAX_TUTOR_TURNS_PER_STEP=6
+export REQUIRE_CASE_DEIDENTIFICATION=false  # true 时拒绝入库含明显身份信息的病例文本
+# 可选：按端点的每小时限额覆盖，例如 RATE_LIMIT_LOGIN_PER_HOUR=60
+```
+
+教师录入病例时（`POST/PUT /api/teacher/cases`、AI 病例生成）系统会检测手机号、
+邮箱、身份证、住院号以及带标签的姓名，返回 `deidentification.findings` 并在教师端
+显示提示。提交给模型的内容始终在 `llm_service` 出境前强制脱敏；默认只提示不阻断，
+`REQUIRE_CASE_DEIDENTIFICATION=true` 时改为拒绝入库。系统不会静默改写教师输入。
+
+教师 / 管理员账号不在公开页面展示，也不允许自助注册，只能由服务器端开通：
+
+```bash
+cd backend
+uv run --python 3.11 --with-requirements requirements.txt python -m app.manage_users create-teacher teacher --name "教师姓名" --teacher-no T001
+```
+
+### AI 调用入口
+
+统一入口位于 `backend/app/services/llm_service.py`：
 
 - `chat_json(system_prompt, user_prompt, fallback)`
-- `chat_text(system_prompt, user_prompt, fallback)`
+- `chat_completion(system_prompt, user_prompt, fallback)`
 - `generate_reasoning_question(case, step, student_answer)`
 - `score_student_answer(case, answers, rubric)`
 - `generate_learning_recommendation(profile, recent_scores, cases)`
+- `probe()`：一次性最小真实请求，用于运行状态探测
 
-没有 `OPENAI_API_KEY` 时会自动回退到本地规则逻辑，不影响系统运行。
+没有配置 `LLM_API_KEY` 或 provider 调用失败时会自动回退到本地规则逻辑，不影响系统运行，
+但结果会被标记为 `evaluation_mode=rule_fallback` / `degraded=true`，前端会明确显示
+「规则降级评价」，不会伪装成 AI 评分。
+
+### 运行状态与版本
+
+```text
+GET  /api/system/version          当前 git SHA、schema revision、环境、AI 是否配置
+GET  /api/system/ai-status        教师可见的 AI runtime 状态（不含任何 key）
+POST /api/system/ai-probe         真实探测 provider 连通性与延迟
+GET  /api/system/ai-invocations   最近 AI 调用审计（元数据 + 证据引用，无 prompt 正文）
+GET  /api/system/reasoning-steps  后端 canonical 推理步骤（前端共用）
+```
+
+教师端页面 `/teacher/runtime` 展示部署版本与 AI Runtime，用于快速判断
+「浏览器里跑的到底是哪一版」以及 AI 是否真的可用。
 
 无 API Key smoke test：
 
@@ -311,6 +371,8 @@ uv run --with-requirements backend/requirements.txt python scripts/smoke_no_api_
 - `GET /api/sessions/{session_id}`
 - `POST /api/sessions/{session_id}/answers`
 - `POST /api/sessions/{session_id}/coach`
+- `POST /api/sessions/{session_id}/tutor`
+- `GET /api/sessions/{session_id}/tutor?step=...`
 - `POST /api/sessions/{session_id}/submit`
 - `GET /api/sessions/{session_id}/result`
 - `GET /api/teacher/dashboard`
@@ -320,6 +382,10 @@ uv run --with-requirements backend/requirements.txt python scripts/smoke_no_api_
 - `DELETE /api/teacher/cases/{case_id}`
 - `POST /api/teacher/case-generator/generate`
 - `POST /api/teacher/case-generator/{draft_id}/approve`
+- `GET /api/system/version`
+- `GET /api/system/ai-status`
+- `POST /api/system/ai-probe`
+- `GET /api/system/reasoning-steps`
 - `GET /api/health`
 
 ## MVP 跑通路径
@@ -335,9 +401,11 @@ uv run --with-requirements backend/requirements.txt python scripts/smoke_no_api_
 
 ## 后续开发路线
 
-- 接入真实大模型评分与多轮追问。
+- 把带 step 级状态的 Socratic tutor 扩展到 SP 问诊、技能训练与指南 PICO 练习。
+- 为 coach / SP / 推荐 / 教师洞察 / 病例生成统一落库 AI 调用审计（`AIInvocation`）。
+- 让教师在编辑界面显式维护学习材料的 tags（abilities / difficulty / prerequisites），
+  替代当前由内容字段启发式推导的方式，并加入标签校验。
 - 增加教师对评分 rubric 的可视化编辑。
 - 增加学生训练历史、详情页和同伴互评。
-- 增加真实登录、班级权限和教师-学生绑定。
-- 引入迁移工具 Alembic 管理数据库结构演进。
-- 增加端到端测试和部署配置。
+- 增加班级权限模型与教师-学生绑定。
+- 接入域名 + HTTPS 反向代理，并打开 `COOKIE_SECURE`（见 `docs/ARCH.md` §11）。
