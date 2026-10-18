@@ -11,7 +11,7 @@
 | CASE-T03 | 训练病例 | 第2–3阶段：初步诊断及依据 / 鉴别诊断 / 临床决策入门 | ANCA 相关性血管炎（GPA 倾向，肺肾受累） | 进阶 | PENDING_REAL_REVIEW | `A01_training_AAV.md` |
 | CASE-T04 | 训练病例 | 第2–3阶段：初步诊断及依据 / 鉴别诊断 / 检查策略 | 炎性肌病（抗合成酶综合征伴 ILD） | 进阶 | PENDING_REAL_REVIEW | `A01_training_IIM.md` |
 | CASE-A01 | 独立考核病例 | 第2–3阶段：鉴别诊断 / 进一步检查 | 未分化多关节炎 | 中等 | PENDING_REAL_REVIEW | `A01_assessment_UA.md` |
-| CASE-A02 | 独立考核病例 | 第3阶段：鉴别诊断 / 临床决策入门 | 成人 Still 病（AOSD）伴 MAS 风险 | 进阶 | PENDING_REAL_REVIEW | `A01_assessment_multisystem.md` |
+| CASE-A02 | 独立考核病例 | 第3阶段：鉴别诊断 / 临床决策入门 | 干燥症状待查（疑似原发性干燥综合征，未确诊） | 中等（待专家校准） | PENDING_REAL_REVIEW | `A01_assessment_multisystem.md` |
 
 ## 训练 / 考核隔离
 
@@ -19,8 +19,8 @@
 | --- | --- |
 | 训练病例 | CASE-T01～CASE-T04，仅用于形成性训练，不进入独立考核题库 |
 | 独立考核病例 | CASE-A01、CASE-A02，考核前不得向学生发放卡片内容，不得在训练环节复用 |
-| 疾病不重叠 | 六个病例的主诊断互不相同：SLE / RA / AAV / IIM / UA / AOSD |
-| 考核与训练的关系 | 考核病例的疾病不出现在训练病例中，训练病例的疾病也不出现在考核病例中 |
+| 疾病不重叠 | 六个病例的主诊断互不相同：SLE / RA / AAV / IIM / UA / 干燥症状待查 |
+| 考核与训练的关系 | 两套独立题本不属于四份训练病例；必须排查平台全部可见教材和已有病例是否出现同一题本答案模式 |
 | 平台支持情况 | 平台 `Case` 表目前**没有** `assessment_only` / `review_status` 字段，训练/考核隔离目前只靠本目录文档与教师发放流程保证（见 `A02_platform_schema_notes.md`） |
 
 ## 六维评分权重（六份卡片一致）
