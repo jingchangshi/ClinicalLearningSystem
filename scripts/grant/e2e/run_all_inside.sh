@@ -42,10 +42,18 @@ export E2E_TEACHER_USERNAME=test_teacher_a E2E_TEACHER_PASSWORD=test-teacher-pw
 export E2E_ADMIN_USERNAME=test_admin E2E_ADMIN_PASSWORD=test-admin-pw
 export E2E_RATER_USERNAME=test_teacher_a E2E_RATER_PASSWORD=test-teacher-pw
 
-# The pre-existing suite, unchanged, plus the R8.2 flow. Excludes the screenshot
-# spec: that runs after the functional suites so it captures their end state.
-step "playwright: existing suite + R8.2 research flow" playwright.log \
-  npx playwright test --reporter=list --grep-invert "E2 evidence screenshots"
+# The R8.2 flow runs FIRST and alone: it produces the training evidence that the
+# AI-audit assertion in teacher.spec.ts reads. Playwright interleaves files when
+# it has several workers, and the audit writer is asynchronous, so running them
+# together made teacher.spec.ts race the audit flush (an intermittently empty
+# audit table, not a product bug).
+step "playwright: R8.2 research flow" playwright_research.log \
+  npx playwright test tests/e2e/research-flow.spec.ts --reporter=list --workers=1
+
+# The pre-existing suite, unchanged. Excludes the screenshot spec: that runs
+# after the functional suites so it captures their end state.
+step "playwright: existing suite" playwright.log \
+  npx playwright test --reporter=list --grep-invert "E2 evidence screenshots|R8.2 research flow"
 
 export E2E_SHOTS_DIR="$SHOTS"
 step "playwright: E2 evidence screenshots" screenshots.log \
