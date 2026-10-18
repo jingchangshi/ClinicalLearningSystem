@@ -1,94 +1,164 @@
 # 测试报告（TEST_REPORT）
 
-> **中期报告**（2026-10-18，应用/申报成员编写）。只记录**本成员实际执行**的检查及其真实输出；
-> 其他成员负责的验收（前端、Playwright、迁移、E2E）在对应条目标「未执行」，**不得视为通过**。
-> 牵头成员在集成后用最终 SHA 的完整运行替换第一节。
+> **最终版**（2026-10-18，牵头成员在集成后以最终 SHA 重跑并填写）。
+> 只记录**实际执行**的检查及其真实输出。未执行的项目一律写「未执行」，**不得视为通过**。
+> 交付 SHA：`f2b32d8`（分支 `feat/clinpath-final-2026`，worktree `/home/jcshi/workspace/clinpath-final`）。
 
-## 1. 后端全量测试（已执行，两次，均为干净检出）
-
-**最新一次：SHA `f7f737c`，2026-10-18 14:25—14:27 UTC，耗时 120 s：329 passed，1 failed，1 xfailed**
-（日志 `../evidence/E2_platform/test_runs/backend_pytest_f7f737c.log`；唯一失败是 `test_version_endpoint.py::test_version_endpoint_reports_deployment_truth`，`schema_revision` 为 `None`，原因未单独定位，归属迁移/版本接口成员）。
-相对第一次（`47f7e6d`）：独立考核测试修复与迁移预期值更新已在他人提交 `613f434` 中入库。以下 1.1 为第一次运行的原始记录，保留作对比。
-
-### 1.1 第一次运行（`47f7e6d`）
+## 1. 后端全量测试（已执行，最终）
 
 | 项 | 值 |
 | --- | --- |
-| Git SHA | `47f7e6d`（分支 `feat/clinpath-final-2026`） |
-| 检出 | 干净 detached worktree（排除他人未提交修改） |
-| 环境 | aarch64 Linux 6.8，uv，Python 3.11，临时 SQLite |
-| 命令 | `cd backend && uv run --python 3.11 --with-requirements requirements.txt pytest -q` |
-| 时间 | 2026-10-18 14:18—14:20 UTC，耗时 107 s |
-| 结果 | **307 passed，5 failed，1 xfailed** |
-| 日志 | `../evidence/E2_platform/test_runs/backend_pytest_47f7e6d.log` |
+| 命令 | `cd backend && uv run --python 3.11 --with-requirements requirements.txt pytest -q -p no:cacheprovider` |
+| 结果 | **425 passed，0 failed**，1 warning（既有 starlette TestClient 弃用告警），465.99 s |
+| 时间 | 2026-10-18 17:0x UTC |
+| 日志 | `../evidence/E2_platform/test_runs/backend_pytest_f2b32d8.log` |
+| 稳定性 | 运行期间 `backend/` 无改动（`git diff --stat b471463..f2b32d8 -- backend/` 为空），计数属于该树 |
 
-失败的 5 项（**如实记录，未隐藏**）：
+### 1.1 历史运行（保留作对比，均已被上面取代）
 
-| 测试 | 原因（已核实的部分） | 归属 |
+| SHA | 结果 | 说明 |
 | --- | --- | --- |
-| `test_independent_assessments.py::test_reject_unapproved_form` | 测试代码引用未定义的 `rater_ids`（`NameError`），是测试自身缺陷 | 独立考核实现者 |
-| `test_seed_migration_semantics.py`（3 项） | 断言迁移 head 为 `20261018_07`，而仓库 head 已是 `20261018_08`（预期值过期）；他人对该文件的修改尚未提交 | 迁移/数据库成员 |
-| `test_version_endpoint.py::test_version_endpoint_reports_deployment_truth` | `schema_revision` 为 `None`，与上一条同属迁移 head 问题；未单独定位 | 同上 |
+| `47f7e6d` | 307 passed / 5 failed / 1 xfailed | 早期；失败含测试自身 `NameError` 与过期迁移断言 |
+| `f7f737c` | 329 passed / 1 failed / 1 xfailed | `test_version_endpoint` 的 `schema_revision=None` |
+| `2fd5558` | 416 passed | 后端成员报告；**不含** staff/my-forms 接口 |
+| `28c8081` | 424 passed | 含接口与驾驶舱修复 |
+| `a653662` | 424 passed | 干净树复跑 |
+| `f2b32d8` | **425 passed** | 最终 |
 
-`xfailed` 1 项：`test_7day_personalization_loop.py` 中记录“普通训练提交路由会更新画像”的历史缺口；
-终稿轮需以 Assessment 正向隔离测试证明最终隔离，而不是靠该 `xfail`（R8.1）。
+> 说明：`xfail` 已全部移除（`grep -rn "xfail\|skip" backend/tests/` 无标记）。
+> 旧 `xfail`「考核会话不进入形成性画像」已由**正向**隔离测试取代，见 §1.2。
 
-> 第二次运行后，他人的硬化工作（`20261018_09`）已入库；仍可能有后续提交，故以上数字**不代表最终结果**。
+### 1.2 隔离性正向证明（R8.1）
 
-## 2. 申报文本检查（已执行）
+`backend/tests/test_assessment_isolation.py` 5 项，全部通过：
 
-`python3 scripts/grant/check_application_text.py`（退出码 0）：
+- 完整考核生命周期后，训练表与 `ai_invocations` 均无新增；
+- 训练提交不产生任何 `assessment_*` 行；
+- 考核题本无法经普通病例/会话 API 读取；
+- 学生响应中不含参考答案、量表与分数；
+- **结构证明**：在 `python -I` 隔离子进程中导入考核模块，断言 `app.services`、`app.llm`、
+  `app.routes.sessions`、`app.core.ai_*` 等训练/AI 模块**从未被加载**。
 
-```text
-栏目                        字数    上限    余量  结果
---------------------------------------------------------
-项目研究基础                 488     600     112  PASS
-拟解决的重点问题             370     600     230  PASS
-项目工作思路与举措           900    1000     100  PASS
-项目特色与创新               223     300      77  PASS
-具体实施计划及预期成果       446     600     154  PASS
-政策支持与经费保障           619     800     181  PASS
---------------------------------------------------------
-合计                        3046    3900     854  PASS
-```
+### 1.3 角色权限矩阵与越权（R1.3、R8.1）
 
-内容机械检查（R7.4）共 23 项，全部 PASS（项目名称全文一致、四种状态用词、无已完成的真实研究/效果性表述/具体 P 值/伦理批准/批件号/班内随机/AOSD/无条件 2/35/合成效果、
-必含 T0 不进入画像、D4/D5 来自 D2/D3、3+4 与 35 种、准实验备选、真实研究未启动、伦理尚无批件、21 人待确认、荣誉与单位承诺为待填、探索性）。
+`tests/test_assessment_permissions.py`（含 `design/assignments`、`design/schedule`、
+`forms/mine`、`admin/staff` 四个新增行的角色断言）、`tests/test_assessment_directory.py`
+（4 项：目录仅管理员、字段集精确、学生不出现、作者之间互不可见）、
+`tests/test_assessment_forms.py`（两名不同教师、管理员不可伪造、未审核不可发布）全部通过。
 
-## 3. 一致性检查（已执行）
+### 1.4 考试可靠性、双评与裁决（R2.3、R3）
 
-`python3 scripts/grant/check_protocol_consistency.py` 现覆盖 R7.4 机械规则，并把**缺失的关键文档视为失败（退出码 2）**。
-截至本报告，它在本成员负责的文件上无违规；剩余违规只来自其他成员负责的文件（见 `FINAL_REPORT_ZH.md` §6.6 “过期表述”）：
-`workpackages/A_cases/A04_difficulty_calibration_BLANK.md:14`、`A_cases/STATUS_A.md:42`、
-`B_rubric/B02_sample_answers.md:138,173`、`B_rubric/STATUS_B.md:183` （过期表述）仍把 CASE-A02 写成 AOSD/Still，应改为干燥症状病例。
-这些在其负责人修正前，该脚本会保持 FAIL——这是预期的“防止遗留过期表述”行为，而不是脚本缺陷。
+`test_assessment_student_exam.py`（11）、`test_assessment_blind_scoring.py`（15）、
+`test_assessment_scheduling.py`、`test_assessment_study_schedule.py`（15）全部通过，
+覆盖草稿/断网恢复、幂等重复提交、窗口与时区、超时与中断、受控重考、
+盲评身份脱敏与锁分、分歧阈值与裁决记录、以及「未经裁决的分歧不得被悄悄覆盖」
+（`finalize` 在分歧超阈值且无裁决时返回 409 `adjudication_required`）。
 
-## 4. 检查脚本自测（已执行）
+### 1.5 7 批 49 人批量编排（R4）
 
-`backend/tests/test_grant_checkers.py`：**44 passed**（`pytest -q`，0.12 s）。覆盖：六栏上限、缺文档/缺栏目退出码 2、超限与过期声明失败、
-9 类被植入的错误陈述、否定式诚实陈述不误报、未知事实必须保持【待填】、缺失关键文档失败、13 类规则的植入/放行、A02 载荷校验。
+`test_assessment_study_schedule.py`：一次调用为 7 批 × 7 人创建 **98 份考次**；
+每人 T0/T1 严格按其冻结的 X/Y 顺序；批内约 4/3；**两处真实的中途失败**证明
+不留下部分考次与部分审计行；重复执行幂等、任何差异返回 `schedule_conflict`；
+未发布题本被拒且不写入；真实与合成来源分离。
 
-## 5. 其他现有检查（已执行，非本成员负责）
+## 2. 前端门禁（已执行，最终树）
 
-`python3 scripts/grant/check_case_cards.py`：88 项检查，通过 87，失败 1，总体 FAIL。失败项属病例卡（病例负责人在改动 A02），本成员未处理。
+| 命令 | 结果 |
+| --- | --- |
+| `npx tsc --noEmit` | 退出码 0，无输出 |
+| `npm run lint`（`eslint . --max-warnings=0`） | 退出码 0，无输出 |
+| `npm run build` | 退出码 0：`✓ Compiled successfully in 20.7s`、`Finished TypeScript in 12.5s`、27/27 静态页 |
 
-## 6. 未执行（不得视为通过）
+## 3. 浏览器 E2E（已执行，隔离栈）
+
+隔离栈：后端 `127.0.0.1:8400`、前端 `127.0.0.1:8401`、`/tmp` 一次性 SQLite、
+独立 `NEXT_DIST_DIR`，构建期烘焙 `INTERNAL_API_BASE_URL=http://127.0.0.1:8400/api`
+（每次运行后核验 `routes-manifest.json`）。完整记录见
+`../evidence/E4_validation/RUN_RECORD_2026-10-18.md`。
+
+| 套件 | 结果 |
+| --- | --- |
+| R8.2 完整研究流程（`research-flow.spec.ts`，单独运行） | **9 passed / 0 failed** |
+| 既有 Playwright 套件 | 26 passed，**3 failed**，11 skipped |
+| 截图套件 | 4 passed |
+
+R8.2 九步全部在浏览器中跑通：管理员建题本 → 两名不同教师各自审核批准 → 管理员发布 →
+学生 T0 → D2/D3 形成性训练 → D4/D5 个性化 → 学生 T1 → 双教师盲评 → 分歧裁决 → 研究导出。
+
+**3 项失败如实记录，未隐藏、未跳过**：`demo-readiness.spec.ts` 的增长趋势图、
+≥3 名学生导出预览、学生学习历史表——它们断言一个**预置演示数据集**，而全新 `seed_data`
+没有任何已完成的训练；重建该数据集（`scripts/prepare_presentation_data.py`）需要真实模型密钥，
+与本轮**刻意无密钥**的设定冲突。
+
+## 4. 7 批 49 人 × 98 份答卷批量流程（已执行）
+
+`scripts/grant/e2e/verify_study_invariants.py` **读取产品自身记录**（而非 fixture 算术）核对：
+
+| 不变量 | 结果 |
+| --- | --- |
+| I1 7 批 × 7 人 = 49 名互异学生 | 成立 |
+| I2 每批同一研究臂；3 ClinPath + 4 CBL；合法整批分配索引 ∈ C(7,3)=35 | 成立 |
+| I3 题本顺序冻结时间（16:16:22.101596）**早于**教学组抽取（16:16:22.119085），哈希绑定 | 成立 |
+| I4 98 份考次，无 `(学生, 时点)` 重复 | 成立 |
+| I5 T0/T1 使用不同题本且遵循各自冻结的 X/Y | 成立 |
+| I6 每批内部 X/Y 约 4/3 | 成立 |
+| I7 导出 98 行，仅含研究编码，`data_origin=['pilot_test']` | 成立 |
+
+## 5. 数据库迁移验收（已执行）
+
+详见 `../evidence/E2_platform/MIGRATION_ACCEPTANCE.md`。
+
+- 隔离临时库：`upgrade head` → `downgrade 20261018_07` → `upgrade head`；
+  **14/14 训练表在每一步逐字节一致**；16 张考核/研究表被删除并重建；
+  再升级后的表结构与全新 `create_all` **52 个对象、0 处差异**。
+- **生产数据库的只读副本**（revision `20260915_06`，含 816 条 `ai_invocations` 等真实数据）：
+  25 张表内容不变；07→head→07→head 往返逐字节一致。副本经 `mode=ro` + `Connection.backup` 取得，
+  源文件 `mtime` 保持 `2026-09-15 16:27:09`。
+- **发现并修复真实缺陷** `d117899`：`20261018_09` 曾把 `assessment_sittings.created_at`
+  建为可空且未恢复 `NOT NULL`，降级再升级后 schema 弱于 ORM；回归测试
+  `test_migration_down_up_cycle.py` 在移除修复后确实失败。
+- **生产库本身未迁移、未写入**；生产 `/api/system/version` 的 `schema_revision` 全程为 `20260915_06`。
+
+## 6. 申报与病例检查脚本（已执行）
+
+| 脚本 | 结果 |
+| --- | --- |
+| `check_application_text.py` | 退出码 0；六栏 488/370/900/223/446/619（限 600/600/1000/300/600/800）；23 项内容检查全 PASS |
+| `check_protocol_consistency.py` | 退出码 0 |
+| `check_case_cards.py` | 退出码 0（88/88） |
+| `validate_assessment_payloads.py` | 退出码 0（**30/30**） |
+| `audit_exam_leakage.py` | 退出码 0 |
+
+检查脚本自测：`tests/test_grant_checkers.py`（51）+ `tests/test_case_payload_validation.py`（20）
+= **71 passed**。
+
+## 7. 未执行（不得视为通过）
 
 | 项 | 原因 |
 | --- | --- |
-| `npm run typecheck` | 本 worktree 未安装 `node_modules`（`tsc: not found`） |
-| `npm run lint` / `npm run build` | 同上；并且不得在共享目录覆盖他人构建 |
-| Playwright / 关键角色 E2E / 中断恢复 / 完整模拟研究流程 | 依赖前端构建与完整实现 |
-| 7 批 49 人 98 份答卷批量流程 | 依赖实现合并 |
-| 迁移升级/降级/再升级（独立库与生产库脱敏副本） | 他人负责；`_09` 未提交 |
-| Assessment 数据域隔离正向测试 | 他人负责 |
-| `verify_deploy.sh`、真实浏览器 smoke | 未部署，需申请人授权 |
+| `training.spec.ts`（8 项）与考核变更类用例 | 需 `E2E_RUN_MUTATING`，本轮未开 |
+| 教师干预、数据集冻结的浏览器用例 | 同上 |
+| 真实断网（物理断网）恢复 | 仅验证了服务端草稿/恢复语义与前端本地备份 |
+| 真实 AI 评分 | 本轮**刻意无模型密钥**；已验证 `rule_fallback` 显式降级路径 |
+| `demo-readiness.spec.ts` 3 项 | 需真实模型密钥重建演示数据集（见 §3） |
+| 生产部署与部署后浏览器 smoke（R8.4） | 未部署，需申请人明确授权 |
+| `./scripts/verify_deploy.sh` | 其前提是「运行源码 == 本检出、schema 在 head」；本轮不部署，故不适用 |
 
-## 7. 重新运行
+## 8. 重新运行
 
 ```bash
+# 后端
 cd backend && uv run --python 3.11 --with-requirements requirements.txt pytest -q
+
+# 前端门禁
+cd frontend && npm ci && npm run typecheck && npm run lint && npm run build
+
+# 隔离栈完整验收（含 E2E、7×49 不变量、截图）
+./scripts/grant/e2e/run_full_acceptance.sh final
+
+# 申报/病例检查
 python3 scripts/grant/check_application_text.py
 python3 scripts/grant/check_protocol_consistency.py
-cd frontend && npm ci && npm run typecheck && npm run lint && npm run build && npx playwright test
+python3 scripts/grant/check_case_cards.py
+python3 scripts/grant/validate_assessment_payloads.py
 ```
