@@ -1,0 +1,5 @@
+# backend pytest - full suite
+# SHA: 28c8081  (28c80813bfc94af050a34a5610ef60a2a984f58f)
+# UTC: 2026-10-18T15:50:49Z
+# cmd: cd backend && uv run --python 3.11 --with-requirements requirements.txt pytest -q -p no:cacheprovider
+# result: 420 passed, 1 warning in 499.56s
