@@ -131,9 +131,16 @@ const CODE_MESSAGES: Record<string, string> = {
   bad_data_origin: "数据来源必须是 real_study、synthetic_demo 或 pilot_test。",
   bad_window: "时间窗口不合法：结束时间必须晚于开始时间。",
   bad_dates: "日期不合法。",
-  bad_forms: "必须分别指定 A01 与 A02 的已发布题本。",
+  bad_forms: "必须分别指定 A01 与 A02 的已发布题本，且必须是两个不同的题本。",
   bad_mode: "分配方式必须是 randomized 或 quasi_experimental。",
+  bad_form_order: "题本顺序必须是 X 或 Y。",
+  bad_teacher: "教学教师名单必须是教工账号。",
   missing_window: "每个批次都必须填写 T0 和 T1 两个时间窗口。",
+  bad_timepoint_order: "时间安排不合法：同一批次 T0 的窗口必须在 T1 开放之前关闭（T0 在前测日，T1 在后测日）。",
+  cohort_empty: "该批次还没有入组学生，无法批量排考。",
+  no_cohorts: "该数据来源下没有已登记的批次。",
+  unknown_cohort: "提交的批次编号中有未登记的批次。",
+  schedule_conflict: "已有学生的考试安排与本次排考不一致（可能已开始或已提交）。请先处理那一场考试，或作废后重新安排。",
   cohort_exists: "该批次编号已存在。",
   cohort_not_found: "没有找到该批次。",
   cohort_full: "一个轮转批次最多 7 名学生，不能再加入。",
@@ -753,7 +760,14 @@ export function scheduleStudySittings(payload: {
   rater_b_id: number;
   adjudicator_user_id?: number | null;
 }) {
-  return call<{ created: number; sitting_ids: number[] }>("/api/assessments/admin/design/schedule", {
+  return call<{
+    created: number;
+    existing: number;
+    students: number;
+    cohorts: Record<string, number>;
+    sitting_ids: number[];
+    existing_ids: number[];
+  }>("/api/assessments/admin/design/schedule", {
     method: "POST",
     ...jsonBody(payload),
   });

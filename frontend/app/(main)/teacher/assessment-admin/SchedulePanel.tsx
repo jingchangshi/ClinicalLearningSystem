@@ -32,6 +32,12 @@ function toPayload(windows: Record<string, WindowPair>) {
     const t1Start = fromLocalInputValue(pair.T1.start);
     const t1End = fromLocalInputValue(pair.T1.end);
     if (!t0Start || !t0End || !t1Start || !t1End) throw new Error(`批次 ${cohort} 的时间窗口没有填完整。`);
+    if (t0Start >= t0End) throw new Error(`批次 ${cohort} 的 T0 窗口结束时间必须晚于开始时间。`);
+    if (t1Start >= t1End) throw new Error(`批次 ${cohort} 的 T1 窗口结束时间必须晚于开始时间。`);
+    // R4.4: T0 is on D1 and T1 on D6, so the two windows may never overlap.
+    if (t1Start <= t0End) {
+      throw new Error(`批次 ${cohort} 的 T0 窗口必须在 T1 开放之前关闭（T0 是基线考核，T1 是后测）。`);
+    }
     payload[cohort] = {
       T0: { start: t0Start, end: t0End },
       T1: { start: t1Start, end: t1End },
@@ -133,7 +139,8 @@ export function SchedulePanel({ directory }: { directory: Directory }) {
         ...(adjudicator ? { adjudicator_user_id: adjudicator } : {}),
       });
       setMessage(
-        `已为 ${originCohorts.length} 个批次建立 ${result.created} 场考试（每人 T0 与 T1 各一场，题本按冻结的 X/Y 顺序分配）。`,
+        `批次排考完成：新建 ${result.created} 场，已存在且一致的 ${result.existing} 场，共 ${result.students} 名学生。` +
+          "每人 T0 与 T1 各一场，题本按冻结的 X/Y 顺序分配。重复执行不会产生重复考试，也不会悄悄改动已有安排。",
       );
       await reload();
     } catch (reason) {

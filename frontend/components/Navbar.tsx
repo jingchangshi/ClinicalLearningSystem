@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, BarChart3, BookOpen, FlaskConical, GraduationCap, History, LogIn, LogOut, Route, Settings, UserPlus, UserRound, Users } from "lucide-react";
+import { Activity, BarChart3, BookOpen, ClipboardList, FlaskConical, GraduationCap, History, LogIn, LogOut, Route, Settings, ShieldCheck, UserPlus, UserRound, Users } from "lucide-react";
 
 import { useAuth } from "@/components/AuthProvider";
 
@@ -14,7 +14,7 @@ const studentLinks = [
   { href: "/student/knowledge", label: "知识学习", icon: BookOpen },
   { href: "/student/profile", label: "能力画像", icon: UserRound },
   { href: "/student/history", label: "学习记录", icon: History },
-  { href: "/student/assessments", label: "独立考核", icon: BookOpen },
+  { href: "/student/assessments", label: "独立考核", icon: ClipboardList },
 ];
 
 const teacherLinks = [
@@ -22,16 +22,16 @@ const teacherLinks = [
   { href: "/teacher/students", label: "学生画像", icon: Users },
   { href: "/teacher/research-export", label: "研究数据", icon: BarChart3 },
   { href: "/teacher/research-demo", label: "模拟研究", icon: FlaskConical },
-  { href: "/teacher/assessments", label: "独立盲评", icon: BookOpen },
-  { href: "/teacher/assessment-forms", label: "病例审核", icon: BookOpen },
+  { href: "/teacher/assessments", label: "独立盲评", icon: ShieldCheck },
+  { href: "/teacher/assessment-forms", label: "考核题本审核", icon: ClipboardList },
   { href: "/teacher/runtime", label: "系统状态", icon: Activity },
 ];
 
 const adminLinks = [
   { href: "/teacher/dashboard", label: "教学驾驶舱", icon: GraduationCap },
   { href: "/teacher/cases", label: "病例管理", icon: Settings },
-  { href: "/teacher/assessment-admin", label: "考核管理", icon: Settings },
-  { href: "/teacher/assessments", label: "独立盲评", icon: BookOpen },
+  { href: "/teacher/assessment-admin", label: "独立考核管理", icon: ClipboardList },
+  { href: "/teacher/assessment-forms", label: "考核题本与发布", icon: ShieldCheck },
   { href: "/teacher/students", label: "学生画像", icon: Users },
   { href: "/teacher/runtime", label: "系统状态", icon: Activity },
 ];
