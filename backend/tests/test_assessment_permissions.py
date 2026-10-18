@@ -27,6 +27,8 @@ def endpoints(fid, sid, code, rid):
         ("POST", f"{P}/forms/{fid}/versions", {}, {"admin_user", *TEACHERS}),
         ("GET", f"{P}/forms/admin/all", None, {"admin_user"}),
         ("GET", f"{P}/forms/{fid}/admin", None, {"admin_user"}),
+        ("GET", f"{P}/forms/mine", None, {"admin_user", *TEACHERS}),
+        ("GET", f"{P}/admin/staff", None, {"admin_user"}),
         ("POST", f"{P}/forms/{fid}/reviewers", {"teacher_user_ids": [1, 2]}, {"admin_user"}),
         ("POST", f"{P}/forms/{fid}/approve", None, {"admin_user"}),
         ("GET", f"{P}/forms/reviewable", None, TEACHERS),
