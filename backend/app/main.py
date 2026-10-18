@@ -9,7 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.routes import auth, case_generation, cases, demo_research, guidelines, knowledge, sessions, skills, sp, students, teacher
+from app.routes import auth, case_generation, cases, demo_research, guidelines, knowledge, sessions, skills, sp, students, teacher, assessments
+from app import assessment_models  # noqa: F401 - registers independent tables
 from app.auth import require_role
 from app.core.ai_runtime import ai_runtime
 from app.core import ai_audit
@@ -70,6 +71,7 @@ app.include_router(auth.router)
 app.include_router(students.router)
 app.include_router(students.student_router)
 app.include_router(cases.router)
+app.include_router(assessments.router)
 app.include_router(sessions.router)
 app.include_router(teacher.router)
 app.include_router(demo_research.router)

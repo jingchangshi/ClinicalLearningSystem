@@ -504,3 +504,6 @@ class TeacherScoreReview(Base):
     confirmed_dimensions_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     projector_version: Mapped[str] = mapped_column(String(50), nullable=False, default="v1")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+# Separate independent-assessment ORM tables registered for Base.metadata.create_all.
+from app.assessment_models import AssessmentForm, AssessmentSitting, AssessmentAnswer, AssessmentReview  # noqa: F401,E402
