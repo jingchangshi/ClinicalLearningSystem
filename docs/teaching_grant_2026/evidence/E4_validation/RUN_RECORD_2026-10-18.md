@@ -11,7 +11,8 @@
 
 在隔离栈（后端 8400 / 前端 8401 / `/tmp` 一次性 SQLite / 构建期烘焙的独立 `NEXT_DIST_DIR`）上：
 
-- 既有 Playwright 套件 + 新增 R8.2 全流程：**35 passed，3 failed，11 skipped**（失败项全部为需要预置演示数据的旧用例，见 §5）；
+- R8.2 全流程单独运行：**9 passed, 0 failed**；
+- 既有 Playwright 套件：**26 passed，3 failed，11 skipped**（失败项全部为需要预置演示数据的旧用例，见 §5）；
 - R8.2 九个步骤（管理员建题本 → 两教师审核 → 发布 → 学生 T0 → D2/D3 训练 → D4/D5 个性化 → 学生 T1 → 双教师盲评 → 裁决 → 研究导出）**9/9 通过**；
 - 7 批 × 7 人 × 98 场批量流程：**7 项不变量全部成立**；
 - E2 截图 **16 张**全部来自本次运行。
@@ -80,8 +81,14 @@ python3 scripts/grant/e2e/stack.py build                     # .next-accept，�
 
 ## 5. Playwright 实际结果（提交 `b0a8a3f`）
 
+分两段运行（`run_all_inside.sh`）：R8.2 先以单 worker 单独跑，随后跑既有套件。
+这样拆分是因为 Playwright 会跨 worker 交错执行文件，而 `ai_invocations` 由**异步后台线程**写入；
+`teacher.spec.ts` 断言该审计汇总，与产生训练事件的 R8.2 流程并行时会偶发读到空表
+（是测试竞态，不是产品缺陷；已实测并修正运行顺序）。
+
 ```
-35 passed, 3 failed, 11 skipped (1.8m)
+R8.2 research flow:  9 passed
+existing suite:     26 passed, 3 failed, 11 skipped (40.8s)
 ```
 
 ### 5.1 R8.2 九步全流程：9/9 通过
@@ -104,9 +111,10 @@ python3 scripts/grant/e2e/stack.py build                     # .next-accept，�
 
 | 结果 | 用例 |
 | --- | --- |
-| PASS（35 含 R8.2 九项） | `assessment.spec.ts`（角色门、学生列表不泄露分数、管理员门）、`auth.spec.ts`（登录/刷新/伪造 JWT 五种/退出）、`monitoring.spec.ts`、`research-demo.spec.ts`（合成横幅与 CSV、学生 403、真实导出未变）、`teacher.spec.ts`（页面无 5xx/控制台错误、AI 运行时探测、退出与审计） |
+| PASS（26，不含 R8.2 九项） | `assessment.spec.ts`（角色门、学生列表不泄露分数、管理员门）、`auth.spec.ts`（登录/刷新/伪造 JWT 五种/退出）、`monitoring.spec.ts`、`research-demo.spec.ts`（合成横幅与 CSV、学生 403、真实导出未变）、`teacher.spec.ts`（页面无 5xx/控制台错误、AI 运行时探测、退出与审计） |
 | **FAIL（3）** | `demo-readiness.spec.ts` 三条：`李明 profile …`（缺 `growth-trend-chart`）、`研究数据 preview …`（只 1 名学生，断言要 ≥3）、`学习记录 …`（缺 `history-table`） |
 | SKIP（11） | `training.spec.ts` 8 条 + `assessment.spec.ts` 2 条 + `auth.spec.ts` 1 条，均因未设 `E2E_RUN_MUTATING` / `E2E_EXPECT_NO_JWT_SECRET` 等显式开关 |
+| PASS（`teacher.spec.ts:73` AI 审计汇总） | 在 R8.2 先跑完之后，该断言读到 `case_evaluation` 汇总行并通过 |
 
 **3 条失败的原因（如实说明）**：它们断言的是「已有教学历史的演示数据集」——
 学生画像趋势图、≥3 名学生的研究导出预览、学生已完成病例的学习记录。
