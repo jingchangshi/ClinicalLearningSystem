@@ -1,5 +1,16 @@
 # E5 研究方案 v2.0 修订清单（PROTOCOL_REVISION_NOTES_v2）
 
+> ## ⚠ 历史文件 — 其中的"方案 B"**已否决**
+>
+> 本文件记录的是 2026-10-18 第三轮提出**方案 B（班内 3+4 随机）**的过程。
+> **该方案已于第四轮被否决**：申请人明确确认教学组织条件不允许把同一批 7 名见习生
+> 拆分为两种教学组。现行唯一设计是 **方案 A（7 批次整群分配）**，
+> 见 `T3_design_comparison.md` 与 `PROTOCOL_REVISION_NOTES_v3.md`。
+>
+> **本文件中的方案 B 内容仅作历史留痕，不得作为备选、推荐或待确认事项引用**，
+> 其样本量（24 vs 25）、主模型（批次固定效应）、置换检验（35⁷ / Monte Carlo）
+> 与个体层面功效推断均已从现行方案中删除。
+
 **日期**：2026-10-18
 **修订范围**：`E5_01_research_protocol.md`、`E5_02_SAP_statistical_analysis_plan.md`，
 以及为保持一致而同步修改的 `E5_03_ethics_privacy.md`、`E5_protocol_data_dictionary.md`、

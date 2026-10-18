@@ -54,7 +54,7 @@
 | `data_origin` | enum | 见 §1 | 是 | 写入时显式赋值 | 真实研究恒为 `REAL_CONSENTED` |
 | `population` | enum | **新增**：`MAIN_CLERKSHIP`（49 名见习学生）/ `EXTENSION_INTERNSHIP`（21 名实习学生） | 是 | 教务 | **主结局分析只取 `MAIN_CLERKSHIP`**；扩展人群不并入（§2.1） |
 | `group` | enum | `CBL` / `CLINPATH` | 是 | 分配记录 | 分配在 D1 前书面确定 |
-| `cohort` | string | 批次（如 `2027春-批次1`），共 7 个批次，每批 7 人 | 是 | 教务排课 | 用于分层与 ICC 估计；**方案 A 下即分组单位，方案 B 下是批次固定效应层**（分组方案见 `E5_01` §3） |
+| `cohort` | string | 批次（如 `2027春-批次1`），共 7 个批次，每批 7 人 | 是 | 教务排课 | 用于分层与 ICC 估计；**批次即分组单位（整群随机分配）**（分组方案见 `E5_01` §3） |
 | `site_id` | string | 院区编码 | 是 | 教务 | 单中心时可填唯一值，但**不得留空** |
 | `department_id` | string | 科室/教研室编码 | 是 | 教务 | 用于确认"同一科室、同一批带教" |
 | `rotation_start` | date | **修订**：7 天见习**开始日期** | 是 | 教务 | T0（D1）必须等于此日期 |
@@ -332,8 +332,8 @@ participants     : study_id, data_origin, population, group, cohort, site_id, de
                    exclusion_reason, enrolled
 consent_log      : study_id, event_type, event_date, icf_version, method,
                    witness_or_staff_id, scope, processed_by, processed_date, data_action
-randomisation_record (方案 B): cohort, seed, generated_at, generated_by, allocation_rule,
-                   study_id, group, revealed_at, revealed_by
+randomisation_record (整群随机): seed, generated_at, generated_by, allocation_rule,
+                   batch_id, group, batch_start, batch_end, revealed_at, revealed_by
 assessments      : study_id, data_origin, group, cohort, timepoint, assessment_date,
                    assessment_case_id, case_version, rubric_version,
                    rater_A_id, rater_A_total, rater_A_blinded_to_group,
@@ -361,7 +361,7 @@ expert_review    : reviewer_slot, reviewer_id, reviewer_role, review_date,
 | 变更 | 字段/实体 | 原因 |
 | --- | --- | --- |
 | 新增实体 | `consent_log` | 同意是可审计事件序列，不是一个状态 |
-| 新增实体 | `randomisation_record`（§12） | 方案 B 的批内 3+4 随机必须留痕 |
+| 新增实体 | `randomisation_record`（§12） | 7 批次整群随机分配必须留痕（分配隐藏与可复现） |
 | 新增 | `population` | 区分 49 名见习学生（主研究总体）与 21 名实习学生（扩展人群），防止误合并 |
 | 新增 | `site_id`, `department_id`, `rotation_start/end` | 批次混杂控制 |
 | **修订** | `rotation_weeks` → `rotation_days`（恒为 7） | 排课条件为 7 天/批 |
@@ -378,30 +378,36 @@ expert_review    : reviewer_slot, reviewer_id, reviewer_role, review_date,
 
 ---
 
-## 12. 随机化记录（新增实体 `randomisation_record`，方案 B 专用）
+## 12. 随机化记录（新增实体 `randomisation_record`，整群随机分配专用）
 
-若采用**方案 B（每批 7 人内部 3+4 随机）**，随机化必须**可审计**。
-本表与主数据集分开存放（仅研究负责人与统计人员可见），用于证明"分配隐藏"与可复现。
+本设计的随机化是**批次层面**的：预先固定 **3 个批次入 ClinPath、4 个批次入常规 CBL**，
+再随机选定"哪 3 个批次"入 ClinPath（合法分配 C(7,3) = 35 种）。
+随机化必须**可审计**。本表与主数据集分开存放（仅研究负责人与统计人员可见），
+用于证明"分配隐藏"与可复现。
 
 | 字段 | 类型 | 定义 | 必填 |
 | --- | --- | --- | --- |
-| `cohort` | string | 批次 | 是 |
 | `seed` | string | 随机数种子（**预注册中固定**，建议 `20270101`） | 是 |
-| `generated_at` | datetime | 分配序列生成时间（必须**早于** D1） | 是 |
+| `generated_at` | datetime | 分配结果生成时间（必须**早于** D1） | 是 |
 | `generated_by` | string | 生成人编号（**不是姓名**） | 是 |
-| `allocation_rule` | string | 该批次分入 ClinPath 的人数（`3` 或 `4`），以及交替规则 | 是 |
-| `study_id` | string | 该批次内每名学生的匿名编号 | 是 |
-| `group` | enum | `CBL` / `CLINPATH` | 是 |
-| `form_order` | enum | `X`（D1=CASE-A01, D6=CASE-A02）/ `Y`（D1=CASE-A02, D6=CASE-A01） | 是 |
-| `revealed_at` | datetime | 分配结果告知学生的时点（必须**在 D1 当天**） | 是 |
+| `allocation_rule` | string | **固定为 `"3 of 7 batches"`**：3 个批次入 ClinPath、4 个入常规 CBL，再随机选哪 3 批 | 是 |
+| `batch_id` | string | 批次编号（7 个批次之一），一行一个批次 | 是 |
+| `group` | enum | 该批次的组别：`CBL` / `CLINPATH` | 是 |
+| `batch_start` | date | 该批次见习开始日期（= T0/D1） | 是 |
+| `batch_end` | date | 该批次见习结束日期（= `batch_start + 6 天`，含 T1/D6） | 是 |
+| `revealed_at` | datetime | 分配结果告知该批次的时点（必须**在 D1 当天**） | 是 |
 | `revealed_by` | string | 执行人编号 | 是 |
+
+> **`form_order`（考核题本顺序）不在本表。** 交叉反平衡的顺序 X/Y 在**每批内**按学生分配
+> （`E5_01` §8.1），与批次组别**相互独立**；为避免提前泄露，题本顺序另表留存，
+> 不写入面向批次层面的 `randomisation_record`。
 
 **规则**
 
-- 分配序列在 **D1 之前**生成并封存，不得因学生基线或教师偏好调整；
-- `form_order`（考核题本顺序）与 `group`（组别）**相互独立**地分配，同样在 D1 前封存；
-  两者都不在 `randomisation_record` 之外的地方留存，避免提前泄露（`E5_01` §8.1）；
-- 每批 7 人中分入 ClinPath 的人数 $k_b \in \{3, 4\}$：4 个批次取 3、3 个批次取 4，
-  使总体为 **24 vs 25**（`scripts/grant/sample_size.py` §[6]）；
-- 若教研室同意**按基线分层随机**，须在本表增加 `strata` 字段并在预注册中说明；
-- 该表是 §3.5 分层置换检验"零假设世界"的依据，**不得事后修改**。
+- 分配结果在 **D1 之前**生成并封存，**不得**因批次基线、教师偏好或排课方便调整；
+- **合法分配只有 C(7,3) = 35 种**，每种概率 1/35；这 35 种即 `E5_02` §3.5
+  精确随机化检验的零分布；
+- 7 行记录（每批一行）必须完整：3 行为 `CLINPATH`、4 行为 `CBL`；
+- 若教研室**无法执行随机分配**，则本表按"准实验整群"填写：`allocation_rule` 记为
+  `"non-random (quasi-experimental cluster)"`，并**放弃随机化推断**（`E5_01` §3.3）；
+- 该表**不得事后修改**。

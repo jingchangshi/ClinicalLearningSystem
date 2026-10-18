@@ -44,17 +44,26 @@
 ## 3. 个性化训练的四项最低要求（缺一不可）
 
 负责人明确要求 ClinPath 的个性化不能只是"统一病例练习"。以下四项必须在干预组真实发生，
-并在数据中留痕：
+并在数据中留痕。
 
-| # | 要求 | 平台实现 | 证据字段 |
+> **驱动来源（重要）**：D4–D5 的个性化强化由 **D2/D3 训练病例的提交**产生的六维形成性分数驱动。
+> D1 的 **T0 是独立闭卷考核**，作答在 **D6 之后**由两位盲评教师统一评分，**不进入**平台形成性画像，
+> 因此 D4–D5 的最弱维度**不来自 T0**。
+> 四项闭环已逐条做代码核验（含端到端测试），见 `T3_personalization_validation.md`。
+
+| # | 要求 | 平台实现（`file:line`，**已核验**） | 证据字段 |
 | --- | --- | --- | --- |
-| 1 | **基线能力识别** | `GET /api/student/competency`、`competency_profiles` | T0 后的六维基线分 |
-| 2 | **短板对应的强化任务推荐** | `recommendation_service.build_learning_pathway`、`choose_recommendation` | `learning_recommendations` 行（推荐病例/任务） |
-| 3 | **推荐理由与训练记录** | 推荐理由文案 + `learning_evidence_events` | `recommendation_reason`、`evidence_payload_json` |
-| 4 | **教师针对性反馈** | `POST /api/teacher/reviews`、`POST /api/teacher/interventions` | `teacher_score_reviews`、`teaching_interventions` |
+| 1 | **基线能力识别** | 提交时更新画像：`backend/app/routes/sessions.py:245` → `backend/app/services/competency_update_service.py:56,159`（权重 `UPDATE_WEIGHT = 0.3`，同文件 `:9`）写入 `competency_profiles`（`backend/app/models.py:227`）；读取入口 `GET /api/student/competency`（`backend/app/routes/students.py:55`） | **D2/D3 训练后的六维分数**（不是 T0） |
+| 2 | **短板对应的强化任务推荐** | `backend/app/services/recommendation_service.py`：`weakest_abilities`（`:55`）、`choose_recommendation`（`:60`）、`build_learning_pathway`（`:78`）；提交后写入 `backend/app/routes/sessions.py:257-265` | `learning_recommendations` 行（`backend/app/models.py:247`） |
+| 3 | **推荐理由与训练记录** | 推荐理由 `backend/app/services/recommendation_service.py:268`；训练记录 `learning_evidence_events`（`backend/app/models.py:454`） | `recommendation_reason`、`evidence_payload_json` |
+| 4 | **教师针对性反馈** | `backend/app/routes/teacher.py`：学生学习画像 `GET /students/{id}/learning-profile`（`:190`，含 `recommended_tasks` `:227`）、班级短板 `GET /dashboard`（`:91,122`）、`POST /interventions`（`:322`）、`POST /reviews`（`:343`） | `teaching_interventions`（`backend/app/models.py:471`）、`teacher_score_reviews` |
 
 > 复用现有功能，不新开发模块。若某项在 7 天内未真实发生（例如教师未提交干预），
 > 研究记录中必须留空，**不得事后补录**。
+>
+> **平台限制（已知）**：平台暂无"独立考核模式"，`POST /api/sessions/{id}/submit` 对任何会话都会更新形成性画像；
+> 因此 T0/T1 的作答**不经**该提交路由（按 `E5_01` §7.1 纸笔完成、D6 后统一盲评）。
+> 详见 `T3_personalization_gap.md`。
 
 ## 4. 两组在 7 天内的差异
 
@@ -71,10 +80,15 @@
 
 ## 5. 待教研室确认
 
+> **分组方式已定，不再作为待确认项**：本研究采用 **7 批次整群分配**（同一批 7 名见习生不拆分），
+> 从 **C(7,3) = 35** 种合法分配中**随机**产生 **3 批进入 ClinPath 组、4 批进入常规 CBL 组**。
+> 原"方案 B（班内 3+4 随机拆分）"**已否决**，不得作为推荐、备选或待确认事项出现在任何现行文档中。
+> 详见 `T3_design_comparison.md` 与 `PROTOCOL_REVISION_NOTES_v2.md`（提出）/`v3`（否决）。
+
 | # | 待确认 | 影响 |
 | --- | --- | --- |
 | 1 | 7 天是否连续，还是中间有间隔 | 影响 T0/T1 的间隔与"遗忘"混杂 |
 | 2 | 每天可用于本训练的课时 | 决定剂量能否达到 §2 的下限 |
-| 3 | 是否允许班内随机分组（方案 B） | 决定研究设计是 A 还是 B |
+| 3 | 分组抽签的执行人与时间（分组方式已定，见上） | 决定分配序列能否在 **D1 之前**完成并留痕 |
 | 4 | 7 个批次的时间分布（一学年内） | 影响批次效应与季节混杂 |
 | 5 | 教师排班能否覆盖 4 小时/批次 × 7 批次 | 决定教师反馈能否真实发生 |

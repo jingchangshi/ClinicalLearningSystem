@@ -18,8 +18,8 @@
 > - `A_cases/A04_difficulty_calibration_BLANK.csv`：难度校准空白表（4 行，教师填写）。
 >
 > 这两项与原有的病例审核（`A03_teacher_review_form_BLANK.csv`）一并完成。
-> 教师还需就 **方案 A（整批分配）vs 方案 B（班内 3+4 随机）** 给出教学可行性意见，
-> 最终由教研室决定（见 `evidence/E5_protocol/T3_design_comparison.md`）。
+> **研究设计已锁定为 7 批次整群分配**（申请人已确认教学组织条件不允许批内拆分，
+> 见 `evidence/E5_protocol/T3_design_comparison.md`），教师无需就分组方式给出意见。
 
 ---
 

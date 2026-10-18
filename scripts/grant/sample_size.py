@@ -12,7 +12,11 @@ CSV，唯一目的是说明"模拟数据不能用来估计效应量"，不产生
 本研究的**真实规模**（教研室已确认的排课条件）：
     风湿免疫本科见习 7 天/批 × 7 人/批 × 7 批 = 49 名见习学生（主研究总体）；
     另有 21 名实习阶段学生为独立扩展人群，**不并入主结局分析**。
-第 [6] 节按这一规模重算方案 A（批次整群）与方案 B（批内 3+4 随机）的可行性。
+
+**分组方案已锁定为唯一一种：7 个批次整群随机分配。** 预先固定 3 个批次入 ClinPath、
+4 个批次入常规 CBL，再随机选定"哪 3 个批次"入 ClinPath——合法分配数 = C(7,3) = 35 种。
+申请人已明确**否决**任何"把一个 7 人批次拆成两个教学组"的方案（教学组织约束），
+因此本脚本**不再计算任何批内随机（3+4）方案**。第 [6] 节只按这一整群规模重算可行性。
 
 运行：
     python3.11 scripts/grant/sample_size.py
@@ -177,14 +181,14 @@ def main() -> None:
     print("[2] 可行性反推：若只能招到 n/组，80% 功效能检出多大的 d？")
     print("-" * 74)
     print(f"{'n/组':>6} {'最小可检出d':>14} {'d=0.50功效':>12} {'d=0.60功效':>12} {'d=0.70功效':>12}")
-    for n in (10, 15, 20, 21, 24, 25, 30, 40, 45, 60, 90):
+    for n in (10, 15, 20, 21, 28, 30, 40, 45, 60, 90):
         print(
             f"{n:>6d} {mdd(n):>14.3f} {achieved_power(0.50, n):>12.3f} "
             f"{achieved_power(0.60, n):>12.3f} {achieved_power(0.70, n):>12.3f}"
         )
-    print("读法：本研究 49 名见习学生，方案 B 按每批 7 人内 3+4 分配后为 24 vs 25 人/组。")
-    print("      25 人/组只能稳定检出 d≈0.79 的大效应（这正是 2 臂 RCT 在本规模下的上限）；")
-    print("      想检出 d=0.50 需要 64 人/组，是当前规模的 2.5 倍以上。")
+    print("读法：本研究 49 名见习学生按 7 个批次整群分配，3 批 vs 4 批 = 21 vs 28 人/组。")
+    print("      较小臂 21 人/组只能稳定检出 d≈0.87 的大效应（尚未计入整群设计效应）；")
+    print("      想检出 d=0.50 需要 64 人/组，是当前规模的 3 倍以上。")
     print("      因此本研究的定位是**可行性 + 信号生成**，不是确证性优效检验。")
     print()
 
@@ -198,7 +202,7 @@ def main() -> None:
             print(f"{d:>5.2f} {rho:>6.2f} {1 + 6 * rho:>10.2f} {math.ceil(k):>10d} {math.ceil(k) * 7:>10d}")
     print("读法：每批只有 7 人时，即使 rho=0.05，设计效应也只有 1.30；")
     print("      表中“群数/组”是达到该功效所需的批次数——12–15 个批次远超实际可用的 7 个批次。")
-    print("      也就是说，方案 A 的问题不是设计效应，而是**群数只有 7 个**（见 [3b] 与 [6]）。")
+    print("      也就是说，本设计的问题不是设计效应，而是**群数只有 7 个**（见 [3b] 与 [6]）。")
     print()
 
     print("-" * 74)
@@ -210,12 +214,12 @@ def main() -> None:
             deff = 1.0 + 6 * rho
             print(f"{k:>8d} {7:>8d} {rho:>6.2f} {deff:>10.2f} "
                   f"{cluster_effective_n(k, 7, rho):>10.1f} {k * 7:>10d}")
-    print("读法：方案 A 全部 7 个批次都用上、rho=0.20 时，全部 49 人的有效样本量只有约 22 人，")
+    print("读法：7 个批次全部用上、rho=0.20 时，全部 49 人的有效样本量只有约 22 人，")
     print("      而 cluster-robust 推断的自由度只由“群数”决定（G−2 = 5）。")
     print("      7 个群时常规 cluster-robust 标准误**向下偏倚**、置信区间过窄、P 值过小；")
     print("      必须使用 CR2 / Satterthwaite / wild cluster bootstrap 等小样本校正，")
     print("      且 wild cluster bootstrap 在 G=7、Rademacher 权重下只有 2^7=128 种符号组合，")
-    print("      双侧 P 值不可能小于 2/128 = 0.0156。因此方案 A 只能作为**探索性**研究，")
+    print("      双侧 P 值不可能小于 2/128 = 0.0156。因此本设计只能作为**探索性**研究，")
     print("      报告 ICC 与群数，而不报告确证性组间 P 值（见 SAP §3.2）。")
     print()
 
@@ -272,51 +276,46 @@ def main() -> None:
     print()
 
     print("-" * 74)
-    print("[6] 本研究实际规模：49 名见习学生 / 7 批次 × 7 人（方案 A 与方案 B）")
+    print("[6] 本研究实际规模：49 名见习学生 / 7 批次整群分配（3 批 vs 4 批）")
     print("-" * 74)
     batches, per_batch = 7, 7
     total = batches * per_batch
     print(f"主研究总体 = {batches} 批次 × {per_batch} 人 = {total} 名见习学生")
     print(f"（另有 21 名实习阶段学生为**独立扩展人群**，不并入主结局分析）")
     print()
-
-    # 方案 B：每批 7 人内部 3+4 随机
-    n_clinpath = 4 * 3 + 3 * 4
-    n_cbl = 4 * 4 + 3 * 3
-    smaller = min(n_clinpath, n_cbl)
-    print(f"方案 B（每批 7 人内部随机 3+4）：")
-    print(f"  4 个批次分 3 人入干预 + 3 个批次分 4 人入干预")
-    print(f"  ClinPath = 4×3 + 3×4 = {n_clinpath} 人；CBL = 4×4 + 3×3 = {n_cbl} 人；合计 {n_clinpath + n_cbl}")
-    print(f"  以较小臂 n={smaller} 规划：80% 功效最小可检出 d = {mdd(smaller):.3f}")
-    for d in (0.40, 0.50, 0.60, 0.70, 0.80):
-        print(f"    若真实 d={d:.2f} → 功效 {achieved_power(d, smaller):.3f}")
-    print(f"  批次固定效应模型 Y_T1 ~ G + Y_T0 + batch 的参数个数 = 1 + 1 + 1 + (7−1) = 9")
-    print(f"  残差自由度 = {total} − 9 = {total - 9}")
-    print(f"  批内分配方式数 = C(7,3) = C(7,4) = {math.comb(7, 3)} 种/批")
-    print(f"  分层置换的全部可能分配数 = 35^7 = {35 ** 7:,}（约 {35 ** 7 / 1e10:.2f}×10^10）")
-    print(f"  → 精确枚举不可行；Monte Carlo 置换 B=20000 时最小可及双侧 P = 1/(B+1) ≈ {1 / 20001:.2e}")
+    print("设计：7 个批次整群随机分配——预先固定 3 个批次入 ClinPath、4 个批次入常规 CBL，")
+    print("      再随机选定'哪 3 个批次'入 ClinPath；合法分配数 = C(7,3) = 35 种。")
+    print("      （申请人已否决任何批内拆分方案，本脚本不计算批内随机。）")
     print()
 
-    # 方案 A：7 个批次整群分配
-    k_a_small, k_a_large = 3, 4
-    n_a_small = k_a_small * per_batch
-    n_a_large = k_a_large * per_batch
-    print(f"方案 A（7 个批次整群分配，3 批 vs 4 批）：")
-    print(f"  名义人数 = {n_a_small} vs {n_a_large}（合计 {total}）")
-    print(f"  以较小臂 n={n_a_small} 规划：80% 功效最小可检出 d = {mdd(n_a_small):.3f}（未计设计效应）")
+    k_small, k_large = 3, 4
+    n_small = k_small * per_batch
+    n_large = k_large * per_batch
+    print(f"7 批次整群分配（3 批 vs 4 批）：")
+    print(f"  名义人数 = {n_small} vs {n_large}（合计 {total}）")
+    print(f"  以较小臂 n={n_small} 规划：80% 功效最小可检出 d = {mdd(n_small):.3f}（未计设计效应）")
+    for d in (0.50, 0.60, 0.70, 0.80):
+        print(f"    若真实 d={d:.2f} → 名义功效 {achieved_power(d, n_small):.3f}（未计设计效应）")
     for rho in (0.05, 0.10, 0.20):
         deff = 1.0 + (per_batch - 1) * rho
-        print(f"    rho={rho:.2f} → 设计效应 {deff:.2f}；有效 n = {cluster_effective_n(batches, per_batch, rho):.1f}"
-              f"（全部 7 批合计，名义 {total}）")
+        eff = cluster_effective_n(batches, per_batch, rho)
+        print(f"    rho={rho:.2f} → 设计效应 {deff:.2f}；全部 7 批的有效样本量 = {eff:.1f}"
+              f"（名义 {total}）；每臂有效 n ≈ {eff / 2:.1f}")
     print(f"  组别效应的可用自由度：cluster-robust 约 G−2 = {batches - 2}（G = 批次数，不是学生数）")
     print(f"  t 分位数对比：t_(0.975, df=5) = {t_quantile(0.975, 5):.3f}，"
           f"是正态 1.960 的 {t_quantile(0.975, 5) / 1.959964:.2f} 倍")
     print(f"  wild cluster bootstrap（Rademacher 权重，G=7）符号组合数 = 2^7 = {2 ** 7}，")
     print(f"  双侧 P 值不可能小于 2/128 = {2 / 2 ** 7:.4f}")
+    print(f"  精确随机化检验：全部合法分配数 = C(7,3) = {math.comb(7, 3)} 种（**可精确枚举**）")
+    print(f"  最小可及双侧精确 P = 2/35 = {2 / math.comb(7, 3):.4f} > 0.05")
+    print(f"  → α=0.05 在本设计下**不可达**（7 个群、3 vs 4 分配的固有信息上限）")
     print()
-    print("结论（两个方案共用）：")
-    print(f"  · 49 名学生、每臂 24–25 人时，80% 功效只能检出 d ≈ 0.79–0.81 的大效应；")
-    print(f"    对 d=0.50 的中等效应功效仅 {achieved_power(0.50, smaller):.2f}–{achieved_power(0.50, 25):.2f}。")
+    print("结论：")
+    print(f"  · 49 名学生按 7 批次整群分配为 3 批 vs 4 批（{n_small} vs {n_large} 人）；")
+    print(f"    较小臂 {n_small} 人/组、未计设计效应时 80% 功效最小可检出 d = {mdd(n_small):.3f}，")
+    print(f"    计入整群设计效应后更差；对 d=0.50 的名义功效仅 {achieved_power(0.50, n_small):.3f}。")
+    print(f"  · 组别效应自由度由群数决定（G−2 = {batches - 2}）；精确检验最小双侧 P = 2/35 ≈ 0.057；")
+    print(f"    wild cluster bootstrap 双侧 P 下限为 2/128 ≈ 0.0156。")
     print(f"  · 若要以 80% 功效检出 d=0.50，需要 {n_t(0.50)} 人/组（合计 {2 * n_t(0.50)} 人），"
           f"是 49 人的 {2 * n_t(0.50) / total:.1f} 倍。")
     print(f"  · 因此本研究定位为**探索性 / 可行性研究**；确证性研究需要多中心或多届累积。")

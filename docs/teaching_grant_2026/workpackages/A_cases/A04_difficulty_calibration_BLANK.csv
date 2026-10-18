@@ -1,5 +1,5 @@
-case_id,reviewer_slot,reviewer_name,review_date,expected_difficulty_1to5,actual_undergraduate_fit_1to5,information_completeness_1to5,reasoning_steps_required,estimated_minutes,hardest_step,recommended_change,final_approval
-CASE-A01,REAL_TEACHER_1,,,,,,,,,,PENDING_REAL_REVIEW
-CASE-A01,REAL_TEACHER_2,,,,,,,,,,PENDING_REAL_REVIEW
-CASE-A02,REAL_TEACHER_1,,,,,,,,,,PENDING_REAL_REVIEW
-CASE-A02,REAL_TEACHER_2,,,,,,,,,,PENDING_REAL_REVIEW
+case_id,reviewer_slot,reviewer_name,review_date,expected_difficulty_1to5,actual_undergraduate_fit_1to5,information_completeness_1to5,reasoning_steps_required,estimated_minutes,hardest_step,recommended_change,accept_difficulty_gap,final_approval
+CASE-A01,REAL_TEACHER_1,,,,,,,,,,,PENDING_REAL_REVIEW
+CASE-A01,REAL_TEACHER_2,,,,,,,,,,,PENDING_REAL_REVIEW
+CASE-A02,REAL_TEACHER_1,,,,,,,,,,,PENDING_REAL_REVIEW
+CASE-A02,REAL_TEACHER_2,,,,,,,,,,,PENDING_REAL_REVIEW
