@@ -156,8 +156,9 @@ def test_batch_index_required_and_cbl_topics_reported():
     ok = long_rows()
     for r in ok:
         r["study_group"] = "cbl"
-    ok[0]["cbl_case_topics"] = "SLE"
+    first = ok[0]["study_student_code"]
+    for r in ok:
+        if r["study_student_code"] == first:
+            r["cbl_case_topics"] = "SLE;RA"
     missing = de.cbl_rows_missing_topics(ok)
-    assert ok[0]["study_student_code"] not in missing or any(
-        r["study_student_code"] == ok[0]["study_student_code"] and not r["cbl_case_topics"] for r in ok[1:2])
-    assert len(missing) >= 48
+    assert first not in missing and len(missing) == 48
