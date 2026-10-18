@@ -255,6 +255,7 @@ FORBIDDEN_IN_SECTIONS: tuple[tuple[str, str], ...] = (
     (r"AOSD|成人\s*Still|Still\s*病", "旧 AOSD 题本出现在现行正文"),
     (r"最小[^。；]{0,8}双侧\s*[Pp][^。；]{0,6}2\s*/\s*35", "无条件宣称最小双侧 P 为 2/35"),
     (r"(合成|虚拟|SYNTHETIC|模拟)[^。；]{0,24}(疗效|效果|显著|提升|有效)", "合成数据被写成效果"),
+    (r"github\.com|git@|仓库地址|ClinicalLearningSystem", "申报正文出现代码仓库地址/名称（考核材料可能被公开暴露）"),
     (r"〔待用户填写", "仍使用旧式占位符，请改为【待填：…】"),
 )
 NEGATIONS = ("未", "尚未", "没有", "无", "不", "非", "否", "禁止", "不得")
@@ -289,7 +290,7 @@ def content_checks(doc_text: str, section_text: str) -> list[dict]:
     for pattern, why in FORBIDDEN_IN_SECTIONS:
         hits = []
         for m in re.finditer(pattern, section_text):
-            if pattern.startswith("〔") or not _negated(section_text, m.start()):
+            if pattern.startswith("〔") or pattern.startswith("github") or not _negated(section_text, m.start()):
                 hits.append(m.group(0)[:30])
         add(f"禁止项：{why}", not hits, "；".join(hits[:3]))
 

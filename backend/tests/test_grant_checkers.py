@@ -116,6 +116,7 @@ def test_project_title_fragment_is_caught(tmp_path):
         "精确检验的最小双侧P为2/35。",
         "合成演示证明ClinPath效果显著。",
         "负责人【待填】〔待用户填写：年份〕。",
+        "代码见 https://github.com/someone/ClinicalLearningSystem。",
     ],
 )
 def test_forbidden_statements_are_caught(tmp_path, bad_sentence):
