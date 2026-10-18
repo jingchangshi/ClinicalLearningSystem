@@ -272,16 +272,18 @@ pytest -q tests/test_7day_personalization_loop.py        4 passed, 1 xfailed
 
 ---
 
-## 9. 终稿轮交付（申报材料与证据，应用成员，2026-10-18）
+## 9. 终稿轮交付（集成后最终状态，2026-10-18，交付 SHA `f2b32d8`）
 
 | 任务 | 状态 | 交付物 |
 | --- | --- | --- |
 | 官方模板（通知、附件 1—3） | **BLOCKED**：全盘搜索未找到原件，未制作任何仿官方模板 | `APPLICATION_PACKAGE/00_README.md` |
 | 六栏正文（项目名称不变） | **完成（草稿）**：488/370/900/223/446/619 字，限 600/600/1000/300/600/800；四种状态用词严格区分 | `evidence/E5_protocol/E5_04_application_text.md` |
 | R7.3 申报材料包 | **完成（草稿，md + docx）**，全部未知项为 `【待填】` | `APPLICATION_PACKAGE/` |
-| E1—E5 证据包 | E1 目录+待办；E2 仅收录真实记录并把独立考核证据标 PENDING；E3 同步新 A02；E4 可复现演示步骤（测试/合成账号，运行记录 PENDING）；E5 方案 v3.1 | `evidence/E1…E5` |
-| R7.4 机械检查 | **完成**：缺关键文档即失败；44 项自测 | `scripts/grant/check_*.py`、`backend/tests/test_grant_checkers.py` |
-| 最终交付骨架 | **完成（11 个文件）**，状态如实 | `FINAL_DELIVERY/` |
+| E1—E5 证据包 | E1 目录+待办；**E2 已含 16 张真实运行截图与迁移验收记录**；E3 同步新 A02；**E4 已含真实运行记录**；E5 方案 v3.1 | `evidence/E1…E5` |
+| R7.4 机械检查 | **完成**：缺关键文档即失败；检查器自测 **71 passed** | `scripts/grant/check_*.py`、`backend/tests/test_grant_checkers.py`、`tests/test_case_payload_validation.py` |
+| 最终交付骨架 | **完成（11 个文件）**，已按最终 SHA 用真实数字定稿 | `FINAL_DELIVERY/` |
+| 独立考核与科研域 | **完成并验收**：后端 425 passed / 0 failed；前端三门禁通过；R8.2 流程 9/9；7×49 不变量成立；迁移验收通过 | `backend/app/assessment/`、`backend/app/research/`、`FINAL_DELIVERY/TEST_REPORT.md` |
 
-仍为真实人员待办：见 `FINAL_DELIVERY/HUMAN_ACTION_CHECKLIST.md`（H01—H17）。
+仍为真实人员待办：见 `FINAL_DELIVERY/HUMAN_ACTION_CHECKLIST.md`（H01—H21，含泄漏审计的 H18—H21）。
 **没有任何真实教师审核、真实学生数据、伦理批件、单位签章或经费数字被生成。**
+**技术就绪不等于研究可启动**：医学审核、伦理、教学组织三项仍未达成。
