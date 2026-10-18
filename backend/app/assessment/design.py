@@ -268,8 +268,15 @@ def _plus_us(form_order_json: str):
 
 @router.get("/allocations")
 def list_allocations(db: Session = Depends(get_db), _: User = Depends(require_admin)):
+    """Both frozen records, with everything an administrator needs to audit the draw.
+
+    The form-order record used to be reduced to a bare list of cohorts, which hid the
+    seed, the frozen timestamp and the per-student X/Y assignment — exactly the fields
+    R4.2 requires to be recorded and re-checkable. The full stored record is returned
+    for both kinds; it already contains only research codes, never names.
+    """
     return [{"allocation_version": a.allocation_version, "kind": a.kind, "mode": a.mode, "data_origin": a.data_origin,
              "protocol_version": a.protocol_version, "content_hash": a.record_sha256, "executed_at": iso_z(a.executed_at),
              "executed_by_user_id": a.executed_by_user_id,
-             "record": json.loads(a.record_json) if a.kind == KIND_CLUSTER else {"cohorts": sorted({x[1] for x in json.loads(a.record_json)["assignments"]})}}
+             "record": json.loads(a.record_json)}
             for a in db.query(StudyAllocation).order_by(StudyAllocation.id)]

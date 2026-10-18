@@ -320,6 +320,13 @@ def test_freezing_the_group_draw_never_rewrites_the_form_order_record(db_factory
     allocs = client.get("/api/assessments/admin/allocations").json()
     assert sorted(a["kind"] for a in allocs) == ["cluster_group", "form_order"]
     assert allocs[0]["content_hash"] != allocs[1]["content_hash"]
+    # R4.2: an administrator must be able to audit the form-order draw through the API,
+    # not only by opening the database: seed, frozen timestamp and per-student X/Y.
+    order = next(a for a in allocs if a["kind"] == "form_order")["record"]
+    assert order["seed"] == "order-seed-1"
+    assert order["frozen_at"] and order["algorithm"] and order["protocol_version"] == "v4"
+    assert len(order["assignments"]) == 49
+    assert {entry[2] for entry in order["assignments"]} == {"X", "Y"}
     # Grouping is now decidable, and it did not disturb any student's frozen form order.
     assert {x["study_group"] for x in design_rows(client)} == {"CLINPATH", "CBL"}
     assert {x["form_order"] for x in design_rows(client)} == {"X", "Y"}
