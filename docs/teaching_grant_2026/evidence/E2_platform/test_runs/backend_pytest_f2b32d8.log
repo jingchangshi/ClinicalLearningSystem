@@ -1,0 +1,6 @@
+# backend pytest - full suite (FINAL)
+# SHA: f2b32d8 (f2b32d844da3cd5329170d22c82958ef42ced675)
+# UTC: 2026-10-18T17:09:41Z
+# cmd: cd backend && uv run --python 3.11 --with-requirements requirements.txt pytest -q -p no:cacheprovider
+# result: 425 passed, 1 warning in 465.99s
+# backend/ unchanged between b471463..f2b32d8 (verified: git diff --stat b471463..f2b32d8 -- backend/ is empty)
