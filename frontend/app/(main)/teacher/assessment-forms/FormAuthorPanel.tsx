@@ -4,17 +4,23 @@
  * Teacher-side题本 authoring: create a draft, or open a new version of one you
  * created. A published version is frozen server-side, so "edit" always means
  * "new version" — there is no path here that rewrites history.
+ *
+ * The list comes only from `GET /forms/mine` (newest version per code). That
+ * contract carries metadata, not body text, so a teacher opening a new version
+ * re-enters the content; an administrator can prefill it from the admin detail
+ * route, which is the only route that returns another author's full version.
  */
 import { useCallback, useEffect, useState } from "react";
 
 import { Button, Card, EmptyHint, Feedback, Pill } from "@/components/assessment/AssessmentUi";
+import { useAuth } from "@/components/AuthProvider";
 import {
   assessmentErrorMessage,
   createAssessmentForm,
   createAssessmentFormVersion,
   formReviewStatusLabel,
+  getAssessmentFormDetail,
   listMyAssessmentForms,
-  type FormContent,
   type FormSummary,
 } from "@/lib/assessmentApi";
 
@@ -26,17 +32,14 @@ import {
   type FormEditorDraft,
 } from "./AssessmentFormEditor";
 
-type SessionContent = { code: string; title: string } & FormContent;
-
 type EditTarget =
   | { mode: "create"; draft: FormEditorDraft }
   | { mode: "version"; form: FormSummary; draft: FormEditorDraft; contentKnown: boolean };
 
 export function FormAuthorPanel() {
-  const [created, setCreated] = useState<FormSummary[]>([]);
-  const [listed, setListed] = useState<FormSummary[]>([]);
+  const { role } = useAuth();
+  const [forms, setForms] = useState<FormSummary[] | null>(null);
   const [listUnavailable, setListUnavailable] = useState(false);
-  const [content, setContent] = useState<Record<number, SessionContent>>({});
   const [target, setTarget] = useState<EditTarget | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -44,9 +47,10 @@ export function FormAuthorPanel() {
 
   const loadMine = useCallback(async () => {
     try {
-      setListed(await listMyAssessmentForms());
+      setForms(await listMyAssessmentForms());
       setListUnavailable(false);
     } catch {
+      setForms([]);
       setListUnavailable(true);
     }
   }, []);
@@ -55,19 +59,32 @@ export function FormAuthorPanel() {
     void loadMine();
   }, [loadMine]);
 
-  const rows = mergeForms(created, listed);
-
-  function startVersion(form: FormSummary) {
-    const known = content[form.id];
+  async function startVersion(form: FormSummary) {
     setError(null);
     setMessage(null);
+    if (role === "admin") {
+      // The admin detail route is the only one that returns a full version body.
+      setBusy(true);
+      try {
+        const detail = await getAssessmentFormDetail(form.id);
+        setTarget({
+          mode: "version",
+          form,
+          contentKnown: true,
+          draft: { ...draftFromContent(detail), code: form.code },
+        });
+        return;
+      } catch {
+        // Fall through to the metadata-only draft rather than blocking the flow.
+      } finally {
+        setBusy(false);
+      }
+    }
     setTarget({
       mode: "version",
       form,
-      contentKnown: Boolean(known),
-      draft: known
-        ? { ...draftFromContent({ id: form.id, ...known }), code: form.code }
-        : { ...blankDraft(), formId: form.id, code: form.code, title: form.title },
+      contentKnown: false,
+      draft: { ...blankDraft(), formId: form.id, code: form.code, title: form.title },
     });
   }
 
@@ -80,27 +97,10 @@ export function FormAuthorPanel() {
         target.mode === "create"
           ? await createAssessmentForm(payload)
           : await createAssessmentFormVersion(target.form.id, payload);
-      const summary: FormSummary = {
-        id: result.id,
-        code: result.code,
-        version: result.version,
-        title: payload.title,
-        review_status: result.review_status,
-      };
-      setCreated((current) => [...current.filter((item) => item.id !== summary.id), summary]);
-      setContent((current) => ({
-        ...current,
-        [summary.id]: {
-          code: payload.code,
-          title: payload.title,
-          stages: payload.stages,
-          rubric: payload.rubric as SessionContent["rubric"],
-          answer_key: payload.answer_key,
-        },
-      }));
       setTarget(null);
       setMessage(
-        `已创建 ${summary.code} v${summary.version}（待真实教师审核）。管理员指派两位教师审核通过后才会发布，未经审核的题本不能用于考试。`,
+        `已创建 ${result.code} v${result.version}（待真实教师审核）。` +
+          "管理员指派两位教师审核通过后才会发布，未经审核的题本不能用于考试。",
       );
       await loadMine();
     } catch (reason) {
@@ -127,7 +127,7 @@ export function FormAuthorPanel() {
       >
         {target.mode === "version" && !target.contentKnown ? (
           <p className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            说明：教师端目前没有下发旧版本正文的接口，因此这里只能预填编号与名称。
+            说明：题本清单只下发编号、版本与审核状态，不下发旧版本正文，因此这里只能预填编号与名称。
             请把新版本的完整内容重新填写一遍——旧版本不会被改动，新版本会以递增的版本号登记。
           </p>
         ) : null}
@@ -162,7 +162,7 @@ export function FormAuthorPanel() {
 
       <Card
         title="我创建的题本"
-        description="在这里为新版本开一个草案：已发布的版本不会被覆盖。"
+        description="每个题本显示最新版本。在这里为新版本开一个草案：已发布的版本不会被覆盖。"
         actions={
           <Button tone="secondary" onClick={() => void loadMine()} disabled={busy}>
             刷新
@@ -171,15 +171,19 @@ export function FormAuthorPanel() {
       >
         {listUnavailable ? (
           <p className="mb-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            「我创建的题本」接口（/api/assessments/forms/mine）当前不可用，因此这里只能列出本次浏览器会话中创建的题本。
-            重新登录或换设备后，需要请研究管理员按编号确认你的题本。
+            「我创建的题本」接口（/api/assessments/forms/mine）当前不可用。
+            在该接口部署之前，本页无法列出你已创建的题本；已创建的题本本身不受影响，管理员可以在题本管理中看到并指派审核。
           </p>
         ) : null}
-        {rows.length === 0 ? (
+        {forms === null ? (
+          <p className="text-sm text-slate-500" role="status">
+            正在加载题本…
+          </p>
+        ) : forms.length === 0 ? (
           <EmptyHint>还没有你创建的题本。点击上方「创建新题本草案」开始。</EmptyHint>
         ) : (
           <ul className="space-y-2">
-            {rows.map((form) => (
+            {forms.map((form) => (
               <li
                 key={form.id}
                 className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 p-3"
@@ -196,7 +200,7 @@ export function FormAuthorPanel() {
                   </Pill>
                   <Button
                     tone="secondary"
-                    onClick={() => startVersion(form)}
+                    onClick={() => void startVersion(form)}
                     disabled={busy || form.review_status === "SUPERSEDED"}
                   >
                     创建新版本
@@ -209,12 +213,4 @@ export function FormAuthorPanel() {
       </Card>
     </div>
   );
-}
-
-/** Session-created rows win: they carry the content this browser just submitted. */
-function mergeForms(created: FormSummary[], listed: FormSummary[]): FormSummary[] {
-  const merged = new Map<number, FormSummary>();
-  for (const form of listed) merged.set(form.id, form);
-  for (const form of created) merged.set(form.id, form);
-  return [...merged.values()].sort((a, b) => b.id - a.id);
 }
