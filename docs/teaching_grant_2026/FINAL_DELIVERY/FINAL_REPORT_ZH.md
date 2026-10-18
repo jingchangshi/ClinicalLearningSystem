@@ -3,7 +3,7 @@
 > 项目：《基于人工智能辅助临床推理训练的医学生个性化学习与形成性评价教学改革研究》
 > **这是唯一的最终汇报文件**，由牵头成员在集成全部成员工作后、以最终 SHA 重新验收写成。
 > 只写实际核实的内容；**未执行的一律写「未执行」，不视为通过**。
-> 交付分支顶端：**`69d300f`**（分支 `feat/clinpath-final-2026`）。生成时间：2026-10-18。
+> 交付分支：`feat/clinpath-final-2026`（顶端以 `git rev-parse HEAD` 为准；本文档自身的提交会使其前移）。生成时间：2026-10-18。
 > 后端验收 SHA：`f2b32d8`（425 passed / 0 failed）；自该提交起 `backend/` **零改动**（`git diff --stat f2b32d8..HEAD -- backend/` 为空），
 > 故该验收结论同样适用于交付顶端。其后提交仅涉及文档。
 
@@ -13,13 +13,14 @@
 | --- | --- |
 | 开发分支 | `feat/clinpath-final-2026`（worktree `/home/jcshi/workspace/clinpath-final`） |
 | 起始 SHA | `80ce271`（独立考核开发基线）；教改材料基线 `teaching-grant-2026-wpd@25a9177` |
-| 交付分支顶端 | **`69d300f`**；后端验收 SHA `f2b32d8`（其后 backend/ 零改动） |
-| 提交范围 | 起始 `80ce271` → 交付顶端 `454a7bd`（含本文档自身的提交；精确数量随文档提交变动，以 SHA 为准） |
+| 交付分支 | `feat/clinpath-final-2026`（顶端以 HEAD 为准） |
+| 代码验收 SHA | **`f2b32d8`** —— 425 passed / 0 failed；其后 `backend/` 零改动，故结论覆盖交付顶端 |
+| 提交范围 | 起始 `80ce271` → 交付顶端（本地领先远端 65+ 个提交） |
 | 新增迁移 | `20261018_08_independent_assessments`（初版）、`20261018_09`（硬化：版本、草稿、裁决、审计、数据集锁）；`d117899` 修复 `created_at` 可空漂移 |
 | 主要改动 | 后端 `app/assessment/`（新包，11 模块）、`app/research/`（新纯函数包，7 模块）、`app/assessment_models.py`、`routes/assessments.py`、迁移；前端考核四类页面与 `lib/assessmentApi.ts`；`scripts/grant/`（检查器、E2E 隔离栈、迁移验收）；`docs/ARCH.md`、`docs/teaching_grant_2026/**` |
 | 是否合并 `main` | **未合并** |
 | 是否部署生产 | **未部署**；生产仍运行 `1d4ef482`，schema 仍为 `20260915_06` |
-| 是否推送远端 | **未推送**（本地领先远端 46 个提交） |
+| 是否推送远端 | **未推送**（本地领先远端 `80ce271`） |
 
 ## 6.2 最终架构
 
