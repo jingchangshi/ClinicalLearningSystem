@@ -85,7 +85,7 @@
 | E-R4-02 | 精确随机化检验与小样本限制 | DRAFT_PENDING_REVIEW | `E5_02` §3.3；`scripts/grant/sample_size.py` | 待统计顾问复核 | "以 7 个批次为分析单位，精确枚举 35 种分配；P 取 k/35、最小值取决于数据（唯一最大时 1/35，并列时 ≥2/35），不宣称确证性" |
 | E-R4-03 | 个性化闭环代码核验 | PLATFORM_EVIDENCE | `evidence/E5_protocol/T3_personalization_validation.md`；`backend/tests/test_7day_personalization_loop.py` | 测试通过（4 passed, 1 xfailed） | "平台已接通训练评分→能力画像→短板推荐→教师干预的闭环" |
 | E-R4-04 | 考核模式缺口（平台无独立考核模式） | PLATFORM_EVIDENCE（缺口） | `evidence/E5_protocol/T3_personalization_gap.md` | 已记录，未改代码 | "平台尚不能在提交层区分训练与独立考核，正式考核前需解决" |
-| E-R4-05 | 题本顺序 X/Y 整批内随机 | DRAFT_PENDING_REVIEW | `workpackages/A_cases/A04_assessment_quality_control.md` §2 | 待两位教师校准 | "题本顺序在整批内部随机平衡，不改变批次所属教学组" |
+| E-R4-05 | 题本顺序 X/Y（每批内平衡） | DRAFT_PENDING_REVIEW | `workpackages/A_cases/A04_assessment_quality_control.md` §2 | 待两位教师校准 | "题本顺序在每批 7 人内按约 4/3 平衡 X/Y，不改变批次所属教学组" |
 | E-R4-06 | 方案 A 唯一性一致性检查 | PLATFORM_EVIDENCE | `scripts/grant/check_protocol_consistency.py` | PASS（0 违规） | "现行申报文档中不再将方案 B 列为推荐或待确认事项" |
 
 ## E1–E5 缺项清单（第二轮更新）
@@ -96,4 +96,4 @@
 | E2 平台基础 | 版本、测试、截图、演示说明、第二轮验收 | 展示授权、教师实际演示反馈 | 院系 / 真实教师 |
 | E3 病例与量表 | 6 份病例（已做一致性修订）、量表 v0.1、16 份模拟作答、空白审核表、审核材料包 | **两位真实教师的审核意见、日期与签名**；量表权重确认 | 两位带教教师 |
 | E4 前期验证 | C 教学闭环真实运行记录、D 合成演示（隔离） | 教师观摩意见；如开展真实试点需伦理批件 | 真实教师 / 伦理委员会 |
-| E5 研究方案 | v2.0 方案（49 人 / 7 批次）、SAP、数据字典、伦理要点、六栏正文、7 天教学实施表、两种分组方案比较 | **分组单位（方案 A 整群 / 方案 B 班内随机）的书面决定**；7 个批次的起止日期与每天课时；21 名实习生的学段与是否与 49 人重叠；伦理批件；单位支持与签章 | 教研室 / 伦理委员会 / 单位 |
+| E5 研究方案 | v2.0 方案（49 人 / 7 批次）、SAP、数据字典、伦理要点、六栏正文、7 天教学实施表、分组方案说明（现为方案 A 唯一设计） | **整批随机化的执行方式（或改为整群准实验）的书面确认**；7 个批次的起止日期与每天课时；21 名实习生的学段与是否与 49 人重叠；伦理批件；单位支持与签章 | 教研室 / 伦理委员会 / 单位 |

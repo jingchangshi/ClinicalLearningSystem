@@ -117,7 +117,7 @@ ClinPath 组 ────►  ClinPath 分步形成性训练 + 教师针对性�
 **分组单位是批次，且只有一种方案：7 个批次整群随机分配。**
 **不设"批内拆分"方案**——申请人已明确，**不能把 7 人一个批次拆成两个教学组**
 （教学组织约束，见 `PROTOCOL_REVISION_NOTES_v3.md`）。因此本设计**没有**"每批 3+4"
-的批内随机选项，**整批学生接受同一种教学**。
+的批内随机选项（本设计没有该选项），**整批学生接受同一种教学**。
 
 #### 3.1.1 随机分配：预先固定 3:4，再随机选哪 3 批入 ClinPath
 
@@ -520,6 +520,10 @@ D2–D5 由同一教师主持常规病例讨论，病例主题范围与干预组
 | 2 | **短板驱动的强化任务推荐** | 平台按最弱能力（`weakest_abilities`）生成候选、过滤难度、排序，输出 3 个推荐任务 | 推荐服务 `backend/app/services/recommendation_service.py`：`determine_pathway_stage()`、`weakest_abilities()`、`build_learning_pathway()`（LearnerGap → Candidate Generator → Constraint Filter → Ranker）；提交后写入 `LearningRecommendation`（`backend/app/routes/sessions.py` `submit_session`） | `learning_recommendations` 表（`recommended_case_id`、`pathway_stage`） |
 | 3 | **推荐理由 + 训练记录** | 学生看到"为什么推这个病例"，完成后形成训练轨迹 | 推荐理由字段 `LearningRecommendation.recommendation_reason`（规则文案 `REASON_TEMPLATES`）；AI 仅可**改写措辞**，**不决定推荐哪个病例**（`backend/app/services/ai_enrichment.py`，`AIEnrichment` 表带 `source_fingerprint`）；训练记录 `learning_evidence_events` + `build_student_evidence_summary()`（`backend/app/services/learning_evidence_service.py`） | `recommendation_reason` + `learning_evidence_events` + 每步作答与追问 |
 | 4 | **针对性教师反馈** | 教师查看学生薄弱维度，逐个给出针对性反馈/干预，并确认形成性评分 | 教师干预 `TeachingIntervention`（`backend/app/models.py`）+ `POST /api/teacher/interventions`（`backend/app/routes/teacher.py`）；班级短板与建议 `GET /api/teacher/dashboard`（`_weak_dimensions`、`_teaching_interventions`）；教师确认评分 `POST /api/teacher/reviews`（`teacher_score_reviews` 表，保留原始 AI/规则分与确认来源） | `teaching_interventions` 表 + `teacher_score_reviews` 表 |
+
+> **证据来源（硬规则）**：D4/D5 的个性化任务只来自 **D2/D3 形成性训练证据**驱动的推荐；
+> D1/T0 独立在线考核成绩与答卷**不进入**能力画像、**不触发**学习推荐，T1 同理。
+> 研究导出中逐生核对：D4/D5 每条推荐必须能追溯到 D2/D3 的 `learning_evidence_events`。
 
 > **可核查性**：四步是否真的运行，可以从 `learning_recommendations`、
 > `learning_evidence_events`、`teaching_interventions`、`teacher_score_reviews`

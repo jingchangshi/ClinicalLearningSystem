@@ -18,7 +18,7 @@
 > - `A_cases/A04_difficulty_calibration_BLANK.csv`：难度校准空白表（4 行，教师填写）。
 >
 > 这两项与原有的病例审核（`A03_teacher_review_form_BLANK.csv`）一并完成。
-> **研究设计已锁定为 7 批次整群分配**（申请人已确认教学组织条件不允许批内拆分，
+> **研究设计已锁定为 7 批次整群分配**（申请人已确认教学组织条件不允许拆分同一批 7 名学生，
 > 见 `evidence/E5_protocol/T3_design_comparison.md`），教师无需就分组方式给出意见。
 
 ---
@@ -51,7 +51,7 @@
 | `A01_training_AAV.md` | CASE-T03 ANCA 相关血管炎 | 训练 |
 | `A01_training_IIM.md` | CASE-T04 特发性炎性肌病 | 训练 |
 | `A01_assessment_UA.md` | CASE-A01 未分化关节炎 | 独立考核 |
-| `A01_assessment_multisystem.md` | CASE-A02 成人 Still 病 | 独立考核 |
+| `A01_assessment_multisystem.md`（文件名沿用旧称，内容已是新 A02；以 `A01_case_index.md` 为准） | CASE-A02 原因待查的干燥症状（疑似原发性干燥综合征，未确诊） | 独立考核 |
 | `A01_case_index.md` | 六例索引与难度标定 | 参考 |
 
 每份卡片含：学习目标、主诉/现病史/查体/检查、标准诊断、鉴别诊断、治疗原则、
