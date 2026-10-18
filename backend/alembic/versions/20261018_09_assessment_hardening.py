@@ -100,6 +100,12 @@ def upgrade():
             b.add_column(sa.Column("created_at", sa.DateTime))
             b.drop_constraint("uq_assess_student_timepoint", type_="unique")
         bind.execute(sa.text("update assessment_sittings set created_at=coalesce(window_start, current_timestamp)"))
+        # created_at could only be added as nullable (ALTER TABLE ADD COLUMN ... NOT NULL needs a
+        # default and the legacy table may already hold rows). Now that every row has a value,
+        # make it required again: the ORM declares it non-optional, and without this a
+        # downgrade -> upgrade cycle ended with a weaker schema than a fresh install.
+        with op.batch_alter_table("assessment_sittings", recreate="always") as b:
+            b.alter_column("created_at", existing_type=sa.DateTime(), nullable=False)
     insp = sa.inspect(bind)
     if "uq_assess_live_student_timepoint" not in _index_names(insp, "assessment_sittings"):
         op.create_index("uq_assess_live_student_timepoint", "assessment_sittings", ["student_id", "timepoint"],
