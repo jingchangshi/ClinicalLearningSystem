@@ -2,11 +2,14 @@
 
 > **这些截图对应实际运行的版本，不是设计稿。**
 >
-> - 运行提交：**`375e197`**（`375e19748baf499908f2b5b78217417762bababa`，分支 `feat/clinpath-final-2026`）
+> - 运行提交：**`b0a8a3f`**（分支 `feat/clinpath-final-2026`）。该提交之后，`backend/app/`、`frontend/app/`、
+>   `frontend/lib/`、`frontend/components/` 相对本次证据运行**没有任何改动**（`git diff --name-only` 为空），
+>   因此截图中显示的产品行为与 `375e197` 完全一致；此前一次同条件运行（`375e197`）采集的截图与本次
+>   逐字节比对，内容不同的仅 3 张（两张含实时时钟的作答页、一张含时间戳的审计页），属时间显示差异。
 > - 环境：隔离 worktree `/home/jcshi/workspace/clinpath-final`；后端 `127.0.0.1:8400`；前端 `127.0.0.1:8401`；
 >   构建目录 `frontend/.next-accept`（构建期烘焙 `INTERNAL_API_BASE_URL=http://127.0.0.1:8400/api`）
 > - 数据库：`/tmp/clinpath-e2e/accept.db`（一次性，`alembic head = 20261018_09`）
-> - 采集时间（UTC）：**2026-10-18 16:30:02—16:30:24**
+> - 采集时间（UTC）：**2026-10-18 16:40:21—16:40:51**
 > - 采集方式：`frontend/tests/e2e/evidence-screenshots.spec.ts`（Playwright，1440×900，`fullPage`）
 > - 数据性质：**`SYNTHETIC / SIMULATED_NOT_HUMAN`**，`data_origin=pilot_test`；
 >   账号为 `TEST 测试教师A/B（非真实教师）`、`TEST测试学生NN`。**不是真实教师审核，不是真实学生数据，不是教学效果证据。**

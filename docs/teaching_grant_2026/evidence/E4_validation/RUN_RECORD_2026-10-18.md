@@ -1,8 +1,10 @@
 # E4 运行记录：隔离栈上的完整研究流程与 7 批批量验证
 
 > 状态：**已实际执行**。本文只记录真实命令、真实输出与真实结论。
-> 记录时间：2026-10-18 16:27—16:31 UTC。执行环境：独立 worktree `/home/jcshi/workspace/clinpath-final`，
-> 分支 `feat/clinpath-final-2026`，运行提交 **`375e197`**（`375e19748baf499908f2b5b78217417762bababa`）。
+> 记录时间：2026-10-18 16:37—16:41 UTC（最终一次运行 `final-run-4`）。执行环境：独立 worktree
+> `/home/jcshi/workspace/clinpath-final`，分支 `feat/clinpath-final-2026`，运行提交 **`b0a8a3f`**。
+> 该提交只改了本成员的测试、脚本与证据文档；`backend/app/`、`frontend/app/`、`frontend/lib/`、
+> `frontend/components/` 相对上一轮证据运行 `375e197` **无改动**。
 > **所有账号与数据均为 `TEST` / `SYNTHETIC / SIMULATED_NOT_HUMAN`，不是真实教师、不是真实学生、不是教学效果证据。**
 
 ## 1. 一句话结论
@@ -76,7 +78,7 @@ python3 scripts/grant/e2e/stack.py build                     # .next-accept，�
 
 > `student_ids` 等完整 fixture 清单：`/tmp/clinpath-e2e/fixture.json`（一次性，不提交）。
 
-## 5. Playwright 实际结果（提交 `375e197`）
+## 5. Playwright 实际结果（提交 `b0a8a3f`）
 
 ```
 35 passed, 3 failed, 11 skipped (1.8m)
@@ -139,15 +141,15 @@ python3 scripts/grant/e2e/stack.py build                     # .next-accept，�
 ## 7. 截图（E2 证据）
 
 16 张，全部由 `frontend/tests/e2e/evidence-screenshots.spec.ts` 在**本次运行**中从真实页面截取，
-采集时间 **2026-10-18 16:30:02—16:30:24 UTC**，提交 `375e197`，端口 8400/8401。
+采集时间 **2026-10-18 16:40:21—16:40:51 UTC**，提交 `b0a8a3f`，端口 8400/8401。
 逐张说明见 `../E2_platform/SCREENSHOTS_2026-10-18.md`。
 
 注意：截图在功能套件**之后**采集，因此 `12_adjudication_queue_flagged_disagreement.png` 中的
 那份分歧已显示为「已裁决」（`待裁决 0`），而不是待裁决状态。这是真实状态，不是摆拍；
 该图证明的是「分歧进入了独立裁决队列且裁决后状态正确」，裁决明细页未单独截图。
 
-已逐张人工核对其中 5 张（03 分配冻结、02 批次清单、09 盲评队列、14 提交成功页、15b 阶段作答、
-12 裁决队列），确认页面内容与文件名描述一致；其余截图由同一脚本同一运行产出。
+已逐张人工核对 6 张（03 分配冻结、02 批次清单、09 盲评队列、10 六维评分表、14 提交成功页、
+15b 阶段作答），确认页面内容与文件名描述一致；其余截图由同一脚本同一运行产出。
 
 ## 8. 本轮**未**执行 / 未覆盖的事项（不得视为通过）
 
