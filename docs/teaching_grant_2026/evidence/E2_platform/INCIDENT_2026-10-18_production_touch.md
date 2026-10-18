@@ -56,6 +56,18 @@ Oct 18 15:14:58 GET /api/assessments/forms/reviewable   404 unmatched
    返回的是路由不存在的 404。
 3. 未部署、未迁移、未重启任何生产单元；生产仍运行 `1d4ef482`，schema 仍为 `20260915_06`。
 
+### 4.1 关于 `/api/system/version` 的 `git_dirty: true`
+
+事后复查时该端点报告 `git_dirty: true`。已核实其来源：`main.py:git_revision()` 用
+`git status --porcelain` 的**非空**判断 dirty，而主检出中存在一个**未跟踪**文件
+`docs/goal/teaching-1018-final.md`（用户放入的任务书，从未提交）。该命令不区分已跟踪
+修改与未跟踪文件，因此任何未跟踪文件都会置位。
+
+核实：主检出 `git status --porcelain` 只有 `?? docs/goal/teaching-1018-final.md` 一行，
+`git status --porcelain --untracked-files=no` 为空，HEAD 仍为 `25a9177`。
+**没有任何已跟踪文件被修改，生产运行的代码未变。** 这一项不是本次事件造成的，也不影响
+上述"未写入生产"的结论；记录于此以免日后被误读为"生产存在本地代码改动"。
+
 ## 5. 根因与纠正措施
 
 **根因**：Next.js `rewrites()` 的目标地址在 `next build` 时确定；仅在 `next start` 时设置
