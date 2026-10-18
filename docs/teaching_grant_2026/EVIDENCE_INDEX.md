@@ -18,6 +18,16 @@
 | E-D-04 | 页面与真实数据的隔离证明 | PLATFORM_EVIDENCE | `tests/test_demo_research.py::test_demo_router_never_touches_the_database` | 2026-10-18 | 见"生成基线" | 项目组（技术） | 测试通过 | "合成演示不写入任何业务表，调用前后业务表行数不变" |
 | E-D-05 | 真实研究导出页（对照） | PLATFORM_EVIDENCE | `/teacher/research-export`；截图 `.../06_real_export_separation.png` | 2026-10-18 | 见"生成基线" | 项目组（技术） | 可复查 | "平台已具备匿名化学习证据导出功能" |
 
+## 证据包目录
+
+| 证据包 | 目录 | 状态 |
+| --- | --- | --- |
+| E1 教学与人员 | `evidence/E1_teaching_credentials/` | 目录 + 缺项清单；材料待用户提供 |
+| E2 平台基础 | `evidence/E2_platform/` | 技术证据已收集，可复查 |
+| E3 病例与量表 | `evidence/E3_cases_rubric/` | 草稿 + 空白审核表；待真实教师 |
+| E4 前期验证 | `evidence/E4_validation/` | C（真实运行）+ D（合成演示），来源分离 |
+| E5 研究方案 | `evidence/E5_protocol/` | 计划文件（拟开展），无研究结果 |
+
 ## 生成基线
 
 ```text
