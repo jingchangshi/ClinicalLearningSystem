@@ -65,7 +65,9 @@ python3 scripts/grant/e2e/stack.py build                     # .next-accept，�
 
 ## 4. 合成研究数据（fixture）
 
-由 `scripts/grant/e2e/build_fixture.py` 通过**产品自身的 HTTP API** 建立（不直写考核表）：
+由 `scripts/grant/e2e/build_fixture.py` 通过**产品自身的 HTTP API** 建立（不直写考核表）。
+仅有的两处直接 SQLite 写入是产品没有对应写接口的部分：49 名 TEST 学生的 `students` /
+`competency_profiles` / `users` 行（`app.manage_users` 只建教师与管理员，且学生不属于特权账号）。
 
 | 项 | 实际值 |
 | --- | --- |
@@ -75,7 +77,9 @@ python3 scripts/grant/e2e/stack.py build                     # .next-accept，�
 | 审核 | 两位不同教师账号 `test_teacher_a` / `test_teacher_b` 各自独立审核通过后，管理员发布 |
 | 分配 | 先冻结题本顺序 `FORM-ORDER-pilot_test-821bc1060883`，再抽整批分配 `CLUSTER-pilot_test-51c049aed0fb` |
 | 排考 | 98 场（49 人 × T0/T1），全部 `data_origin=pilot_test` |
-| 账号来源 | 教师/管理员仅经 `python -m app.manage_users create-teacher|create-admin`（密码走 stdin） |
+| 账号来源 | 教师/管理员仅经 `python -m app.manage_users create-teacher\|create-admin`（密码走 stdin） |
+| 人员解析 | `GET /api/assessments/admin/staff`（**真实端点**，无数据库回退） |
+| 题本归属 | `GET /api/assessments/forms/mine` 实测：作者管理员见 2 份，仅参与审核的教师见 0 份 |
 
 > `student_ids` 等完整 fixture 清单：`/tmp/clinpath-e2e/fixture.json`（一次性，不提交）。
 

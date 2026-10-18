@@ -127,48 +127,34 @@ def provision_staff(args, spec: dict) -> None:
     _backend_python(cmd, database_url=args.database_url, jwt_secret=args.jwt_secret, stdin=password + "\n")
 
 
-def resolve_staff(admin_api: Api, db_path: Path) -> tuple[dict[str, dict], bool]:
-    """Resolve staff ids.
+def resolve_staff(admin_api: Api) -> dict[str, dict]:
+    """Resolve staff ids through the product's own directory endpoint.
 
-    Preferred path is the frozen contract ``GET /api/assessments/admin/staff``.
-    While that endpoint is still being written by backend-finish, fall back to a
-    read of the throwaway SQLite so the harness is not blocked; the returned flag
-    records which path was used, and the run record must state it.
+    ``GET /api/assessments/admin/staff`` (added in 4cd4a18) is the contract the UI
+    itself uses, so the fixture exercises it rather than reading ids out of the
+    throwaway database. There is deliberately no DB fallback: if the endpoint is
+    missing or wrong, the fixture must fail loudly instead of hiding it.
+
+    The response carries exactly {user_id, display_name, role, teacher_no} and no
+    username, so staff are matched by teacher_no (teachers) or display_name (the
+    admin, whose display_name falls back to its username).
     """
     status, rows = admin_api.request("GET", "/api/assessments/admin/staff")
-    via_api = status < 400
-    if via_api:
-        staff: dict[str, dict] = {}
-        for spec in STAFF_SPECS:
-            # An admin has no Teacher row, so the directory falls back to the username.
-            wanted = {spec["display"], spec["username"]}
-            match = next((r for r in rows if spec["teacher_no"] and r.get("teacher_no") == spec["teacher_no"]), None)
-            if match is None:
-                match = next((r for r in rows if r.get("display_name") in wanted), None)
-            if match is None:
-                raise SystemExit(f"could not resolve staff id for {spec['username']}: {rows}")
-            staff[spec["username"]] = match
-        return staff, True
-
-    if status not in (404, 405):
-        raise SystemExit(f"staff lookup failed: {status} {rows}")
-
-    conn = sqlite3.connect(str(db_path))
-    try:
-        staff = {}
-        for spec in STAFF_SPECS:
-            row = conn.execute(
-                "SELECT u.id, u.username, u.role, t.teacher_no FROM users u"
-                " LEFT JOIN teachers t ON t.id = u.teacher_id WHERE u.username = ?",
-                (spec["username"],),
-            ).fetchone()
-            if row is None:
-                raise SystemExit(f"staff account {spec['username']} was not provisioned")
-            staff[spec["username"]] = {"user_id": int(row[0]), "username": str(row[1]),
-                                       "role": str(row[2]), "teacher_no": row[3], "display_name": spec["display"]}
-        return staff, False
-    finally:
-        conn.close()
+    if status >= 400:
+        raise SystemExit(
+            f"GET /api/assessments/admin/staff -> {status}: {rows}. "
+            "The fixture needs the staff directory; it will not read ids from the database."
+        )
+    staff: dict[str, dict] = {}
+    for spec in STAFF_SPECS:
+        wanted = {spec["display"], spec["username"]}
+        match = next((r for r in rows if spec["teacher_no"] and r.get("teacher_no") == spec["teacher_no"]), None)
+        if match is None:
+            match = next((r for r in rows if r.get("display_name") in wanted), None)
+        if match is None:
+            raise SystemExit(f"could not resolve staff id for {spec['username']}: {rows}")
+        staff[spec["username"]] = match
+    return staff
 
 
 def ensure_students(db_path: Path, count: int) -> list[int]:
@@ -274,6 +260,28 @@ def ensure_forms(admin_api: Api, staff: dict, payloads: dict[str, dict], base: s
     return form_ids
 
 
+def verify_my_forms(admin_api: Api, base: str, form_ids: dict[str, int]) -> dict:
+    """Exercise ``GET /api/assessments/forms/mine`` against the fixture it just made.
+
+    Two things must hold, and both are about the confidentiality the endpoint
+    exists to protect: the authoring admin sees the forms it created, and a
+    teacher who merely *reviewed* them sees none of them in their own list.
+    """
+    mine = admin_api.ok("GET", "/api/assessments/forms/mine")
+    mine_ids = {row["id"] for row in mine}
+    missing = sorted(set(form_ids.values()) - mine_ids)
+    if missing:
+        raise SystemExit(f"/forms/mine is missing forms the admin authored: {missing}")
+
+    teacher_api = Api(base).login("test_teacher_a", TEACHER_PASSWORD)
+    teacher_mine = teacher_api.ok("GET", "/api/assessments/forms/mine")
+    leaked = sorted(row["code"] for row in teacher_mine if row["code"] in {"TEST-CASE-A01-UA-V1", "TEST-CASE-A02-SICCA-V1"})
+    if leaked:
+        raise SystemExit(f"/forms/mine showed a reviewer forms they did not author: {leaked}")
+    return {"admin_forms": len(mine), "teacher_forms": len(teacher_mine),
+            "teacher_sees_reviewed_forms": bool(leaked)}
+
+
 def ensure_cohorts(admin_api: Api, student_ids: list[int], staff: dict) -> None:
     existing = {c["cohort_code"] for c in admin_api.ok("GET", "/api/assessments/admin/cohorts")}
     teacher_a = staff["test_teacher_a"]["user_id"]
@@ -362,12 +370,13 @@ def main() -> int:
     for spec in STAFF_SPECS:
         provision_staff(args, spec)
     admin_api = Api(base).login("test_admin", ADMIN_PASSWORD)
-    staff, staff_via_api = resolve_staff(admin_api, db_path)
+    staff = resolve_staff(admin_api)
 
     student_ids = ensure_students(db_path, args.students)
     logins = ensure_student_logins(db_path, student_ids)
 
     form_ids = ensure_forms(admin_api, staff, load_form_payloads(), base)
+    my_forms_check = verify_my_forms(admin_api, base, form_ids)
     ensure_cohorts(admin_api, student_ids, staff)
     allocations = ensure_allocations(admin_api)
     schedule = ensure_schedule(admin_api, form_ids, staff)
@@ -375,9 +384,8 @@ def main() -> int:
     manifest = {
         "data_origin": ORIGIN,
         "label": "SYNTHETIC / SIMULATED_NOT_HUMAN — software acceptance only, not real students",
-        "staff_resolved_via_api": staff_via_api,
-        "staff_endpoint_note": None if staff_via_api else
-        "GET /api/assessments/admin/staff was not implemented at fixture time; ids read from the throwaway DB",
+        "staff_resolved_via": "GET /api/assessments/admin/staff",
+        "my_forms_check": my_forms_check,
         "student_ids": student_ids,
         "student_logins": {str(k): v for k, v in logins.items()},
         "student_password": STUDENT_PASSWORD,
