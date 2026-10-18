@@ -24,7 +24,8 @@
 仓库       /home/jcshi/workspace/clinical_learning_system
 分支       main
 基线 SHA   1d4ef4823c75fb9d89a7aec734b8b84d0bfa5c41（本批改动之前）
-工作树     本批改动尚未提交；提交后此处必须更新为实际 SHA
+提交       ea145d6ca4cbebe21381860961dce59da8baa010
+分支       teaching-grant-2026-wpd（未合并、未部署）
 ```
 
 > **规则**：提交后必须把上表的 SHA 更新为实际提交 SHA，并在申报材料中引用该 SHA。

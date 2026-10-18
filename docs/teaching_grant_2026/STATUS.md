@@ -3,7 +3,7 @@
 > 生成日期：2026-10-18
 > 仓库：`/home/jcshi/workspace/clinical_learning_system`（`main`）
 > 基线 SHA：`1d4ef4823c75fb9d89a7aec734b8b84d0bfa5c41`（本批改动之前）
-> 本批改动：**尚未提交**。提交后必须把本文件与 `EVIDENCE_INDEX.md` 中的 SHA 更新为实际提交 SHA。
+> 本批提交：`ea145d6ca4cbebe21381860961dce59da8baa010`（分支 `teaching-grant-2026-wpd`）。**未部署**；生产仍运行 `1d4ef48`。
 
 ## 0. 一句话结论
 
@@ -68,7 +68,7 @@ deploy              ./scripts/verify_deploy.sh       → PASSED（生产仍为 H
 
 处置：将工作树 stash → 用生产环境变量重建 HEAD 前端 → 重启 `clinical-frontend.service`
 → `./scripts/verify_deploy.sh` 恢复为 **PASSED**（运行版本 = `1d4ef48`）→ 恢复 stash。
-当前生产运行的是未改动的 HEAD；本批改动**全部留在工作树，未部署**。
+当前生产运行的是未改动的 HEAD；本批改动已提交为 `ea145d6ca4cbebe21381860961dce59da8baa010`，**未部署**。
 
 教训：验收栈必须用独立 `distDir`，且绝不能与生产共用 `frontend/.next`。
 
