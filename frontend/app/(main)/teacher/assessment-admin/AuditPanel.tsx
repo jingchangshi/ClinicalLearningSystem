@@ -4,10 +4,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Button, Card, EmptyHint, Feedback, Moment, Pill } from "@/components/assessment/AssessmentUi";
-import { assessmentErrorMessage, listAssessmentAudit, type AuditRow } from "@/lib/assessmentApi";
+import {
+  assessmentErrorMessage,
+  listAssessmentAudit,
+  listAssessmentStaff,
+  type AuditRow,
+  type StaffAccount,
+} from "@/lib/assessmentApi";
+
+const ROLE_LABELS: Record<string, string> = { admin: "研究管理员", teacher: "教师", student: "学生" };
 
 export function AuditPanel() {
   const [rows, setRows] = useState<AuditRow[]>([]);
+  const [staff, setStaff] = useState<StaffAccount[]>([]);
   const [actionFilter, setActionFilter] = useState("all");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -26,10 +35,30 @@ export function AuditPanel() {
 
   useEffect(() => {
     void load();
+    listAssessmentStaff()
+      .then(setStaff)
+      .catch(() => setStaff([]));
   }, [load]);
 
+  const staffById = useMemo(() => new Map(staff.map((account) => [account.user_id, account])), [staff]);
   const actions = useMemo(() => [...new Set(rows.map((row) => row.action))].sort(), [rows]);
   const visible = actionFilter === "all" ? rows : rows.filter((row) => row.action === actionFilter);
+
+  function actorLabel(actorUserId: number | null): string {
+    if (actorUserId === null) return "系统";
+    const account = staffById.get(actorUserId);
+    return account ? account.display_name : `账号 #${actorUserId}`;
+  }
+
+  function targetLabel(target: string): string {
+    // The audit endpoint sends "type:id"; read it as a record reference, not a raw id.
+    const [type, ...rest] = target.split(":");
+    const id = rest.join(":");
+    const typeLabel =
+      { form: "题本", sitting: "考试", review: "评分记录", cohort: "批次", allocation: "分配记录",
+        dataset: "数据集", research_codes: "研究编码", design: "研究设计" }[type] ?? type;
+    return id ? `${typeLabel} · ${id}` : typeLabel;
+  }
 
   return (
     <div className="space-y-4">
@@ -86,10 +115,14 @@ export function AuditPanel() {
                       <Pill>{row.action}</Pill>
                     </td>
                     <td className="px-3 py-2">
-                      {row.actor_user_id === null ? "系统" : `账号 #${row.actor_user_id}`}
-                      {row.actor_role ? <p className="text-xs text-slate-500">{row.actor_role}</p> : null}
+                      {actorLabel(row.actor_user_id)}
+                      {row.actor_role ? (
+                        <p className="text-xs text-slate-500">
+                          {ROLE_LABELS[row.actor_role] ?? row.actor_role}
+                        </p>
+                      ) : null}
                     </td>
-                    <td className="px-3 py-2 font-mono text-xs">{row.target}</td>
+                    <td className="px-3 py-2 text-xs">{targetLabel(row.target)}</td>
                     <td className="px-3 py-2 text-xs text-slate-600">
                       {Object.keys(row.detail).length
                         ? Object.entries(row.detail)
