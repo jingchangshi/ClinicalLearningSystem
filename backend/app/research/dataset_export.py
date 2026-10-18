@@ -23,10 +23,10 @@ from . import (
 )
 
 COLUMNS = (
-    "study_student_code", "cohort_id", "study_group", "randomization_version", "timepoint",
+    "study_student_code", "cohort_id", "batch_index", "study_group", "randomization_version", "timepoint",
     "assessment_form_id", "assessment_form_version", "form_order",
     "blinded_rater_1_score", "blinded_rater_2_score", "adjudicated_score", "final_score",
-    "assessment_completed_at", "training_exposure", "intervention_count", "missingness",
+    "assessment_completed_at", "training_exposure", "cbl_case_topics", "intervention_count", "missingness",
     "scoring_provenance", "dataset_version", "data_origin",
 )
 _SCORES = ("blinded_rater_1_score", "blinded_rater_2_score", "adjudicated_score", "final_score")
@@ -53,6 +53,9 @@ def build_rows(records: Iterable[Mapping], *, dataset_version: str, data_origin:
             raise MixedDataOriginError(f"row origin {origin!r} != dataset origin {data_origin!r}")
         row = {c: rec.get(c) for c in COLUMNS}
         row["dataset_version"], row["data_origin"] = dataset_version, data_origin
+        if not isinstance(row["batch_index"], int) or isinstance(row["batch_index"], bool) \
+                or row["batch_index"] < 1:
+            raise ResearchError("batch_index (chronological batch order, 1..7) is required")
         if row["timepoint"] not in TIMEPOINTS:
             raise ResearchError(f"timepoint must be T0 or T1: {row['timepoint']!r}")
         if row["form_order"] not in FORM_ORDERS:
@@ -75,6 +78,12 @@ def build_rows(records: Iterable[Mapping], *, dataset_version: str, data_origin:
         out.append(row)
     out.sort(key=lambda r: (r["study_student_code"], r["timepoint"]))
     return out
+
+
+def cbl_rows_missing_topics(rows: Sequence[Mapping]) -> list[str]:
+    """Student codes in the CBL arm with no logged case topics (reported, not silently filled)."""
+    return sorted({r["study_student_code"] for r in rows
+                   if r.get("study_group") == "cbl" and not r.get("cbl_case_topics")})
 
 
 def to_csv(rows: Sequence[Mapping]) -> str:

@@ -19,6 +19,7 @@
 | --- | --- | --- |
 | `study_student_code` | 文本 | 研究编码（非真实学号/姓名） |
 | `cohort_id` | 文本 | 批次编码（7 个完整轮转批次之一，分析单位） |
+| `batch_index` | 整数 1–7 | 批次**实际时间顺序**（必填）。第 b 批前有 7(b−1) 名已考完两份题本的学生，用于「题本信息外泄/批次顺序」敏感性分析 |
 | `study_group` | 枚举 | `clinpath` / `cbl`；来自冻结的整批随机化记录 |
 | `randomization_version` | 文本 | 随机化记录版本（含算法、种子、执行人、时间、方案版本的那条记录） |
 | `timepoint` | 枚举 | `T0`（D1 基线）/ `T1`（D6 后测） |
@@ -31,6 +32,7 @@
 | `final_score` | 数值或空 | 最终成绩（锁定后）；缺失须有 `missingness` 理由 |
 | `assessment_completed_at` | ISO-8601 或空 | 考核完成时间 |
 | `training_exposure` | 文本/数值 | 训练暴露（ClinPath 组：D2–D5 完成的形成性训练量；CBL 组：常规教学接触记录） |
+| `cbl_case_topics` | 文本 | CBL 组实际教学的病例主题清单（`;` 分隔；**CBL 组必须记录**，空值由 `cbl_rows_missing_topics` 列出，用于核对 CBL 病例是否与考核题本主题重合；ClinPath 组留空） |
 | `intervention_count` | 整数 | 教师干预次数 |
 | `missingness` | 文本 | `observed`，或缺失原因（如 `absent`、`withdrawn`、`incomplete`） |
 | `scoring_provenance` | 文本 | 分数来源链（评分者/裁决/规则或 AI 的 `degraded` 标记等），不含提示词与回答正文 |
@@ -43,4 +45,5 @@
 - `quasi_experimental` 分配的数据集不得产出随机化检验结论（`exact_randomization_test` 拒绝）。
 - 评分者一致性（ICC(2,1)、ICC(2,k) 及 95% CI）由两位盲评分数计算；完整配对不足 10 个受试者时
   输出 `insufficient_data` 且**不给数值**。
+- 批次顺序与同批次同题本暴露（`cohort_stats.batch_exposure_sensitivity`）仅作探索性敏感性分析，只给描述性量，不给 P 值。
 - 主分析单位为批次；P 值定义见 SAP `E5_02` §3.5.3（全项目唯一一种）。

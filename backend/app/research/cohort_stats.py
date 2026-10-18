@@ -136,3 +136,94 @@ def rate(numerator: int, denominator: int) -> dict:
 
 def group_label(cohort_id: str, clinpath_cohorts: Iterable[str]) -> str:
     return STUDY_GROUP_CLINPATH if cohort_id in set(clinpath_cohorts) else STUDY_GROUP_CBL
+
+
+def _pearson(xs: Sequence[float], ys: Sequence[float]) -> float | None:
+    n = len(xs)
+    if n < 3:
+        return None
+    mx, my = sum(xs) / n, sum(ys) / n
+    sxx = sum((x - mx) ** 2 for x in xs)
+    syy = sum((y - my) ** 2 for y in ys)
+    if sxx <= 1e-12 or syy <= 1e-12:
+        return None
+    return sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / (sxx * syy) ** 0.5
+
+
+def batch_exposure_sensitivity(
+    rows: Sequence[StudentScores],
+    batch_index: Mapping[str, int],
+    clinpath_cohorts: Iterable[str],
+) -> dict:
+    """Exploratory sensitivity: later batches may hear about the forms from earlier ones.
+
+    ``batch_index`` is the chronological position (1..7) of each cohort. Batch b has
+    ``7(b-1)`` nominal earlier students who sat both forms (``n_prior_informants``
+    uses the actual enrolled counts). Also reported: same-form exposure inside a
+    batch (classmates with the same form order, who sat the same form at the same
+    time). Everything here is descriptive, for n = 7 clusters, and gives NO p-values;
+    the single randomization p definition (exact_permutation) is unaffected.
+    """
+    assert_single_origin(rows)
+    stats = per_cohort_stats(rows)
+    if set(batch_index) != set(stats):
+        raise ResearchError("batch_index must cover exactly the cohorts in the data")
+    if sorted(batch_index.values()) != list(range(1, len(stats) + 1)):
+        raise ResearchError("batch_index must be a permutation of 1..number of cohorts")
+    cp = set(clinpath_cohorts)
+    changes = cohort_changes(stats)
+    by_batch = sorted(stats, key=lambda c: batch_index[c])
+    per_cohort: dict[str, dict] = {}
+    enrolled_before = 0
+    for cid in by_batch:
+        b = batch_index[cid]
+        paired = [r for r in rows if r.cohort_id == cid and r.t0 is not None and r.t1 is not None]
+        by_order = {o: [r for r in paired if r.form_order == o] for o in FORM_ORDERS}
+        peers = [len(by_order[r.form_order]) - 1 for r in paired]
+        major = max(FORM_ORDERS, key=lambda o: len(by_order[o]))
+        minor = [o for o in FORM_ORDERS if o != major][0]
+        mean_ch = lambda rs: (sum(r.t1 - r.t0 for r in rs) / len(rs)) if rs else None  # noqa: E731
+        per_cohort[cid] = {
+            "batch_index": b, "study_group": group_label(cid, cp), "mean_change": changes[cid],
+            "n_prior_informants_nominal": 7 * (b - 1),
+            "n_prior_informants_actual": enrolled_before,
+            "mean_same_form_peers": (sum(peers) / len(peers)) if peers else None,
+            "change_major_form_students": mean_ch(by_order[major]),
+            "change_minor_form_students": mean_ch(by_order[minor]),
+        }
+        enrolled_before += stats[cid]["n_enrolled"]
+    # arm-centred association between batch position (= informant count) and change
+    arm_mean = {g: _mean([changes[c] for c in changes if (c in cp) == (g == STUDY_GROUP_CLINPATH)])
+                for g in (STUDY_GROUP_CLINPATH, STUDY_GROUP_CBL)}
+    xs = [float(batch_index[c]) for c in by_batch]
+    resid = [changes[c] - arm_mean[group_label(c, cp)] for c in by_batch]
+    mean_idx = {g: _mean([batch_index[c] for c in batch_index if (c in cp) == (g == STUDY_GROUP_CLINPATH)])
+                for g in (STUDY_GROUP_CLINPATH, STUDY_GROUP_CBL)}
+    trend = _trend_adjusted_difference(changes, batch_index, cp)
+    return {
+        "per_cohort": per_cohort,
+        "mean_batch_index_by_arm": mean_idx,
+        "r_batch_index_vs_change_within_arm": _pearson(xs, resid),
+        "unadjusted_difference": between_arm_difference(changes, cp)["difference"],
+        "batch_trend_adjusted_difference": trend,
+        "note": "Exploratory, descriptive, 7 clusters; no p-values; the exact randomization p is unchanged.",
+    }
+
+
+def _trend_adjusted_difference(changes: Mapping[str, float], batch_index: Mapping[str, int],
+                               clinpath: set[str]) -> dict:
+    """OLS of cohort change on arm + batch_index (3 coefficients on 7 points)."""
+    ids = sorted(changes)
+    y = [changes[c] for c in ids]
+    a = [1.0 if c in clinpath else 0.0 for c in ids]
+    t = [float(batch_index[c]) for c in ids]
+    n = len(ids)
+    ma, mt, my = sum(a) / n, sum(t) / n, sum(y) / n
+    saa = sum((v - ma) ** 2 for v in a); stt = sum((v - mt) ** 2 for v in t)
+    sat = sum((u - ma) * (v - mt) for u, v in zip(a, t))
+    say = sum((u - ma) * (v - my) for u, v in zip(a, y)); sty = sum((u - mt) * (v - my) for u, v in zip(t, y))
+    det = saa * stt - sat * sat
+    if n < 4 or det <= 1e-12:
+        return {"status": "insufficient_data", "arm_effect": None, "batch_slope": None}
+    return {"status": "ok", "arm_effect": (stt * say - sat * sty) / det,
+            "batch_slope": (saa * sty - sat * say) / det}

@@ -81,7 +81,7 @@ def long_rows(origin=DATA_ORIGIN_REAL):
         for tp, score in (("T0", s.t0), ("T1", s.t1)):
             form = {"X": {"T0": "A01", "T1": "A02"}, "Y": {"T0": "A02", "T1": "A01"}}[s.form_order][tp]
             out.append(dict(study_student_code=s.study_student_code, cohort_id=s.cohort_id,
-                            study_group="clinpath", randomization_version="r1", timepoint=tp,
+                            batch_index=int(s.cohort_id[1:]), study_group="clinpath", randomization_version="r1", timepoint=tp,
                             assessment_form_id=form, assessment_form_version="1", form_order=s.form_order,
                             final_score=score, missingness=None if score is not None else "absent",
                             data_origin=origin))
@@ -118,3 +118,46 @@ def test_data_dictionary_lists_exactly_the_export_columns():
     documented = [line.split("`")[1] for line in doc.read_text(encoding="utf-8").splitlines()
                   if line.startswith("| `")]
     assert documented == list(de.COLUMNS)
+
+
+def test_batch_exposure_sensitivity_recovers_batch_trend():
+    cp = ["C2", "C4", "C6"]
+    idx = {f"C{i}": i for i in range(1, 8)}
+    data = []
+    for r in rows():
+        b = idx[r.cohort_id]
+        bump = 1.5 * b + (5.0 if r.cohort_id in cp else 0.0)  # later batches gain more
+        data.append(cs.StudentScores(r.study_student_code, r.cohort_id, r.form_order, r.t0, r.t0 + bump,
+                                     r.data_origin))
+    s = cs.batch_exposure_sensitivity(data, idx, cp)
+    assert s["per_cohort"]["C1"]["n_prior_informants_nominal"] == 0
+    assert s["per_cohort"]["C7"]["n_prior_informants_nominal"] == 42
+    assert s["per_cohort"]["C7"]["n_prior_informants_actual"] == 42
+    assert s["per_cohort"]["C1"]["mean_same_form_peers"] == pytest.approx((4 * 3 + 3 * 2) / 7)
+    assert s["batch_trend_adjusted_difference"]["batch_slope"] == pytest.approx(1.5)
+    assert s["batch_trend_adjusted_difference"]["arm_effect"] == pytest.approx(5.0)
+    assert s["r_batch_index_vs_change_within_arm"] == pytest.approx(1.0)
+    assert "p_value" not in s
+
+
+def test_batch_exposure_guards():
+    idx = {f"C{i}": i for i in range(1, 8)}
+    with pytest.raises(ResearchError):
+        cs.batch_exposure_sensitivity(rows(), {**idx, "C7": 3}, ["C1", "C2", "C3"])
+    with pytest.raises(MixedDataOriginError):
+        cs.batch_exposure_sensitivity(rows() + rows(DATA_ORIGIN_DEMO), idx, ["C1", "C2", "C3"])
+
+
+def test_batch_index_required_and_cbl_topics_reported():
+    bad = long_rows()
+    bad[0]["batch_index"] = None
+    with pytest.raises(ResearchError):
+        de.build_rows(bad, dataset_version="v", data_origin=DATA_ORIGIN_REAL)
+    ok = long_rows()
+    for r in ok:
+        r["study_group"] = "cbl"
+    ok[0]["cbl_case_topics"] = "SLE"
+    missing = de.cbl_rows_missing_topics(ok)
+    assert ok[0]["study_student_code"] not in missing or any(
+        r["study_student_code"] == ok[0]["study_student_code"] and not r["cbl_case_topics"] for r in ok[1:2])
+    assert len(missing) >= 48
