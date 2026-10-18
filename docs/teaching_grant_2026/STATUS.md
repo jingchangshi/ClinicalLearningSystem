@@ -1,7 +1,7 @@
 # 2026 浙江省本科教改项目 — 交付状态总表（STATUS）
 
 > 生成日期：2026-10-18
-> 仓库：`/home/jcshi/workspace/clinical_learning_system`（`main`）
+> 仓库：`/home/jcshi/workspace/clinical_learning_system`（分支 `teaching-grant-2026-wpd`，基于 `main`）
 > 基线 SHA：`1d4ef4823c75fb9d89a7aec734b8b84d0bfa5c41`（本批改动之前）
 > 本批提交：`ea145d6ca4cbebe21381860961dce59da8baa010`（分支 `teaching-grant-2026-wpd`）。**未部署**；生产仍运行 `1d4ef48`。
 
@@ -26,7 +26,7 @@
 | B04 | 量表一致性分析脚本 | **完成** | `scripts/grant/rubric_agreement.py`；空真实评分时**退出码 2 且不出数**；模拟演示需显式 `--demo`；自检 8/8 PASS | 无真实评分可分析 |
 | C01 | SLE 端到端演示流程记录 | **完成** | `C_workflow/C01_demo_walkthrough.md` | — |
 | C02 | 每个环节的角色/ID/来源/版本记录 | **完成** | `C_workflow/C02_run_record.md` + `C02_evidence/00–23`（23 份原始 JSON/时间线） | — |
-| C03 | 复用既有页面、补可读性 | **完成/无改动** | `C_workflow/C03_page_gaps.md`（记录而非重构） | — |
+| C03 | 复用既有页面、补可读性 | **完成（1 处内部 key 修复）** | `C_workflow/C03_page_gaps.md`；干预页改为渲染后端 `display_labels` 中文标签（+1 后端测试），学生首页「八维→九维」纠正；其余 4 条记录未改 | — |
 | C04 | 3–5 分钟录屏脚本与截图索引 | **完成** | `C_workflow/C04_screenplay.md` + 17 张截图 | 真实专家观摩意见由用户补入 |
 | D01 | 独立只读版本化数据资源 | **完成** | `demo_research/synthetic_v1/`；路由与服务不 import ORM/DB；调用 7 端点前后业务表行数不变（测试固定） | — |
 | D02 | `/teacher/research-demo` + 只读 API + CSV | **完成** | `routes/demo_research.py`、`research-demo/` 页面；浏览器实测通过（见 §3） | — |
