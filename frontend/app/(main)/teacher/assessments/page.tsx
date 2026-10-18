@@ -1,39 +1,60 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { getBlindQueue,getBlindDetail,submitBlindReview } from "@/lib/assessmentApi";
-import type { BlindDetail, BlindQueueItem } from "@/lib/assessmentApi";
+import { useState } from "react";
 
-const DIMENSIONS = [
-  ["medical_knowledge","医学知识"],["key_information","关键信息"],["differential_diagnosis","鉴别诊断"],
-  ["evidence_integration","证据整合"],["clinical_decision","临床决策"],["evidence_based_medicine","循证安全"]
-] as const;
+import { TabBar } from "@/components/assessment/AssessmentUi";
+import { useAuth } from "@/components/AuthProvider";
 
-export default function BlindReviewPage() {
-  const [items,setItems]=useState<BlindQueueItem[]>([]);
-  const [detail,setDetail]=useState<BlindDetail|null>(null);
-  const [scores,setScores]=useState<Record<string,number>>({});
-  const [error,setError]=useState("");
-  const [loading,setLoading]=useState(false);
-  async function refresh(){try{setItems(await getBlindQueue())}catch(e){setError(String(e))}}
-  useEffect(()=>{void refresh()},[]);
-  async function open(code:string){try{setDetail(await getBlindDetail(code));setScores({});setError("")}catch(e){setError(String(e))}}
-  async function submit(){
-    if(!detail)return;
-    setLoading(true);
-    try{await submitBlindReview(detail.blind_code,scores);setDetail(null);await refresh();setError("")}
-    catch(e){setError(String(e))}finally{setLoading(false)}
+import { AdjudicationPanel } from "./AdjudicationPanel";
+import { BlindQueuePanel } from "./BlindQueuePanel";
+
+type Tab = "blind" | "adjudication";
+
+export default function TeacherAssessmentPage() {
+  const { role, loading } = useAuth();
+  const [tab, setTab] = useState<Tab>("blind");
+
+  if (loading) {
+    return (
+      <p className="text-sm text-slate-500" role="status">
+        正在确认账号权限…
+      </p>
+    );
   }
-  return <div className="space-y-5">
-    <h1 className="text-2xl font-semibold">独立考核盲评</h1>
-    <p className="text-sm text-slate-600">盲评页面不显示学生姓名、教学组别或前后测时点。每份答卷提交评分后立即锁定。</p>
-    {error?<p role="alert" className="text-red-700">{error}</p>:null}
-    {!detail?<div className="space-y-2">{items.map(item=><button type="button" key={item.blind_code} disabled={item.reviewed} className="block w-full rounded border p-3 text-left disabled:opacity-50" onClick={()=>void open(item.blind_code)}>匿名答卷 {item.blind_code.slice(0,10)}… · {item.reviewed?"已评分":"待评分"}</button>)}</div>:
-    <section className="space-y-4 rounded border p-5">
-      <p className="font-medium">匿名答卷 {detail.blind_code.slice(0,12)}…</p>
-      {detail.stages.map((s,i)=><div key={i} className="rounded border p-3"><h2 className="font-semibold">{s.title}</h2><p className="whitespace-pre-wrap text-sm">{s.clinical_information}</p><p className="text-sm font-medium">{s.question}</p><p className="mt-2 whitespace-pre-wrap">{detail.answers.find(x=>x.index===i)?.answer_text??"缺失"}</p></div>)}
-      <details className="rounded border p-3"><summary>评分锚点与参考要点（只供盲评者）</summary><pre className="overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify({rubric:detail.rubric,answer_key:detail.answer_key},null,2)}</pre></details>
-      <div className="grid gap-3 md:grid-cols-2">{DIMENSIONS.map(([key,label])=><label key={key} className="text-sm">{label}（0–100）<input type="number" min={0} max={100} value={scores[key]??""} onChange={e=>setScores(old=>({...old,[key]:Number(e.target.value)}))} className="block w-full rounded border p-2"/></label>)}</div>
-      <button type="button" disabled={loading||DIMENSIONS.some(([key])=>scores[key]===undefined||scores[key]<0||scores[key]>100)} onClick={()=>void submit()} className="rounded bg-teal-700 px-4 py-2 text-white disabled:opacity-50">锁定并提交独立评分</button>
-    </section>}
-  </div>;
+
+  if (role !== "teacher") {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-2xl font-semibold text-ink">独立考核盲评</h1>
+        <p role="alert" className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          盲评与裁决只对具有独立教师身份的评分者开放。研究管理员负责安排与锁定，不参与评分，
+          也不能读取评分内容。请使用课程负责人为你分配的教师账号登录。
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <section>
+        <p className="text-sm font-semibold tracking-[0.22em] text-clinic">独立考核 · 评分</p>
+        <h1 className="mt-2 text-3xl font-semibold text-ink">盲评与分歧裁决</h1>
+        <p className="mt-2 max-w-3xl text-slate-600">
+          这里是独立考核的双教师盲评工作台。匿名答卷只暴露盲评编码、病例资料、学生作答、评分量表与锚点；
+          学生身份、教学组别、批次与考核时点不下发到本页面。评分提交后即锁定，另一位评分者的分数也不可见。
+        </p>
+      </section>
+
+      <TabBar
+        tabs={[
+          { key: "blind", label: "盲评队列" },
+          { key: "adjudication", label: "分歧裁决" },
+        ]}
+        active={tab}
+        onChange={setTab}
+      />
+
+      {tab === "blind" ? <BlindQueuePanel /> : <AdjudicationPanel />}
+    </div>
+  );
+}
