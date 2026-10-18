@@ -55,9 +55,19 @@ step "playwright: R8.2 research flow" playwright_research.log \
 step "playwright: existing suite" playwright.log \
   npx playwright test --reporter=list --grep-invert "E2 evidence screenshots|R8.2 research flow"
 
-export E2E_SHOTS_DIR="$SHOTS"
+# Screenshots are captured into the run dir, not straight into the tracked
+# evidence directory: a routine verification run must not churn committed
+# evidence. Publishing is opt-in (E2E_PUBLISH_SHOTS=1).
+export E2E_SHOTS_DIR="$RUN_DIR/screenshots"
+mkdir -p "$E2E_SHOTS_DIR"
 step "playwright: E2 evidence screenshots" screenshots.log \
   npx playwright test tests/e2e/evidence-screenshots.spec.ts --reporter=list
+
+if [[ "${E2E_PUBLISH_SHOTS:-0}" == "1" ]]; then
+  mkdir -p "$SHOTS"
+  cp "$E2E_SHOTS_DIR"/*.png "$SHOTS"/
+  echo "published $(ls "$E2E_SHOTS_DIR"/*.png | wc -l) screenshots to $SHOTS"
+fi
 
 echo
 if [[ "$failures" -eq 0 ]]; then

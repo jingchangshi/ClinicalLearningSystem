@@ -182,6 +182,10 @@ existing suite:     26 passed, 3 failed, 11 skipped (40.8s)
 ```bash
 cd <worktree>            # 任意独立 worktree，勿在生产主检出内运行
 ./scripts/grant/e2e/run_full_acceptance.sh <label>
+
+# 截图默认写到 <run-dir>/screenshots（避免日常复跑改动已提交的证据）；
+# 仅在确实要更新 E2 证据目录时：
+E2E_PUBLISH_SHOTS=1 ./scripts/grant/e2e/run_full_acceptance.sh <label>
 ```
 
 要求：`uv`、`node`/`npm`、`npx playwright`（chromium 已安装）。脚本会在以下任一情况下**拒绝运行**：
