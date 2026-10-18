@@ -29,7 +29,7 @@ SHA、环境、时间、日志路径与截图（截图文件名带 SHA 前 7 位
 | E2-13 | 双教师盲评（匿名队列、互不可见、评分锁定）与分歧裁决 | PENDING |
 | E2-14 | 研究管理（批次、整批随机化记录、题本顺序、受控导出、数据冻结） | PENDING |
 | E2-15 | 数据域隔离回归测试（考核不写 Score/画像/推荐，不调用 AI） | PENDING（看 `TEST_REPORT.md`） |
-| E2-16 | 迁移升级/降级/再升级记录 | PENDING |
+| E2-16 | 迁移升级/降级/再升级记录 | DONE — 见 `MIGRATION_ACCEPTANCE.md`（隔离库完整循环 + 生产库只读副本；含修复 `assessment_sittings.created_at` 可空缺陷的提交 `d117899` 与回归测试 `test_migration_down_up_cycle.py`） |
 | E2-17 | 7 批 49 名**测试**学生、98 份答卷批量流程（标 `TEST/SYNTHETIC`） | PENDING |
 | E2-18 | 版本验收：`GET /api/system/version` 与运行 SHA 一致 | PENDING（需获授权的部署） |
 
