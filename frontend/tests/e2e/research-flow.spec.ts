@@ -437,8 +437,25 @@ test.describe("R8.2 research flow (SYNTHETIC test accounts only)", () => {
         const response = await fetch("/api/assessments/blind/queue", { credentials: "include" });
         return (await response.json()) as { blind_code: string; reviewed: boolean }[];
       });
-      const pending = queue.find((row) => !row.reviewed);
-      test.skip(!pending, "No submitted answer is assigned to rater A.");
+      // Score the answer this run's student sat in step 4 (T0), not just any
+      // unreviewed entry: step 8 finalises that sitting and expects the forced
+      // disagreement to belong to it. The blind detail never says which student a
+      // code is, so identify it by matching the answer text written in step 4.
+      const t0Marker = `第1阶段：TEST 合成作答`;
+      let pending: { blind_code: string; reviewed: boolean } | undefined;
+      for (const row of queue.filter((entry) => !entry.reviewed)) {
+        const candidate = await raterA.page.evaluate(async (code) => {
+          const response = await fetch(`/api/assessments/blind/${encodeURIComponent(code)}`, { credentials: "include" });
+          return await response.json();
+        }, row.blind_code);
+        const text = (candidate.answers as { index: number; answer_text: string }[])
+          .map((answer) => answer.answer_text).join("\n");
+        if (text.includes(t0Marker) && text.includes("T1") === false) {
+          pending = row;
+          break;
+        }
+      }
+      test.skip(!pending, "No unreviewed answer from this run's T0 sitting is assigned to rater A.");
       blindCode = pending!.blind_code;
       const detail = await raterA.page.evaluate(async (code) => {
         const response = await fetch(`/api/assessments/blind/${encodeURIComponent(code)}`, { credentials: "include" });
