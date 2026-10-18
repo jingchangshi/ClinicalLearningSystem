@@ -51,7 +51,7 @@
 | `A01_training_AAV.md` | CASE-T03 ANCA 相关血管炎 | 训练 |
 | `A01_training_IIM.md` | CASE-T04 特发性炎性肌病 | 训练 |
 | `A01_assessment_UA.md` | CASE-A01 未分化关节炎 | 独立考核 |
-| `A01_assessment_multisystem.md`（文件名沿用旧称，内容已是新 A02；以 `A01_case_index.md` 为准） | CASE-A02 原因待查的干燥症状（疑似原发性干燥综合征，未确诊） | 独立考核 |
+| `A01_assessment_sicca.md` | CASE-A02 原因待查的干燥症状（疑似原发性干燥综合征，未确诊） | 独立考核 |
 | `A01_case_index.md` | 六例索引与难度标定 | 参考 |
 
 每份卡片含：学习目标、主诉/现病史/查体/检查、标准诊断、鉴别诊断、治疗原则、

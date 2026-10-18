@@ -45,6 +45,7 @@
 第二轮     d65267e932b3fa30db187bb870c60d9d907a1f96
 第三轮     e175d6a8560155d7cefc638ed22620f34c522e4d
 第四轮     68c14e87ff1ea53a5daf8e3196778ac936bf372b（分支 teaching-grant-2026-wpd，未合并、未部署）
+终稿轮     分支 feat/clinpath-final-2026（起点 80ce271；见 git log；未合并、未部署）
 生产       仍运行 1d4ef48；本批未部署
 ```
 
@@ -75,20 +76,31 @@
 | E-R3-03 | 独立考核质量控制 | DRAFT_PENDING_REVIEW | `workpackages/A_cases/A04_assessment_quality_control.md`；`A04_difficulty_calibration_BLANK.csv` | 待两位教师校准 | "已对两份独立考核病例做难度与覆盖比较并提出题本顺序平衡方案" |
 | E-R3-04 | 研究方案 v2.0 | DRAFT_PENDING_REVIEW | `evidence/E5_protocol/E5_02_SAP_statistical_analysis_plan.md`；`PROTOCOL_REVISION_NOTES_v2.md` | 待教研室确认分组单位 | "研究方案已按 49 名学生 / 7 批次的实际规模重算" |
 | E-R3-05 | 申报书六栏正文（第三轮） | DRAFT_PENDING_REVIEW | `evidence/E5_protocol/E5_04_application_text.md` | 6/6 栏在限内；12 项待填 | "申报书六栏正文已按正式项目名称与 7 天见习条件定稿" |
-| E-R3-06 | AOSD 指南引用核实 | PLATFORM_EVIDENCE | `workpackages/A_cases/A01_assessment_multisystem.md` §10 | 已核实（2024 EULAR/PReS） | "成人 Still 病病例已引用 2024 EULAR/PReS 推荐" |
+| E-R3-06 | （作废）AOSD 指南引用核实 | SUPERSEDED | 旧 A02 AOSD 病例已被新 A02「干燥症状待查」取代，仅存 Git 历史 | 作废：对现行独立考核无效 | "（历史条目，不得引用）" |
 
 ## 第四轮条目（2026-10-18）
 
 | 条目ID | 内容 | 来源类别 | 文件路径 | 审核状态 | 可用于申报书的准确句子 |
 | --- | --- | --- | --- | --- | --- |
 | E-R4-01 | 唯一研究设计（7 批次整群随机） | DRAFT_PENDING_REVIEW | `evidence/E5_protocol/T3_design_comparison.md`；`E5_01` §3 | 设计已锁定；待教研室提供批次日期与抽签执行人 | "研究采用 7 批次整群随机分配，从 C(7,3)=35 种合法分配中随机产生" |
-| E-R4-02 | 精确随机化检验与小样本限制 | DRAFT_PENDING_REVIEW | `E5_02` §3.3；`scripts/grant/sample_size.py` | 待统计顾问复核 | "以 7 个批次为分析单位，精确枚举 35 种分配；P 取 k/35、最小值取决于数据（唯一最大时 1/35，并列时 ≥2/35），不宣称确证性" |
+| E-R4-02 | 精确随机化检验与小样本限制 | DRAFT_PENDING_REVIEW | `E5_02` §3.5；`backend/app/research/exact_permutation.py`；`scripts/grant/sample_size.py` | 待统计顾问复核 | "以 7 个批次为分析单位，精确枚举 35 种整批分配；P 值取 k/35，最小值取决于数据（并非无条件 2/35），仅作探索性" |
 | E-R4-03 | 个性化闭环代码核验 | PLATFORM_EVIDENCE | `evidence/E5_protocol/T3_personalization_validation.md`；`backend/tests/test_7day_personalization_loop.py` | 测试通过（4 passed, 1 xfailed） | "平台已接通训练评分→能力画像→短板推荐→教师干预的闭环" |
-| E-R4-04 | 考核模式缺口（平台无独立考核模式） | PLATFORM_EVIDENCE（缺口） | `evidence/E5_protocol/T3_personalization_gap.md` | 已记录，未改代码 | "平台尚不能在提交层区分训练与独立考核，正式考核前需解决" |
+| E-R4-04 | （历史）平台无独立考核模式的缺口 | SUPERSEDED（缺口已由独立在线考核模块处理，验收见 `FINAL_DELIVERY/TEST_REPORT.md`） | `evidence/E5_protocol/T3_personalization_gap.md` | 历史记录 | "（历史条目）" |
 | E-R4-05 | 题本顺序 X/Y（每批内平衡） | DRAFT_PENDING_REVIEW | `workpackages/A_cases/A04_assessment_quality_control.md` §2 | 待两位教师校准 | "题本顺序在每批 7 人内按约 4/3 平衡 X/Y，不改变批次所属教学组" |
 | E-R4-06 | 方案 A 唯一性一致性检查 | PLATFORM_EVIDENCE | `scripts/grant/check_protocol_consistency.py` | PASS（0 违规） | "现行申报文档中不再将方案 B 列为推荐或待确认事项" |
 
-## E1–E5 缺项清单（第二轮更新）
+## 终稿轮条目（2026-10-18，分支 `feat/clinpath-final-2026`）
+
+| 条目ID | 内容 | 来源类别 | 文件路径 | 代码 SHA | 审核状态 | 可用于申报书的准确句子 |
+| --- | --- | --- | --- | --- | --- | --- |
+| E-F-01 | 申报六栏正文（终稿轮）与占位符清单（13 项） | DRAFT_PENDING_REVIEW | `evidence/E5_protocol/E5_04_application_text.md`、`E5_04_placeholders.md` | 见 `git log -- 该文件` | 字数与 R7.4 内容检查通过；`【待填】` 待真实人员 | "申报书六栏正文已起草并通过字数与一致性检查；待填项待申请人提供" |
+| E-F-02 | 申报材料包（md + docx，非官方模板） | DRAFT_PENDING_REVIEW | `APPLICATION_PACKAGE/` | 同上 | **官方原件未获得（BLOCKED）** | "已准备可编辑申报材料草稿；官方模板待申请人提供" |
+| E-F-03 | 研究方案 v3.1 | DRAFT_PENDING_REVIEW | `evidence/E5_protocol/E5_01_research_protocol.md` | 同上 | 待教研室确认排期与随机化执行方式 | "研究采用 7 批次整批分配，D1/D6 为 ClinPath 独立在线考核" |
+| E-F-04 | 后端全量测试记录（干净检出，中期） | PLATFORM_EVIDENCE | `evidence/E2_platform/test_runs/backend_pytest_47f7e6d.log` | `47f7e6d` | **307 通过 / 5 失败 / 1 xfail**（如实） | "（仅陈述实测数字，不写“全部通过”）" |
+| E-F-05 | 申报文本/一致性检查脚本及其自测 | PLATFORM_EVIDENCE | `scripts/grant/check_*.py`、`backend/tests/test_grant_checkers.py` | 见 `git log` | 44 项自测通过 | "文本与方案由脚本做机械一致性检查" |
+| E-F-06 | 最终交付文件骨架 | DRAFT | `FINAL_DELIVERY/`（11 个文件） | 同上 | 待牵头成员集成后更新测试与状态 | — |
+
+## E1–E5 缺项清单（第二轮更新；以 `evidence/E*/README.md` 与 `FINAL_DELIVERY/HUMAN_ACTION_CHECKLIST.md` 为准）
 
 | 证据包 | 已有 | 仍缺 | 谁能提供 |
 | --- | --- | --- | --- |

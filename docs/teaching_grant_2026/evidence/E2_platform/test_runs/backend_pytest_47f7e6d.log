@@ -1,0 +1,31 @@
+date_utc: 2026-10-18T14:18:47Z
+sha: 47f7e6df91486246a208d33f302393ad07745761
+checkout: clean detached worktree of the SHA (no uncommitted changes from other agents)
+host: Linux 6.8.0-1049-oracle aarch64
+command: cd backend && uv run --python 3.11 --with-requirements requirements.txt pytest -q
+client = <starlette.testclient.TestClient object at 0xe8a183bf1390>
+
+    def test_version_endpoint_reports_deployment_truth(client):
+        response = client.get("/api/system/version")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["environment"]
+        assert payload["backend_source_fingerprint"].startswith("v1:")
+>       assert payload["schema_revision"]
+E       assert None
+
+tests/test_version_endpoint.py:52: AssertionError
+=============================== warnings summary ===============================
+../../../../home/jcshi/.cache/uv/archive-v0/dvAqh2s2pOALJYP3/lib/python3.11/site-packages/starlette/testclient.py:40
+  /home/jcshi/.cache/uv/archive-v0/dvAqh2s2pOALJYP3/lib/python3.11/site-packages/starlette/testclient.py:40: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = typing.Callable[[], typing.ContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_independent_assessments.py::test_reject_unapproved_form - N...
+FAILED tests/test_seed_migration_semantics.py::test_fresh_database_is_created_and_stamped
+FAILED tests/test_seed_migration_semantics.py::test_existing_old_database_is_migrated_not_stamped
+FAILED tests/test_seed_migration_semantics.py::test_already_current_database_is_idempotent
+FAILED tests/test_version_endpoint.py::test_version_endpoint_reports_deployment_truth
+5 failed, 307 passed, 1 xfailed, 1 warning in 107.22s (0:01:47)
+finished_utc: 2026-10-18T14:20:37Z
