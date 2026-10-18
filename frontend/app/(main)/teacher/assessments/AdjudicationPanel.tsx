@@ -104,6 +104,7 @@ export function AdjudicationPanel() {
   }
 
   const preview = weightedTotal(scores, detail?.rubric);
+  const pending = queue?.filter((item) => !item.adjudicated).length ?? 0;
 
   return (
     <div className="space-y-4">
@@ -197,7 +198,7 @@ export function AdjudicationPanel() {
         <Card
           title="待裁决分歧"
           description="只有两位评分者都完成评分、且差值超过阈值的答卷才会进入这里。"
-          actions={<Pill tone={(queue?.length ?? 0) > 0 ? "warn" : "clinic"}>待裁决 {queue?.length ?? 0}</Pill>}
+          actions={<Pill tone={pending > 0 ? "warn" : "clinic"}>待裁决 {pending}</Pill>}
         >
           {queue === null ? (
             <p className="text-sm text-slate-500" role="status">
