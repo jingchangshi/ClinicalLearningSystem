@@ -1,0 +1,6 @@
+# backend pytest - full suite (authoritative)
+# SHA: a653662  (a653662720f26764944cd1d36a56a8e5426245a5)
+# UTC: 2026-10-18T16:06:39Z
+# cmd: cd backend && uv run --python 3.11 --with-requirements requirements.txt pytest -q -p no:cacheprovider
+# result: 424 passed, 1 warning in 435.83s
+# tree clean before and after; HEAD unchanged during the run
