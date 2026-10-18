@@ -61,11 +61,23 @@
 ## 3. 生产数据库的只读副本
 
 来源：`/home/jcshi/workspace/clinical_learning_system/backend/clinical_learning.db`
-——**这就是生产数据库**：生产 `backend.env` 未设置 `DATABASE_URL`，生产进程因此使用代码默认的
-相对路径 `sqlite:///./clinical_learning.db`，即主检出的该文件；生产 `/api/system/version` 报告的
-`schema_revision=20260915_06` 与该文件一致（另见 `ENVIRONMENT_ISOLATION.md` §3、§6）。
-该库处于 revision `20260915_06`，**完全没有考核表**，因此它正好覆盖「旧形状数据库」这条迁移路径
-（也就是 `20261018_08/09` 真正执行 DDL 的路径）。
+——**这就是生产数据库**。生产服务 `clinical-backend.service`（端口 8100）就运行在本机，
+`WorkingDirectory=/home/jcshi/workspace/clinical_learning_system`，使用
+`~/.config/clinpath/backend.env`；该 env 文件**未设置 `DATABASE_URL`**，因此生产进程使用代码默认的
+相对路径 `sqlite:///./clinical_learning.db`，即主检出的该文件。
+
+生产实例自报的状态（只读 `GET`，由牵头成员核实后引用；本次撰写未再向生产发起请求）：
+
+```text
+$ curl -s http://127.0.0.1:8100/api/system/version
+{"environment":"production","git_sha":"1d4ef4823c75fb9d89a7aec734b8b84d0bfa5c41",
+ "git_dirty":false,"schema_revision":"20260915_06","ai_configured":true}
+```
+
+`git_sha` 为 `1d4ef482`（即 `EVIDENCE_INDEX.md` 记录的当前生产版本），
+`schema_revision` 为 `20260915_06`，与所复制文件的 `alembic_version` 完全一致；该库
+**完全没有考核表**，因此它正好覆盖「旧形状数据库」这条迁移路径（也就是 `20261018_08/09`
+真正执行 DDL 的路径）。
 
 复制方式：以 `file:...?mode=ro` 只读打开源库，用 `sqlite3.Connection.backup` 写入 `/tmp` 下的
 临时副本；**生产库本身未被迁移或写入**。可核查的事实：
@@ -75,9 +87,14 @@ $ ls -la --time-style=full-iso .../backend/clinical_learning.db
 -rw-r--r-- 1 jcshi jcshi 1449984 2026-09-15 16:27:09.237713121 +0000 .../clinical_learning.db
 $ sqlite3（mode=ro）select version_num from alembic_version
 20260915_06
+$ sqlite3（mode=ro）select count(*) from students; select count(*) from scores
+4
+19
 ```
 
-- 复制前后源文件 `mtime` 均为 `2026-09-15 16:27:09`，`schema_revision` 均为 `20260915_06`；
+- 复制前后源文件 `mtime` 均为 `2026-09-15 16:27:09`（即生产服务 2026-09-15 16:27 UTC 的启动时刻），
+  `schema_revision` 均为 `20260915_06`，`students 4` / `scores 19` 与生产自报一致；
+- 生产库**本身**从未被迁移、写入或做破坏性测试；本次对它的唯一接触是上述**只读**复制；
 - 副本含真实教学数据，仅在本机临时目录用于迁移验证，**未导出、未提交**；验收后已删除。
 
 副本中的真实数据规模（迁移前）：
@@ -158,6 +175,10 @@ head -> 20261018_07 -> head  ：07 状态与 head 状态两次比较均逐行字
 另：降级到 `20261018_07` 会**删除** `assessment_*` / `study_*` / `research_*` 表（这是回到该 revision 的定义）。
 `20261018_09` 的 downgrade 在存在 voided 答卷/评审或题本版本 >1 时会**拒绝**执行，提示先导出处理。
 任何降级前都必须按 AGENTS.md 第 5 条先生成带时间戳的 SQLite 备份。
+
+本轮全程未触碰生产运行环境：`clinical-backend.service`（8100）与 `clinical-frontend.service`（8101）
+**未被停止、重启或修改**，8100/8101 端口未被本轮使用；所有 `alembic` 命令的 `DATABASE_URL`
+都指向 `/tmp` 下的一次性数据库。
 
 ## 7. 复现方法
 
