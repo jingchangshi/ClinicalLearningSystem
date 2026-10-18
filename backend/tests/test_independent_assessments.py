@@ -99,3 +99,28 @@ def test_reject_unapproved_form(db_factory,client):
         "window_start":now.isoformat(),"window_end":(now+timedelta(hours=1)).isoformat(),
         "rater_a_id":rater_ids["reviewer_a"],"rater_b_id":rater_ids["reviewer_b"]})
     assert sit.status_code==409
+
+def test_cannot_split_one_batch_into_two_study_groups(db_factory,client):
+    db=db_factory();first=setup_users(db)
+    second,_=make_student(db,name="第二测试学生",username="student_two")
+    second_id=second.id
+    db.commit()
+    raters={u.username:u.id for u in db.query(User).filter(User.username.in_(["reviewer_a","reviewer_b"])).all()}
+    db.close()
+    sid=setup_sitting(client,first)
+    assert sid>0
+    login(client,"admin_user")
+    from app.database import get_db
+    sess=next(iter(client.app.dependency_overrides[get_db]()))
+    assignment=sess.query(AssessmentSitting).filter_by(id=sid).one()
+    form_id=assignment.form_id
+    sess.close()
+    now=datetime.utcnow()
+    response=client.post("/api/assessments/sittings",json={
+        "student_id":second_id,"form_id":form_id,
+        "cohort_code":"cohort1","study_group":"CBL","timepoint":"T0",
+        "rater_a_id":raters["reviewer_a"],"rater_b_id":raters["reviewer_b"],
+        "window_start":(now-timedelta(minutes=1)).isoformat(),
+        "window_end":(now+timedelta(hours=2)).isoformat()
+    })
+    assert response.status_code==409,response.text
