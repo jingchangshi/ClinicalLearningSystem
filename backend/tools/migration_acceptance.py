@@ -154,7 +154,9 @@ def cmd_seed(args) -> int:
         teacher = Teacher(name="迁移验收测试教师", teacher_no="MIG-T-001", department="TEST")
         db.add(teacher)
         db.flush()
-        db.add(User(username="mig_teacher", password_hash="x", role="teacher", teacher_id=teacher.id))
+        teacher_user = User(username="mig_teacher", password_hash="x", role="teacher", teacher_id=teacher.id)
+        db.add(teacher_user)
+        db.flush()
         student = Student(name="迁移验收测试学生", student_no="MIG-S-0001", class_name="TEST",
                           current_stage="阶段一")
         db.add(student)
@@ -192,7 +194,7 @@ def cmd_seed(args) -> int:
                                          competency_updates_json="{}", evidence_payload_json="{}")
         db.add(evidence)
         db.flush()
-        db.add(TeacherScoreReview(evidence_event_id=evidence.id, reviewer_user_id=1, ai_score=77.5,
+        db.add(TeacherScoreReview(evidence_event_id=evidence.id, reviewer_user_id=teacher_user.id, ai_score=77.5,
                                   baseline_score=77.5, baseline_source="rule_fallback", teacher_score=78.0,
                                   comment="迁移验收复核", agreement_delta=0.5,
                                   confirmed_dimensions_json="{}"))
@@ -203,8 +205,11 @@ def cmd_seed(args) -> int:
     return 0
 
 
-def _connect(db_path: Path):
+def _connect(db_path: Path, readonly: bool = True):
+    """Open the database read-only by default: dumping a copy must never write to it."""
     import sqlite3
+    if readonly:
+        return sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     return sqlite3.connect(str(db_path))
 
 
