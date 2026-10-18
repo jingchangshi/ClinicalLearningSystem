@@ -1,0 +1,53 @@
+{
+  "code": "CASE-A02-SICCA-V1",
+  "title": "原因待查的干燥症状：疑似原发性干燥综合征",
+  "stages": [
+    {
+      "title": "S1 关键信息提取",
+      "clinical_information": "女性42岁，双眼干涩、夜间口干8个月，饮水后缓解，偶有双手关节酸痛；无明显发热。",
+      "question": "提取关键信息，列出需要进一步询问的病史。"
+    },
+    {
+      "title": "S2 初步判断",
+      "clinical_information": "长期服用抗组胺药治疗过敏性鼻炎，近3个月停药后干燥仍明显。眼表染色有异常。",
+      "question": "提出主要临床问题与初步诊断假设，并解释现有不确定性。"
+    },
+    {
+      "title": "S3 鉴别诊断",
+      "clinical_information": "无头颈放疗、已知HCV感染或结节病史；血糖正常，乏力，无明显腮腺肿大。",
+      "question": "对干燥综合征、药物性干燥和其他代谢/系统疾病作分层鉴别。"
+    },
+    {
+      "title": "S4 进一步检查",
+      "clinical_information": "Schirmer右眼3 mm/5 min、左眼4 mm/5 min；ANA 1:160斑点型；抗SSA和抗SSB均阴性，RF弱阳性。",
+      "question": "解释阴性抗SSA的局限，并给出下一步客观检查及优先级。"
+    },
+    {
+      "title": "S5 临床决策",
+      "clinical_information": "腮腺超声提示轻度非均匀改变；唇腺活检尚未实施；目前无明确蛋白尿或系统器官损害证据。",
+      "question": "提出审慎的临床管理、对症处理和随访计划，说明为什么不能仅凭目前证据做最终判断。"
+    }
+  ],
+  "answer_key": {
+    "clinical_intent": "主要考查对持续干燥症状的结构化鉴别和诊断不确定性；不强求确定诊断。",
+    "notes": [
+      "确认病程、药物、既往治疗及系统受累迹象",
+      "区分症状与客观腺体异常",
+      "综合Schirmer、眼表、抗SSA阴性和唇腺活检必要性",
+      "避免未确诊时自行启动系统免疫抑制",
+      "排除性病因和后续随访"
+    ]
+  },
+  "rubric": {
+    "status": "PENDING_REAL_REVIEW",
+    "dimensions": {
+      "medical_knowledge": 10,
+      "key_information": 20,
+      "differential_diagnosis": 25,
+      "evidence_integration": 15,
+      "clinical_decision": 20,
+      "evidence_based_medicine": 10
+    },
+    "scale": "Each dimension rated 0-100, weights sum to 100; anchors require authentic clinical teacher validation."
+  }
+}
