@@ -145,6 +145,18 @@ R74_HONEST_MARKERS = (
     "不是", "不可能", "没有", "删除", "错误引文", "历史措辞", "历史缺口", "原写", "原表述", "已更正", "未获", "未取得", "未开展", "未完成", "拟", "计划", "排除", "鉴别",
 )
 
+# Being in the training pool is not evidence that a "CASE-A02 is AOSD" claim is
+# historical: the seed Still case lives in the training pool *and* used to be A02, so a
+# line that merely says 训练池/种子病例 would let a stale "current A02 is Still" claim
+# through. The A02/AOSD rule therefore uses its own marker set.
+_TRAINING_POOL_MARKERS = ("训练池", "训练库", "种子病例")
+
+# Rule index -> the markers that make a match honest. Rules not listed use R74_HONEST_MARKERS.
+R74_HONEST_MARKERS_BY_RULE: dict[int, tuple[str, ...]] = {
+    0: tuple(m for m in R74_HONEST_MARKERS if m not in _TRAINING_POOL_MARKERS)
+    + ("不重叠", "互不重叠", "无同病种"),
+}
+
 # (regex, why, honest-if-negated-inside-match). Matching is per line.
 R74_RULES: list[tuple[str, str, bool]] = [
     # A02 / AOSD
@@ -242,12 +254,13 @@ def _scan_r74(path: Path, text: str) -> list[dict]:
         if TITLE_STEM in line and PROJECT_TITLE not in line:
             out.append({"file": str(path.relative_to(REPO_ROOT)), "line": number,
                         "why": "项目名称不一致（出现名称片段但不是完整正式名称）", "text": line.strip()[:160]})
-        for pattern, why, negation_inside in R74_RULES:
+        for index, (pattern, why, negation_inside) in enumerate(R74_RULES):
+            markers = R74_HONEST_MARKERS_BY_RULE.get(index, R74_HONEST_MARKERS)
             for match in re.finditer(pattern, line):
                 span = match.group(0)
                 if negation_inside and any(n in span for n in ("不", "未", "禁止", "无")):
                     continue
-                if any(marker in line for marker in R74_HONEST_MARKERS):
+                if any(marker in line for marker in markers):
                     continue
                 out.append({"file": str(path.relative_to(REPO_ROOT)), "line": number, "why": why,
                             "text": line.strip()[:160]})

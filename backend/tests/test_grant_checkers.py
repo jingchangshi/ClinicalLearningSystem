@@ -217,6 +217,33 @@ def test_r74_rules_accept_honest_statements(fake_tree, line):
     assert _violations(fake_tree, line) == []
 
 
+@pytest.mark.parametrize(
+    "line",
+    [
+        # The seed Still case lives in the training pool *and* used to be A02, so a
+        # training-pool marker must not excuse a stale "current A02 is Still" claim.
+        "CASE-A02 为成人 Still 病（种子病例），用于独立考核",
+        "CASE-A02（训练库）为成人 Still 病，用于独立考核题本",
+        "CASE-A02 是成人 Still 病，属于种子病例",
+    ],
+)
+def test_training_pool_marker_does_not_excuse_a_stale_a02_claim(fake_tree, line):
+    assert any("AOSD" in w for w in _violations(fake_tree, line)), line
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        # The legitimate lines that state a training pool does NOT overlap the exam.
+        "| 疾病域 | 与训练池（SLE、RA、AAV、IIM，以及种子病例 SLE 合并感染、成人 Still 病）**不重叠**；与 A01/A02 的主诊断也不重叠 |",
+        "训练库与考核无同病种内容：种子病例仅 SLE、成人 Still 病、ANCA 血管炎",
+        "种子病例为成人 Still 病，与独立考核题本互不重叠",
+    ],
+)
+def test_training_pool_non_overlap_statements_stay_honest(fake_tree, line):
+    assert _violations(fake_tree, line) == []
+
+
 def test_a02_payload_must_be_sicca(fake_tree):
     payload_dir = fake_tree / "workpackages" / "A_cases"
     payload_dir.mkdir(parents=True)
