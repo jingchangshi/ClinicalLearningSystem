@@ -56,7 +56,7 @@ export function AuditPanel() {
     const id = rest.join(":");
     const typeLabel =
       { form: "题本", sitting: "考试", review: "评分记录", cohort: "批次", allocation: "分配记录",
-        dataset: "数据集", research_codes: "研究编码", design: "研究设计" }[type] ?? type;
+        dataset: "数据集", research_codes: "研究编码", design: "研究设计", staff: "人员目录" }[type] ?? type;
     return id ? `${typeLabel} · ${id}` : typeLabel;
   }
 
