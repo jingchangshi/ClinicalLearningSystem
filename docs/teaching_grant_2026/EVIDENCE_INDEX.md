@@ -64,6 +64,17 @@
 | E5-01 | 用户/教研室 | 实际轮转时长、可招募人数、组别实施方式 | REAL_PENDING |
 | E5-02 | 用户/单位 | 伦理申报与单位支持签章 | REAL_PENDING |
 
+## 第三轮条目（2026-10-18）
+
+| 条目ID | 内容 | 来源类别 | 文件路径 | 审核状态 | 可用于申报书的准确句子 |
+| --- | --- | --- | --- | --- | --- |
+| E-R3-01 | 7 天见习教学实施表 | DRAFT_PENDING_REVIEW | `evidence/E5_protocol/T2_7day_teaching_plan.md` | 待教研室确认 | "已按每批 7 天设计分步形成性训练的最小有效剂量" |
+| E-R3-02 | 两种分组方案比较 | DRAFT_PENDING_REVIEW | `evidence/E5_protocol/T3_design_comparison.md` | 待教研室决定 A 或 B | "已就整群与班内随机两种分组方案给出可行性与统计方案" |
+| E-R3-03 | 独立考核质量控制 | DRAFT_PENDING_REVIEW | `workpackages/A_cases/A04_assessment_quality_control.md`；`A04_difficulty_calibration_BLANK.csv` | 待两位教师校准 | "已对两份独立考核病例做难度与覆盖比较并提出题本顺序平衡方案" |
+| E-R3-04 | 研究方案 v2.0 | DRAFT_PENDING_REVIEW | `evidence/E5_protocol/E5_02_SAP_statistical_analysis_plan.md`；`PROTOCOL_REVISION_NOTES_v2.md` | 待教研室确认分组单位 | "研究方案已按 49 名学生 / 7 批次的实际规模重算" |
+| E-R3-05 | 申报书六栏正文（第三轮） | DRAFT_PENDING_REVIEW | `evidence/E5_protocol/E5_04_application_text.md` | 6/6 栏在限内；12 项待填 | "申报书六栏正文已按正式项目名称与 7 天见习条件定稿" |
+| E-R3-06 | AOSD 指南引用核实 | PLATFORM_EVIDENCE | `workpackages/A_cases/A01_assessment_multisystem.md` §10 | 已核实（2024 EULAR/PReS） | "成人 Still 病病例已引用 2024 EULAR/PReS 推荐" |
+
 ## E1–E5 缺项清单（第二轮更新）
 
 | 证据包 | 已有 | 仍缺 | 谁能提供 |
@@ -72,4 +83,4 @@
 | E2 平台基础 | 版本、测试、截图、演示说明、第二轮验收 | 展示授权、教师实际演示反馈 | 院系 / 真实教师 |
 | E3 病例与量表 | 6 份病例（已做一致性修订）、量表 v0.1、16 份模拟作答、空白审核表、审核材料包 | **两位真实教师的审核意见、日期与签名**；量表权重确认 | 两位带教教师 |
 | E4 前期验证 | C 教学闭环真实运行记录、D 合成演示（隔离） | 教师观摩意见；如开展真实试点需伦理批件 | 真实教师 / 伦理委员会 |
-| E5 研究方案 | v1.1 方案、SAP、数据字典、伦理要点、六栏正文 | **分组单位（整群/班内）的书面决定**；轮转时长、可招募人数；伦理批件；单位支持与签章 | 教研室 / 伦理委员会 / 单位 |
+| E5 研究方案 | v2.0 方案（49 人 / 7 批次）、SAP、数据字典、伦理要点、六栏正文、7 天教学实施表、两种分组方案比较 | **分组单位（方案 A 整群 / 方案 B 班内随机）的书面决定**；7 个批次的起止日期与每天课时；21 名实习生的学段与是否与 49 人重叠；伦理批件；单位支持与签章 | 教研室 / 伦理委员会 / 单位 |

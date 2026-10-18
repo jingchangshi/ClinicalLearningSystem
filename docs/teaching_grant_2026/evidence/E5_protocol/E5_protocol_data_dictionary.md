@@ -52,13 +52,14 @@
 | --- | --- | --- | --- | --- | --- |
 | `study_id` | string | 唯一匿名研究编号，格式建议 `R-<年份>-<三位序号>` | 是 | 研究管理表 | **不得**使用姓名、学号、身份证号 |
 | `data_origin` | enum | 见 §1 | 是 | 写入时显式赋值 | 真实研究恒为 `REAL_CONSENTED` |
-| `group` | enum | `CBL` / `CLINPATH` | 是 | 分配记录 | 分配在 T0 前书面确定 |
-| `cohort` | string | 轮转批次（如 `2027春-批次1`） | 是 | 教务排课 | 用于分层、ICC 估计与整群分析；**分组单位未定**，班次整群时即分组单位，班内小组时是分析层 |
-| `site_id` | string | **新增**：见习医院/院区编码 | 是 | 教务 | 单中心时可填唯一值，但**不得留空** |
-| `department_id` | string | **新增**：科室/教研室编码 | 是 | 教务 | 用于确认"同一科室、同一批带教" |
-| `rotation_start` | date | **新增**：轮转开始日期 | 是 | 教务 | T0 必须早于此日期 |
-| `rotation_end` | date | **新增**：轮转结束日期 | 是 | 教务 | 用于计算训练期长度 |
-| `rotation_weeks` | integer | **新增**：轮转周数 | 是 | 教务 | `待院系与教研室确认` |
+| `population` | enum | **新增**：`MAIN_CLERKSHIP`（49 名见习学生）/ `EXTENSION_INTERNSHIP`（21 名实习学生） | 是 | 教务 | **主结局分析只取 `MAIN_CLERKSHIP`**；扩展人群不并入（§2.1） |
+| `group` | enum | `CBL` / `CLINPATH` | 是 | 分配记录 | 分配在 D1 前书面确定 |
+| `cohort` | string | 批次（如 `2027春-批次1`），共 7 个批次，每批 7 人 | 是 | 教务排课 | 用于分层与 ICC 估计；**方案 A 下即分组单位，方案 B 下是批次固定效应层**（分组方案见 `E5_01` §3） |
+| `site_id` | string | 院区编码 | 是 | 教务 | 单中心时可填唯一值，但**不得留空** |
+| `department_id` | string | 科室/教研室编码 | 是 | 教务 | 用于确认"同一科室、同一批带教" |
+| `rotation_start` | date | **修订**：7 天见习**开始日期** | 是 | 教务 | T0（D1）必须等于此日期 |
+| `rotation_end` | date | **修订**：7 天见习**结束日期** | 是 | 教务 | 必须为 `rotation_start + 6 天`；T1（D6）在此日期之内 |
+| `rotation_days` | integer | **新增**：见习天数，**恒为 7** | 是 | 教务 | 替代原 `rotation_weeks`（已删除） |
 | `program` | string | 培养项目（如"临床医学本科（五年制）"） | 是 | 教务 | 用于外推性描述 |
 | `grade_level` | integer | **新增**：年级（如 5） | 是 | 教务 | 用于确认成年（≥18 岁） |
 | `age_at_consent` | integer | **新增**：签署同意时年龄 | 是 | 同意书 | 仅用于确认成年；分析时**不**作为协变量 |
@@ -76,6 +77,24 @@
 > `ethics_or_consent`（`NOT_APPLICABLE_SYNTHETIC`）在真实研究中不适用，
 > 由 `consent_status` / `consent_version` / `ethics_approval_ref` 替代。
 > `simulation_seed` 在真实研究中不存在。
+
+### 2.1 两个人群必须分开（`population` 字段）
+
+真实研究有**两个来源不同、学段可能不同**的人群，**不得合并**：
+
+| `population` | 人数 | 来源 | 是否进入主结局分析 |
+| --- | --- | --- | --- |
+| `MAIN_CLERKSHIP` | **49** | 风湿免疫本科见习 7 天/批 × 7 人/批 × 7 批 | **是**（主结局分析） |
+| `EXTENSION_INTERNSHIP` | **21** | 见习 + 实习合计 70 人中，除 49 名见习学生外的实习阶段学生 | **否**（独立分析或仅描述） |
+
+**规则**
+
+- 该列在 `participants` 表中**每行非空**；
+- 主结局分析的数据集必须**断言** `population` 只有一个取值（`MAIN_CLERKSHIP`）；
+- 扩展人群的**确切学段**及**是否与 49 名见习学生完全重叠**目前 `待确认`；
+  在确认之前，**不采集**扩展人群的研究数据；
+- **禁止**把两个人群合并为"70 人"分析，也禁止在申报书中把 70 写成样本量。
+  研究样本量是 **49 人**。
 
 ---
 
@@ -114,9 +133,9 @@
 | `study_id` | string | 匿名编号 | 是 | |
 | `data_origin` | enum | 见 §1 | 是 | |
 | `group` | enum | `CBL` / `CLINPATH` | 是 | |
-| `cohort` | string | 轮转批次 | 是 | |
-| `timepoint` | enum | `T0` / `T1` | 是 | |
-| `assessment_date` | date | **新增**：考核日期 | 是 | 用于核对 T0 早于训练 |
+| `cohort` | string | 批次（7 个批次） | 是 | |
+| `timepoint` | enum | `T0` / `T1`（**T0 = 第 1 天 D1，T1 = 第 6 天 D6**） | 是 | 7 天循环内两个时点 |
+| `assessment_date` | date | **新增**：考核日期 | 是 | 用于核对 T0（D1）早于训练、T1（D6）在训练之后 |
 | `assessment_case_id` | string | 独立病例编号 | 是 | **不得**与训练库病例重复 |
 | `assessment_type` | string | 考核类型 | 是 | |
 | `case_version` | string | **新增**：病例版本号 | 是 | 病例修改后必须升版 |
@@ -127,12 +146,12 @@
 | `rater_B_total` | number (0–100) | 评分者 B 总分 | 是 | |
 | `rater_C_id` | string | **新增**：裁决者匿名编号 | 分歧时必填 | |
 | `rater_C_total` | number (0–100) | **新增**：裁决分 | 分歧时必填 | |
-| `independent_total` | number (0–100) | **主要结局**：两位真实教师盲评的均分或裁决后分数 | 是 | 规则须在 T0 前固定；**这是主分析唯一的 Y** |
+| `independent_total` | number (0–100) | **主要结局**：两位真实教师盲评的均分或裁决后分数 | 是 | 规则须在 D1 前固定；**这是主分析唯一的 Y** |
 | `rater_origin` | enum | `REAL_BLINDED_RATER`（真实研究）/ `SIMULATED_NOT_HUMAN`（演示） | 是 | **真实研究必须为 `REAL_BLINDED_RATER`** |
 | `rater_A_blinded_to_group` | boolean | **新增**：A 是否对组别设盲 | 是 | 应为 `true` |
-| `rater_A_blinded_to_timepoint` | boolean | **新增**：A 是否对 T0/T1 设盲 | 是 | 应为 `true` |
+| `rater_A_blinded_to_timepoint` | boolean | **新增**：A 是否对 D1/D6（T0/T1）设盲 | 是 | 应为 `true` |
 | `rater_B_blinded_to_group` | boolean | **新增**：B 是否对组别设盲 | 是 | 应为 `true` |
-| `rater_B_blinded_to_timepoint` | boolean | **新增**：B 是否对 T0/T1 设盲 | 是 | 应为 `true` |
+| `rater_B_blinded_to_timepoint` | boolean | **新增**：B 是否对 D1/D6（T0/T1）设盲 | 是 | 应为 `true` |
 | `rater_A_completed` | boolean | **新增**：A 是否完成评分 | 是 | 缺失标记，见 §7 |
 | `rater_B_completed` | boolean | **新增**：B 是否完成评分 | 是 | |
 | `rater_agreement_delta` | number | **新增**：|A − B| | 是 | 用于一致性分析 |
@@ -140,7 +159,7 @@
 | `ai_scoring_used_for_primary_outcome` | boolean | AI 评分是否用于主结局 | 是 | **必须为 `false`** |
 | `ai_score_available` | number / empty | **新增**：平台 AI 形成性评分（如存在） | 否 | 仅作过程指标，**不进主分析** |
 | `ai_evaluation_mode` | enum | **新增**：`ai` / `rule_fallback` / 无 | 否 | 必须如实标记降级 |
-| `medical_knowledge` … `evidence_based_medicine` | number (0–100) | 六维度分 | 是 | 权重须在 T0 前固定（见 §8） |
+| `medical_knowledge` … `evidence_based_medicine` | number (0–100) | 六维度分 | 是 | 权重须在 D1 前固定（见 §8） |
 | `missing_dimensions` | string | **新增**：缺失的维度 key，逗号分隔 | 否 | 见 §7 |
 
 > **`rater_origin` 是最容易被误用的字段。** 合成演示中它是
@@ -158,7 +177,7 @@
 | `study_id` | string | 匿名编号 | 是 | |
 | `data_origin` | enum | 见 §1 | 是 | |
 | `group` | enum | `CBL` / `CLINPATH` | 是 | |
-| `week` | integer | 训练发生的轮转周次 | 是 | |
+| `study_day` | integer | **修订**：训练发生的**见习第几天**（1–7） | 是 | 替代原 `week`；7 天循环内取值 1–7 |
 | `session_date` | date | **新增**：实际日期 | 是 | 用于核对时间窗 |
 | `case_code` | string | 训练病例编码 | 是 | **不得**与 `assessment_case_id` 相同 |
 | `case_version` | string | **新增**：病例版本 | 是 | |
@@ -225,12 +244,12 @@
 
 | 字段 | 类型 | 定义 | 必填 |
 | --- | --- | --- | --- |
-| `missing_t1` | boolean | T1 整例缺失 | 是（assessments 汇总行） |
+| `missing_t1` | boolean | T1（D6）整例缺失 | 是（assessments 汇总行） |
 | `missing_t1_reason` | enum | `ABSENT` / `WITHDREW` / `ROTATION_INTERRUPTED` / `TECHNICAL_FAILURE` / `UNKNOWN` | 条件必填 | 
 | `missing_dimensions` | string | 缺失的六维度 key | 否 |
 | `missing_rater_a` | boolean | 评分者 A 未完成 | 是 |
 | `missing_rater_b` | boolean | 评分者 B 未完成 | 是 |
-| `missing_baseline` | boolean | T0 缺失（该例不进 ITT） | 是 |
+| `missing_baseline` | boolean | T0（D1）缺失（该例不进 ITT） | 是 |
 | `missing_process_data` | boolean | 平台过程数据缺失 | 是 |
 | `missing_process_reason` | enum | `NOT_STARTED` / `TECHNICAL_FAILURE` / `NOT_SUBMITTED` / `OTHER` | 条件必填 |
 
@@ -249,7 +268,7 @@
 | 平台评分代码 `backend/app/services/scoring_llm.py` `WEIGHTS` | 0.20 / 0.20 / 0.20 / 0.15 / 0.15 / 0.10 |
 | 合成演示 `generate_demo.py` `DIMS` | 0.10 / 0.20 / 0.25 / 0.15 / 0.20 / 0.10 |
 
-**两者不一致。** 真实研究必须在 T0 之前：
+**两者不一致。** 真实研究必须在 D1 之前：
 1. 选定一套权重（或由评分量表工作包 `B_rubric` 给出第三套并说明理由）；
 2. 把选定的权重写入数据字典与研究方案；
 3. 在数据集中记录 `rubric_version` 与 `weight_version`。
@@ -307,12 +326,14 @@
 ## 10. 字段清单速查（真实研究最小集）
 
 ```
-participants     : study_id, data_origin, group, cohort, site_id, department_id,
-                   rotation_start, rotation_end, rotation_weeks, grade_level,
+participants     : study_id, data_origin, population, group, cohort, site_id, department_id,
+                   rotation_start, rotation_end, rotation_days, grade_level,
                    consent_status, consent_date, consent_version, ethics_approval_ref,
                    exclusion_reason, enrolled
 consent_log      : study_id, event_type, event_date, icf_version, method,
                    witness_or_staff_id, scope, processed_by, processed_date, data_action
+randomisation_record (方案 B): cohort, seed, generated_at, generated_by, allocation_rule,
+                   study_id, group, revealed_at, revealed_by
 assessments      : study_id, data_origin, group, cohort, timepoint, assessment_date,
                    assessment_case_id, case_version, rubric_version,
                    rater_A_id, rater_A_total, rater_A_blinded_to_group,
@@ -321,7 +342,7 @@ assessments      : study_id, data_origin, group, cohort, timepoint, assessment_d
                    rater_agreement_delta, adjudication_used, independent_total,
                    rater_origin, ai_scoring_used_for_primary_outcome,
                    six dimensions, missing_* flags
-sessions         : session_id, study_id, data_origin, group, week, session_date,
+sessions         : session_id, study_id, data_origin, group, study_day, session_date,
                    case_code, case_version, completed, completed_steps,
                    evaluation_mode, model_id, prompt_version, ai_invocations_ref
 reasoning_steps  : session_id, study_id, data_origin, step_id, step_label,
@@ -340,7 +361,11 @@ expert_review    : reviewer_slot, reviewer_id, reviewer_role, review_date,
 | 变更 | 字段/实体 | 原因 |
 | --- | --- | --- |
 | 新增实体 | `consent_log` | 同意是可审计事件序列，不是一个状态 |
-| 新增 | `site_id`, `department_id`, `rotation_start/end/weeks` | 整群设计与批次混杂控制 |
+| 新增实体 | `randomisation_record`（§12） | 方案 B 的批内 3+4 随机必须留痕 |
+| 新增 | `population` | 区分 49 名见习学生（主研究总体）与 21 名实习学生（扩展人群），防止误合并 |
+| 新增 | `site_id`, `department_id`, `rotation_start/end` | 批次混杂控制 |
+| **修订** | `rotation_weeks` → `rotation_days`（恒为 7） | 排课条件为 7 天/批 |
+| **修订** | `week` → `study_day`（1–7） | 7 天循环，不再以"周"为单位 |
 | 新增 | `consent_status`, `consent_date`, `consent_version`, `ethics_approval_ref` | 伦理要求 |
 | 新增 | `withdrawal_date`, `withdrawal_scope` | 撤回可执行 |
 | 新增 | `rater_*_blinded_to_group/timepoint`, `rater_C_*`, `rater_agreement_delta`, `adjudication_used` | 盲法与一致性可核查 |
@@ -350,3 +375,33 @@ expert_review    : reviewer_slot, reviewer_id, reviewer_role, review_date,
 | 删除（真实研究） | `study_status`, `simulation_seed`, `synthetic_teacher_intervention`, `date_relative` | 演示专用 |
 | 统一枚举 | `evaluation_mode`: `ai` / `rule_fallback` / `no_ai` | 与平台 `scores.evaluation_mode` 对齐 |
 | 明确 | `rater_origin` 真实值为 `REAL_BLINDED_RATER` | 防止演示值被沿用 |
+
+---
+
+## 12. 随机化记录（新增实体 `randomisation_record`，方案 B 专用）
+
+若采用**方案 B（每批 7 人内部 3+4 随机）**，随机化必须**可审计**。
+本表与主数据集分开存放（仅研究负责人与统计人员可见），用于证明"分配隐藏"与可复现。
+
+| 字段 | 类型 | 定义 | 必填 |
+| --- | --- | --- | --- |
+| `cohort` | string | 批次 | 是 |
+| `seed` | string | 随机数种子（**预注册中固定**，建议 `20270101`） | 是 |
+| `generated_at` | datetime | 分配序列生成时间（必须**早于** D1） | 是 |
+| `generated_by` | string | 生成人编号（**不是姓名**） | 是 |
+| `allocation_rule` | string | 该批次分入 ClinPath 的人数（`3` 或 `4`），以及交替规则 | 是 |
+| `study_id` | string | 该批次内每名学生的匿名编号 | 是 |
+| `group` | enum | `CBL` / `CLINPATH` | 是 |
+| `form_order` | enum | `X`（D1=CASE-A01, D6=CASE-A02）/ `Y`（D1=CASE-A02, D6=CASE-A01） | 是 |
+| `revealed_at` | datetime | 分配结果告知学生的时点（必须**在 D1 当天**） | 是 |
+| `revealed_by` | string | 执行人编号 | 是 |
+
+**规则**
+
+- 分配序列在 **D1 之前**生成并封存，不得因学生基线或教师偏好调整；
+- `form_order`（考核题本顺序）与 `group`（组别）**相互独立**地分配，同样在 D1 前封存；
+  两者都不在 `randomisation_record` 之外的地方留存，避免提前泄露（`E5_01` §8.1）；
+- 每批 7 人中分入 ClinPath 的人数 $k_b \in \{3, 4\}$：4 个批次取 3、3 个批次取 4，
+  使总体为 **24 vs 25**（`scripts/grant/sample_size.py` §[6]）；
+- 若教研室同意**按基线分层随机**，须在本表增加 `strata` 字段并在预注册中说明；
+- 该表是 §3.5 分层置换检验"零假设世界"的依据，**不得事后修改**。

@@ -158,13 +158,14 @@
 
 ## 10. 指南与文献
 
-- Yamaguchi M, et al. Preliminary criteria for classification of adult Still's disease. *J Rheumatol* 1992.
-- Fautrel B, et al. Proposal for a new set of classification criteria for adult-onset Still disease. *Medicine* 2002.
-- HLH-2004 诊断与治疗方案（Henter JI, et al. *Pediatr Blood Cancer* 2007）。
-- EULAR/ACR 成人 Still 病管理推荐（**版本待教师核对**）。
-- 中华医学会风湿病学分会《成人斯蒂尔病诊治指南》（**版本待教师核对**）。
+- Yamaguchi M, Ohta A, Tsunematsu T, Kasukawa R, Mizushima Y, Kashiwagi H, et al. Preliminary criteria for classification of adult Still's disease. *J Rheumatol.* 1992;19(3):424–430. PMID: 1578458.
+- Fautrel B, Zing E, Golmard JL, Le Moel G, Bissery A, Rioux C, et al. Proposal for a new set of classification criteria for adult-onset Still disease. *Medicine (Baltimore).* 2002;81(3):194–200. doi:10.1097/00005792-200205000-00003. PMID: 11997716.
+- Henter JI, Horne A, Aricó M, Egeler RM, Filipovich AH, Imashuku S, et al. HLH-2004: Diagnostic and therapeutic guidelines for hemophagocytic lymphohistiocytosis. *Pediatr Blood Cancer.* 2007;48(2):124–131. doi:10.1002/pbc.21039. PMID: 16937360.
+- Fautrel B, Mitrovic S, De Matteis A, Bindoli S, Antón J, Belot A, et al. **EULAR/PReS recommendations for the diagnosis and management of Still's disease, comprising systemic juvenile idiopathic arthritis and adult-onset Still's disease.** *Ann Rheum Dis.* 2024;83(12):1614–1627. doi:10.1136/ard-2024-225851. PMID: 39317417.
+  - 说明：该 2024 年推荐由 **EULAR 与 PReS 联合**制定（**不是 EULAR/ACR**），把 sJIA 与 AOSD 视为同一疾病并统一命名为"Still 病"；含 4 条总体原则与 14 条具体推荐；治疗目标为临床非活动性疾病（CID）与缓解；对 MAS 推荐大剂量糖皮质激素、IL-1 抑制剂、环孢素与干扰素-γ 抑制剂。2026-10-18 经检索核实存在（见 `A04_assessment_quality_control.md` §5.1）。
+- 中华医学会风湿病学分会《成人斯蒂尔病诊治指南》（**版本待教师核对**；检索到的最早正式版本为 2003 年制定、2004 年发表于《中华风湿病学杂志》的"草案"，网络流传的"2025 版"未见期刊正式刊文，不作为可引用来源）。
 
-**核对提示**：请审核教师核对 EULAR/ACR AOSD 管理推荐是否存在及具体年份（若不存在请删除该条）、中文指南名称与版本，以及 HLH-2004 方案在本科见习层面的引用深度。本卡片不引用具体推荐等级与证据级别。
+**核对提示**：原"EULAR/ACR 成人 Still 病管理推荐"已核实为 **2024 EULAR/PReS 推荐**（非 ACR），并已按完整引用改写；请审核教师确认引用深度与是否引用具体推荐等级。中文指南的**正式版本**仍需教师指定（现有"2003/2004 草案"线索，无官方更新版可确认）。HLH-2004 方案在本科见习层面的引用深度亦请教师确认。本卡片不引用具体推荐等级与证据级别。
 
 ## 11. 脱敏说明与审核状态
 
