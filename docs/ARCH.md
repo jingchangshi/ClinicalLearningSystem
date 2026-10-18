@@ -1015,3 +1015,126 @@ backend/tools/ai_concurrency.py  有界真实 provider 并发
 - 不把模拟 P 值放进任何真实研究页面或导出。
 - 不因为"演示更好看"而调低 P 值或改变种子：换种子必须同时改变
   表格、图表与下载，因为三者同源。
+
+## 19. 独立在线考核域（Assessment，本阶段新增）
+
+考核域是**第三个业务域**，与训练域并列而不是它的一个模式。一句话概括：
+训练域产生形成性证据，考核域产生研究测量，两者只在用户身份层相见。
+
+### 19.1 位置
+
+| 项目 | 事实源 |
+| --- | --- |
+| 持久化 | `backend/app/assessment_models.py`（`assessment_*` 表，**不复用** `case_sessions` / `scores`） |
+| 逻辑 | `backend/app/assessment/`（`forms` / `student` / `rating` / `admin` / `design` / `dataset` / `rubric` / `blinding` / `audit` / `access` / `timeutil`） |
+| 路由装配 | `backend/app/routes/assessments.py` → `/api/assessments/*` |
+| 迁移 | `20261018_08_independent_assessments`（初版）、`20261018_09`（硬化：版本、草稿、裁决、审计、数据集锁） |
+| 学生页面 | `frontend/app/(main)/student/assessments/` |
+| 教师页面 | `frontend/app/(main)/teacher/assessment-forms/`（出题与审核）、`teacher/assessments/`（盲评与裁决）、`teacher/assessment-admin/`（编排与研究） |
+
+### 19.2 数据域隔离（硬约束，可用测试复现）
+
+`backend/app/assessment/` 的 import 面被刻意收窄：只有 `app.auth.get_current_user`、
+`app.models.User` / `Student`、`app.database.get_db` 与纯函数包 `app.research`。
+**不 import** `Score`、`CompetencyProfile`、`LearningRecommendation`、`TutorTurn`、
+`CaseSession`，也不 import `app.core.ai_policy` 或任何 provider 客户端。因此：
+
+- 考核作答不写训练表，不产生 `Score` 行，不更新画像，不生成推荐；
+- 考核路径**没有任何 AI 调用**（考核不需要 AI，所以也不存在"AI 不可用需降级"的分支）；
+- 考核表单不能通过普通病例 API 读取（两套路由与模型互不引用）。
+
+这条约束不靠约定，靠 import 结构 + 回归测试固定；见 `TEST_REPORT.md` 的隔离项。
+
+### 19.3 时序与可靠性
+
+- **统一 UTC 存储**：所有时间列存 UTC；请求里的 naive datetime 被拒（422），
+  必须带时区偏移，由 `app/assessment/timeutil.py` 归一。
+- **幂等提交**：`(sitting_id, stage_index)` 与 `(sitting_id, rater_user_id)` 有唯一约束；
+  重复提交与并发提交返回既有状态而不是新建第二份记录。
+- **草稿与断网恢复**：草稿写入 `AssessmentAnswerRevision`，刷新/重连后按 stage 恢复；
+  正式答案提交后才成为不可变历史。
+- **窗口与超时**：窗口结束后按策略处理（记录超时/中断事件），过期 sitting 由
+  `/sweep-expired` 收敛；补考/重考只能由管理员受控授权，并保留 `retake_of` 链。
+- **答案不可变**：提交后的答案不可原地改写；修正走新的 revision，保留原记录。
+
+### 19.4 题本生命周期
+
+`PENDING_REAL_REVIEW` → 两位**不同**真实教师账号各自批准（`AssessmentFormReview` 唯一约束
+按 `(form_id, teacher_user_id)`）→ 管理员核验后发布。管理员点击**不能**伪造教师签字：
+未获两份批准的表单无法进入 `APPROVED_FOR_ASSESSMENT`，且该状态是发布与排考的前置条件。
+已发布并用于考试的版本冻结；修改医学内容必须创建**新版本**，历史答卷仍指向当时的版本。
+
+### 19.5 双教师盲评与裁决
+
+- 每份答卷携带随机 `blind_code`，评分者队列按 `(rater_user_id, blind_code)` 打乱，
+  响应中**不含**姓名、学号、组别、批次、T0/T1，也不含另一位评分者的分数。
+- 学生自己写进答案的姓名/学号会被尽力脱敏，但**不宣称**这是匿名化保证
+  （`blinding.redact_answer` 的 docstring 明说这是安全网）。
+- 六维权重来自**已批准的量表版本**，不在 Python 里硬编码唯一研究权重；
+  研究默认 10/20/25/15/20/10 标注为待教师确认，且**不覆盖**平台形成性权重
+  20/20/20/15/15/10。
+- 分歧超阈值进入裁决队列；裁决生成**独立记录**（`AssessmentAdjudication`），
+  不重写两位评分者的原始分数；最终成绩带来源标记（双评均分 / 裁决结果）。
+- 评分者若同时承担该批教学任务，记 `blinding_risk`，系统不自动宣称已实现真正盲法。
+
+### 19.6 不做什么
+
+- 不把正式独立考试提交到普通 `CaseSession` 训练路由。
+- 不用 AI 导师、AI 形成性评分、画像更新或个性化推荐参与正式考核。
+- 不把考核最终成绩回写形成性能力画像。
+- 不让管理员无审计记录地修改已锁定评分（管理动作写 `assessment_audit_log`）。
+- 不把合成 Demo 数据混入真实研究（`data_origin` 隔离，见 §20）。
+
+## 20. 教学研究管理域（Research，本阶段新增）
+
+研究域负责"把一次真实教学变成可复现的数据集"，并且**在没有任何模型的情况下也必须可用**。
+
+### 20.1 纯函数计算层
+
+`backend/app/research/` 是**不接数据库、不接时钟、不接网络**的纯函数包：
+
+| 模块 | 职责 |
+| --- | --- |
+| `randomization` | 整批分配（7 批取 3 批 ClinPath / 4 批 CBL，C(7,3)=35 种等概率）、题本顺序 X/Y 的批内约 4/3 分配；返回不可变记录（含算法、种子、协议版本、执行人、时间、内容哈希），并提供 `verify_*` 由种子重演校验；**没有重抽 API** |
+| `exact_permutation` | 35 种整批分配的精确枚举与随机化检验；`quasi_experimental` 记录会**拒绝**产出随机化检验结论 |
+| `order_balance` | A01/A02 难度效应的估计与变化分数校正 |
+| `agreement` | ICC(2,1) 与 ICC(2,k) 及置信区间；样本不足或零方差时如实返回 `insufficient_data` / `degenerate`，**不给数字** |
+| `cohort_stats` | 逐批 T0/T1 均值与变化、批次层面组间变化差、缺失、批次序号与知情者暴露的敏感性分析 |
+| `dataset_export` | 研究导出行的纯转换与冻结内容哈希 |
+
+随机流用 SHA-256 + 拒绝采样，不依赖 Python 版本的 `random` 实现，因此同一记录可在
+任意环境重演。
+
+### 20.2 两个随机化过程必须分开且有序
+
+题本顺序分配与教学组整批分配是**两个不同的随机化过程**。顺序被强制为：
+
+1. 先冻结题本顺序（`POST /api/assessments/allocations/form-order`）；
+2. 再抽教学组（`POST /api/assessments/allocations/cluster`），且 `drawn_at` 被强制
+   晚于题本顺序的 `frozen_at`（至少 1 微秒）。
+
+第二步在缺少第一步时返回 `form_order_first`。两者各自唯一、写审计、**无重抽**，
+从而保证 35 种整批分配的统计参考空间与实际设计一致。
+
+### 20.3 精确检验的双侧 P 值定义（唯一）
+
+统计量为 T = 3 个 ClinPath 批平均变化 − 4 个 CBL 批平均变化，
+双侧定义为 `p = #{|T_perm| ≥ |T_obs|} / 35`（观测分配计入分子，故 p ≥ 1/35）。
+最小值**取决于数据**：观测 |T| 唯一最大时为 1/35，出现并列时 ≥ 2/35。
+以 3 组对 4 组的零分布并不对称，因此**不得**无条件宣称最小双侧 P 恒为 2/35。
+固定数据 `[10,9,8,0,0,0,0]` 的独立穷举测试验证该定义下可取到 1/35。
+研究定位为**探索性**，不宣称 49 人 7 群可支持确证性优效推断。
+
+### 20.4 数据冻结与受控导出
+
+导出使用研究编码而非真实身份；身份映射表单独限制访问。数据集可冻结为一个
+`dataset_version`（含内容哈希与冻结责任人），冻结后可重演同一版本的统计结果。
+导出行携带 `data_origin`，真实与合成数据不可混合（混用即抛错）。字段清单见
+`workpackages/DATA_DICTIONARY.md`，由测试固定与 `dataset_export.COLUMNS` 一致。
+
+### 20.5 不做什么
+
+- 不把 Assessment 最终成绩回写形成性能力画像。
+- 不用合成 Demo 预设的效果差异去计算真实研究预期效果。
+- 不为"结果更好"重新抽签；分配与顺序记录冻结后不可更改。
+- 不在有效样本不足时编造 ICC 等可靠性指标。
