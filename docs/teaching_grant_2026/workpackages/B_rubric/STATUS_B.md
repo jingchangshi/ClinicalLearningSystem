@@ -180,7 +180,7 @@ python3.11 -I - <<'PY'   # 见下方结论
 B02 写作开始时 `docs/teaching_grant_2026/workpackages/A_cases/` 为空，
 因此先按任务书约定编写；A 的病例卡落盘后已核对
 `A01_case_index.md`，六个编号与主题**一致**
-（CASE-T01 SLE / T02 RA / T03 AAV / T04 IIM / A01 UA / A02 AOSD+MAS 风险）。
+（CASE-T01 SLE / T02 RA / T03 AAV / T04 IIM / A01 UA / A02 持续性干燥症状待查；原 AOSD 版已取代，仅历史）。
 A 的全部病例仍为 `PENDING_REAL_REVIEW`，因此 B02 中的对应关系仍属
 **待真实教师审核**的约定，不是已审核结论。
 

@@ -49,7 +49,7 @@ EXPECTED_CASES = {
     "CASE-T03": ("training", "A01_training_AAV.md"),
     "CASE-T04": ("training", "A01_training_IIM.md"),
     "CASE-A01": ("assessment", "A01_assessment_UA.md"),
-    "CASE-A02": ("assessment", "A01_assessment_multisystem.md"),
+    "CASE-A02": ("assessment", "A01_assessment_sicca.md"),
 }
 
 REQUIRED_FIELDS = (
