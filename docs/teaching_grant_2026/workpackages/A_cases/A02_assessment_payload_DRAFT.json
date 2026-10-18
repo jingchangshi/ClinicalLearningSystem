@@ -1,45 +1,87 @@
 {
   "code": "CASE-A02-SICCA-V1",
-  "title": "原因待查的干燥症状：疑似原发性干燥综合征",
+  "title": "持续性眼干口干待查（患者F，42岁）",
   "stages": [
     {
       "title": "S1 关键信息提取",
-      "clinical_information": "女性42岁，双眼干涩、夜间口干8个月，饮水后缓解，偶有双手关节酸痛；无明显发热。",
-      "question": "提取关键信息，列出需要进一步询问的病史。"
+      "clinical_information": "患者F，女性，42岁，双眼干涩、异物感，夜间口干需起夜饮水，进食干性食物需用水送服，每天均有，已持续8个月。偶有双手指关节酸痛，无晨僵，伴乏力，无发热。近1年新发龋齿2颗。既往过敏性鼻炎数年。查体：口腔黏膜及舌面干燥，龋齿2颗，双手关节无肿胀、无压痛。",
+      "question": "请提取本阶段的关键阳性信息和关键阴性信息，并列出为明确病因还需要进一步询问的病史。"
     },
     {
       "title": "S2 初步判断",
-      "clinical_information": "长期服用抗组胺药治疗过敏性鼻炎，近3个月停药后干燥仍明显。眼表染色有异常。",
-      "question": "提出主要临床问题与初步诊断假设，并解释现有不确定性。"
+      "clinical_information": "追问得知：患者过敏性鼻炎期间间断服用第一代抗组胺药，3个月前已停药，停药后眼干口干无明显改善；目前鼻炎症状轻，仅偶用鼻用糖皮质激素喷剂；月经规律，无其他长期用药。眼科检查：角结膜染色评分（OSS）右眼5分、左眼4分。",
+      "question": "请归纳目前的主要临床问题，提出你的初步诊断假设并说明依据，同时指出此时还缺少哪些信息。"
     },
     {
       "title": "S3 鉴别诊断",
-      "clinical_information": "无头颈放疗、已知HCV感染或结节病史；血糖正常，乏力，无明显腮腺肿大。",
-      "question": "对干燥综合征、药物性干燥和其他代谢/系统疾病作分层鉴别。"
+      "clinical_information": "既往无头颈部放疗史，无结节病、淀粉样变、IgG4相关疾病、移植物抗宿主病病史；抗HCV抗体、HIV抗体阴性；胸片未见肺门淋巴结肿大。空腹血糖、HbA1c、TSH、血常规、肝肾功能、尿常规均正常；ESR 28 mm/h，CRP 3 mg/L，总IgG 17.8 g/L（参考约7-16 g/L），补体C3、C4正常。无腮腺或颌下腺肿痛及持续肿大，无皮疹、光敏感、雷诺现象、口腔溃疡、紫癜，无咳嗽气促及肢体麻木无力。",
+      "question": "请列出你的鉴别诊断并按可能性排序，说明每一项在本病例中的支持证据和反对证据，以及排除或区分它所需要的检查。"
     },
     {
       "title": "S4 进一步检查",
-      "clinical_information": "Schirmer右眼3 mm/5 min、左眼4 mm/5 min；ANA 1:160斑点型；抗SSA和抗SSB均阴性，RF弱阳性。",
-      "question": "解释阴性抗SSA的局限，并给出下一步客观检查及优先级。"
+      "clinical_information": "Schirmer Ⅰ试验（无表面麻醉）：右眼3 mm/5 min，左眼4 mm/5 min。ANA 1:160，斑点型；抗SSA/Ro抗体阴性，抗SSB/La抗体阴性（常规检测法）；类风湿因子（RF）弱阳性（28 IU/mL，参考<20）。",
+      "question": "请逐项解释上述结果的意义和局限，并说明下一步检查的先后顺序、目的及理由。"
     },
     {
       "title": "S5 临床决策",
-      "clinical_information": "腮腺超声提示轻度非均匀改变；唇腺活检尚未实施；目前无明确蛋白尿或系统器官损害证据。",
-      "question": "提出审慎的临床管理、对症处理和随访计划，说明为什么不能仅凭目前证据做最终判断。"
+      "clinical_information": "腮腺超声：双侧腮腺轻度非均匀回声。复诊时患者无紫癜，无腺体持续肿大，无蛋白尿，血常规无减少，无肺部或神经系统症状。患者询问是否需要使用激素或免疫抑制剂。",
+      "question": "请给出你目前的综合判断（包括诊断的把握程度及理由）、处理方案和随访计划，并回答患者的提问。"
     }
   ],
   "answer_key": {
-    "clinical_intent": "主要考查对持续干燥症状的结构化鉴别和诊断不确定性；不强求确定诊断。",
+    "internal_title": "CASE-A02 持续性干燥症状待查：疑似原发性干燥综合征（未确诊）",
+    "clinical_intent": "主要考查对持续干燥症状的结构化鉴别、对2016 ACR/EULAR分类标准与临床诊断边界的理解，以及在抗SSA阴性、关键检查尚未完成时的检查优先级与审慎决策；不强求学生写出某个固定的最终病名。",
+    "reference_reasoning": {
+      "entry_condition": "每日持续>3个月的眼干/口干，满足2016标准入口条件；无排除条件（无头颈放疗、抗HCV阴性、HIV阴性、无结节病/淀粉样变/IgG4-RD/GVHD史）。",
+      "criteria_scoring_current": {
+        "labial_gland_focus_score_ge_1": "未做，未评估（0）",
+        "anti_SSA_Ro_positive": "阴性（常规法），0",
+        "ocular_staining_score_ge_5": "右眼OSS 5，1分",
+        "schirmer_le_5mm_5min": "右3、左4 mm/5 min，1分",
+        "unstimulated_whole_saliva_le_0.1ml_min": "未测，未评估（0）",
+        "total_known": "2，小于4，不满足分类"
+      },
+      "decisive_reasoning": "抗SSA阴性时，无创检查最多再增加唾液流率1分，合计最多3分，仍小于4；达到分类阈值只能通过唇腺活检灶性评分>=1（+3）或抗SSA经复测转为阳性（+3）。因此唇腺活检是决定性检查。",
+      "classification_vs_diagnosis": "2016标准用于研究分类，不等于临床诊断；未达到4分不等于排除，应补充客观检查与随访；ANA、RF、IgG、ESR及腮腺超声均不是计分条目。"
+    },
     "notes": [
-      "确认病程、药物、既往治疗及系统受累迹象",
-      "区分症状与客观腺体异常",
-      "综合Schirmer、眼表、抗SSA阴性和唇腺活检必要性",
-      "避免未确诊时自行启动系统免疫抑制",
-      "排除性病因和后续随访"
-    ]
+      "确认病程、药物与停药时间、既往治疗及系统受累迹象",
+      "区分主观症状与客观腺体异常，识别眼表染色与Schirmer异常为客观眼部证据，口干客观证据尚未评估",
+      "按2016标准为已知结果计分并识别未评估项，不把未做的唇腺活检或唾液流率当作阳性或阴性",
+      "抗SSA阴性不能排除干燥综合征，ANA/RF/IgG不是计分条目",
+      "下一步先测非刺激全唾液流率，再考虑唇腺活检（适应证、风险、知情同意、判读要求）",
+      "对症与局部管理，无器官受累和明确指征时不启动系统性激素或免疫抑制，并说明其会干扰活检",
+      "给出随访时点与危险信号（腺体持续肿大、紫癜、低C4、冷球蛋白、M蛋白、蛋白尿、肺或神经受累）"
+    ],
+    "leak_terms_forbidden_in_student_fields": [
+      "干燥综合征",
+      "Sjögren",
+      "Sjogren",
+      "SjD",
+      "2016 ACR",
+      "ACR/EULAR",
+      "分类标准",
+      "唇腺活检",
+      "灶性评分",
+      "确诊",
+      "排除诊断"
+    ],
+    "meta": {
+      "review_status": "PENDING_REAL_REVIEW",
+      "draft_revision": "r2-2026-10-18",
+      "revision_origin": "AI technical/medical DRAFT re-check; not teacher approval",
+      "supersedes": "r1 draft (git history): stage text leaked the hypothesis and answer hints in questions; HCV exclusion stated as 'known infection' instead of an antibody result; ocular staining unquantified so criteria could not be scored",
+      "card": "A01_assessment_sicca.md",
+      "estimated_minutes_AI_UNCALIBRATED": "45-60",
+      "citations_unverified": [
+        "中华医学会风湿病学分会《原发性干燥综合征诊疗规范》中华内科杂志2020;59(4):269-276 (UNVERIFIED)",
+        "ESSDAI original publication (UNVERIFIED)"
+      ]
+    }
   },
   "rubric": {
     "status": "PENDING_REAL_REVIEW",
+    "version": "research-draft-v1",
     "dimensions": {
       "medical_knowledge": 10,
       "key_information": 20,
@@ -48,6 +90,44 @@
       "clinical_decision": 20,
       "evidence_based_medicine": 10
     },
-    "scale": "Each dimension rated 0-100, weights sum to 100; anchors require authentic clinical teacher validation."
+    "scale": "Each dimension rated 0-100, weights sum to 100; weights and anchors are pending authentic clinical teacher validation. Training rubric weights (20/20/20/15/15/10) are a separate scale and are untouched.",
+    "anchors": {
+      "medical_knowledge": {
+        "weight": 10,
+        "high": "Lists the five 2016 ACR/EULAR items with weights (3/3/1/1/1, threshold 4), the entry and exclusion conditions, notes that ANA/RF/IgG/ultrasound are not scored items, and states that classification criteria are not a clinical diagnosis.",
+        "mid": "Knows the criteria exist and some items, but omits weights or exclusion conditions, or blurs classification and diagnosis.",
+        "low": "Cannot name the criteria, or treats dryness symptoms or a positive ANA/RF as diagnostic."
+      },
+      "key_information": {
+        "weight": 20,
+        "high": "At least 4 key positives (8-month daily course, no improvement 3 months after stopping the antihistamine, abnormal ocular staining, Schirmer 3/4 mm, new caries, hand joint aches without synovitis) and at least 4 key negatives (no radiation, HCV/HIV negative, no gland swelling, no purpura, no proteinuria), and explains what the 3-month washout and the negative anti-SSA mean.",
+        "mid": "Extracts most positives but few negatives, or does not interpret the washout or the negative anti-SSA.",
+        "low": "Restates the case without selecting key points, or misses the medication history entirely."
+      },
+      "differential_diagnosis": {
+        "weight": 25,
+        "high": "At least 6 differentials covering medication effect, other dry-eye types, metabolic/endocrine causes, infection or infiltrative disease, secondary Sjogren (with SLE/RA), and lymphoproliferative disease, each with case-specific supporting and opposing evidence and the test needed to exclude it.",
+        "mid": "Several correctly ranked differentials but evidence is generic, or the exclusion tests are missing.",
+        "low": "Names primary Sjogren only, or a bare list of diagnoses without case-level evidence."
+      },
+      "evidence_integration": {
+        "weight": 15,
+        "high": "Scores the known results (Schirmer 1 + ocular staining 1 + anti-SSA 0 = 2, below 4), marks salivary flow and labial biopsy as not assessed, explains that non-invasive testing can reach at most 3 points so biopsy or repeat serology is needed, and that a negative anti-SSA does not exclude disease.",
+        "mid": "Recognises the score is below threshold but cannot show the item-by-item arithmetic or the unassessed items.",
+        "low": "Concludes a definite diagnosis from symptoms or ANA/RF, or excludes disease because anti-SSA is negative, or treats the unperformed biopsy as a result."
+      },
+      "clinical_decision": {
+        "weight": 20,
+        "high": "Prioritises salivary flow then labial gland biopsy (indication, consent, timing before any steroid), gives topical and symptomatic management, does not start systemic immunosuppression, and names a follow-up interval with escalation triggers.",
+        "mid": "Reasonable tests and symptomatic care but no priority order, no follow-up interval, or vague about immunosuppression.",
+        "low": "Starts steroids or immunosuppressants without indication, orders an undirected battery of tests, or gives no plan."
+      },
+      "evidence_based_medicine": {
+        "weight": 10,
+        "high": "Cites the 2016 ACR/EULAR criteria and the EULAR 2020 management recommendations, states biopsy risks, avoids unindicated immunosuppression, and names lymphoma-risk markers to monitor (persistent gland swelling, purpura, low C4, cryoglobulin, M protein).",
+        "mid": "Mentions guidelines in general terms or covers only some safety points.",
+        "low": "No evidence basis, or recommends unsafe or unindicated treatment."
+      }
+    }
   }
 }

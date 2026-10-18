@@ -1,0 +1,131 @@
+{
+  "code": "CASE-A01-UA-V1",
+  "title": "多关节疼痛待查（患者E，34岁）",
+  "stages": [
+    {
+      "title": "S1 关键信息提取",
+      "clinical_information": "患者E，女性，34岁，双手及双膝多关节疼痛5周。5周前无明显诱因出现双手近端指间关节（PIP）、掌指关节（MCP）及双腕疼痛，近2周累及双膝，右侧重于左侧。晨僵约15-20分钟，活动后缓解不完全。无银屑病皮疹，无腰背痛、足跟痛、指（趾）炎，无皮疹、光敏感、脱发、口腔溃疡、口干眼干，无发热和体重下降，无前驱腹泻或泌尿生殖道感染，无关节外伤史、痛风发作史，无自身免疫病家族史。查体：右手PIP2、PIP3及左膝轻度肿胀，右手PIP2、PIP3及双膝压痛，无关节畸形；左手及双腕无肿胀、无压痛。",
+      "question": "请提取本阶段的关键阳性信息和关键阴性信息，判断这是否为炎性关节病，并说明你认为最重要的特征及其意义。"
+    },
+    {
+      "title": "S2 初步判断",
+      "clinical_information": "ESR 32 mm/h，CRP 12 mg/L；类风湿因子（RF）弱阳性（低滴度）；抗CCP抗体阴性；ANA 1:80；血尿酸正常；血常规、肝肾功能正常。",
+      "question": "请根据以上资料作出你的暂定诊断并说明依据；如使用分类标准，请写出逐项计分过程。"
+    },
+    {
+      "title": "S3 鉴别诊断",
+      "clinical_information": "补充病史与查体：无银屑病个人史及家族史，指（趾）甲无点状凹陷或甲剥离，无皮疹，无眼红眼痛，无近期腹泻、尿道炎或结膜炎，足跟及附着点无压痛，无骶髂关节区疼痛，无输血史、黄疸。",
+      "question": "请列出你的鉴别诊断并说明排序理由，对每一项写出本病例的支持证据、反对证据，以及排除它还需要什么证据。"
+    },
+    {
+      "title": "S4 进一步检查",
+      "clinical_information": "双手及双足X线：未见骨侵蚀。双膝关节超声：少量积液，滑膜轻度增厚，未见明显血流信号。抗dsDNA、抗Sm、抗U1RNP、抗SSA、抗SSB抗体均阴性；乙肝表面抗原、抗HCV抗体、结核感染T细胞检测均阴性。膝关节积液量少，未行关节穿刺。",
+      "question": "请解释上述结果的意义和局限，并说明下一步还需要哪些检查或处理，给出先后顺序及理由。"
+    },
+    {
+      "title": "S5 临床决策",
+      "clinical_information": "3个月随访：仅右手PIP2仍有1个关节肿胀，左膝肿胀消退；ESR 18 mm/h，CRP 4 mg/L；RF仍为弱阳性，抗CCP仍为阴性；复查X线未见骨侵蚀。",
+      "question": "请重新评估患者的诊断，并给出治疗原则、随访计划，以及在什么情况下需要改变诊断或治疗。"
+    }
+  ],
+  "answer_key": {
+    "internal_title": "CASE-A01 未分化多关节炎",
+    "clinical_intent": "考查在信息不完整时作出暂定诊断；2010 ACR/EULAR RA分类标准逐项计分及分类标准与临床诊断的区别；有目的有优先级的检查；诊断未明阶段的安全处理（避免长期激素、随访、重新分类触发条件）。",
+    "reference_reasoning": {
+      "entry_condition": "右手PIP2、PIP3存在明确临床滑膜炎（肿胀），且不能被其他疾病更好解释：满足入口条件。",
+      "criteria_scoring_initial": {
+        "joint_involvement": "小关节2个（右手PIP2、PIP3）、大关节2个（双膝），1-3个小关节可伴大关节：2分",
+        "serology": "RF低滴度阳性或抗CCP低滴度阳性：2分",
+        "acute_phase_reactants": "ESR/CRP异常：1分",
+        "duration": "5周，小于6周：0分",
+        "total": "5，小于6，不满足RA分类"
+      },
+      "criteria_scoring_followup_3_months": {
+        "joint_involvement": "仅右手PIP2 1个小关节：2分",
+        "serology": "RF低滴度阳性：2分",
+        "acute_phase_reactants": "ESR 18、CRP 4均正常：0分",
+        "duration": "已大于等于6周：1分",
+        "total": "5，仍小于6，仍不满足RA分类"
+      },
+      "classification_vs_diagnosis": "分类标准用于研究入组，不替代临床诊断；入口条件满足不等于分类成立；总分是四项之和，单项达标不等于整体达标；对边界病例随访比贴标签更重要。"
+    },
+    "notes": [
+      "标准诊断：未分化多关节炎（暂不满足任何特定风湿病分类标准）",
+      "非对称、晨僵短、抗CCP阴性、无侵蚀均降低早期RA可能性但不能排除",
+      "鉴别至少覆盖RA、银屑病关节炎、SLE、痛风、反应性关节炎、骨关节炎、病毒性关节炎、纤维肌痛",
+      "检查有目的有优先级，并含治疗前乙肝/结核等安全筛查",
+      "诊断未明阶段避免长期激素，短期NSAIDs需评估风险，1-3个月随访并写明重新分类和启动DMARD的触发条件"
+    ],
+    "leak_terms_forbidden_in_student_fields": [
+      "未分化",
+      "UA",
+      "不满足RA",
+      "分类标准不",
+      "2+2+1+0",
+      "重新分类",
+      "确诊"
+    ],
+    "meta": {
+      "review_status": "PENDING_REAL_REVIEW",
+      "draft_revision": "payload-r1-2026-10-18",
+      "revision_origin": "AI technical/medical DRAFT: payload transcribed from card A01_assessment_UA.md (no A01 payload existed before); not teacher approval",
+      "card": "A01_assessment_UA.md",
+      "estimated_minutes_AI_UNCALIBRATED": "45-60",
+      "teacher_confirm": [
+        "S4 releases ENA panel / HBsAg / anti-HCV / TB test results (all negative) that are not listed in card section 2; added so S4 has concrete results to interpret",
+        "S3 negatives (no uveitis, no enthesitis, no SI pain) are restated from card section 2 and the S3 description"
+      ]
+    }
+  },
+  "rubric": {
+    "status": "PENDING_REAL_REVIEW",
+    "version": "research-draft-v1",
+    "dimensions": {
+      "medical_knowledge": 10,
+      "key_information": 20,
+      "differential_diagnosis": 25,
+      "evidence_integration": 15,
+      "clinical_decision": 20,
+      "evidence_based_medicine": 10
+    },
+    "scale": "Each dimension rated 0-100, weights sum to 100; weights and anchors are pending authentic clinical teacher validation. Training rubric weights (20/20/20/15/15/10) are a separate scale and are untouched.",
+    "anchors": {
+      "medical_knowledge": {
+        "weight": 10,
+        "high": "States what undifferentiated arthritis means, the entry condition and four scored items of the 2010 ACR/EULAR RA criteria, and that duration under 6 weeks scores 0.",
+        "mid": "Knows the criteria exist and some items but not the entry condition or the scoring ranges.",
+        "low": "Cannot describe the criteria, or equates a weakly positive RF/ANA with a diagnosis."
+      },
+      "key_information": {
+        "weight": 20,
+        "high": "At least 4 key positives (asymmetry, 15-20 min morning stiffness, 2 swollen small joints, 5-week course, anti-CCP negative, normal uric acid) and at least 3 key negatives, and explains why anti-CCP negativity and a duration under 6 weeks matter for scoring and prognosis.",
+        "mid": "Extracts most positives but omits negatives or does not interpret them.",
+        "low": "Restates the case without selecting key points, or misses asymmetry and duration."
+      },
+      "differential_diagnosis": {
+        "weight": 25,
+        "high": "At least 6 differentials, each with case-specific supporting and opposing evidence and the evidence needed to exclude it.",
+        "mid": "Several correct differentials but generic reasoning or missing exclusion evidence.",
+        "low": "A bare list of disease names, or treats 'undifferentiated' as 'no need to differentiate'."
+      },
+      "evidence_integration": {
+        "weight": 15,
+        "high": "Shows the scoring 2 + 2 + 1 + 0 = 5, below 6, so RA classification is not met, and weighs asymmetry and negative anti-CCP as further lowering the likelihood of RA.",
+        "mid": "Concludes criteria are not met but cannot show the item-by-item arithmetic.",
+        "low": "Diagnoses RA or SLE from a weakly positive RF or ANA 1:80, or does not weigh evidence."
+      },
+      "clinical_decision": {
+        "weight": 20,
+        "high": "Gives a provisional diagnosis, a 1-3 month follow-up with named re-assessment items, and explicit triggers for reclassification or starting a DMARD.",
+        "mid": "Provisional diagnosis with a vague follow-up.",
+        "low": "No follow-up plan, or starts prolonged glucocorticoid without a diagnosis."
+      },
+      "evidence_based_medicine": {
+        "weight": 10,
+        "high": "Cites the 2010 ACR/EULAR criteria and early arthritis recommendations, avoids prolonged glucocorticoid while the diagnosis is unclear, and writes pre-treatment hepatitis B and tuberculosis screening.",
+        "mid": "Mentions guidelines in general terms or covers only some safety points.",
+        "low": "No evidence basis or unsafe treatment advice."
+      }
+    }
+  }
+}
