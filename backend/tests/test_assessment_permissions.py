@@ -67,6 +67,9 @@ def endpoints(fid, sid, code, rid):
         ("POST", f"{P}/admin/allocations/form-order", {"protocol_version": "v1"}, {"admin_user"}),
         ("POST", f"{P}/admin/allocations/cluster", {"protocol_version": "v1"}, {"admin_user"}),
         ("GET", f"{P}/admin/allocations", None, {"admin_user"}),
+        ("GET", f"{P}/admin/design/assignments?data_origin=pilot_test", None, {"admin_user"}),
+        ("POST", f"{P}/admin/design/schedule", {"data_origin": "pilot_test", "forms": {"A01": fid, "A02": fid},
+                                                "windows": {}, "rater_a_id": 1, "rater_b_id": 2}, {"admin_user"}),
     ]
 
 

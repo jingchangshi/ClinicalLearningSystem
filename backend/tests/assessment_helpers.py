@@ -39,14 +39,14 @@ class World:
     pass
 
 
-def build_world(db_factory, n_students=1, extra_teachers=()):
+def build_world(db_factory, n_students=1, extra_teachers=(), student_accounts=True):
     db = db_factory()
     w = World()
     w.students, w.student_users = [], []
     for i in range(n_students):
-        st, u = make_student(db, name=f"测试学生{i}", username=f"exam_student{i}")
+        st, u = make_student(db, name=f"测试学生{i}", username=f"exam_student{i}" if student_accounts else None)
         w.students.append(st.id)
-        w.student_users.append(u.username)
+        w.student_users.append(u.username if u else None)
     w.users = {}
     for name in ("admin_user", "rev_one", "rev_two", "rater_a", "rater_b", "adjudicator", "plain_teacher", *extra_teachers):
         role = "admin" if name == "admin_user" else "teacher"
@@ -154,3 +154,76 @@ def seed_submitted(db_factory, sitting_id, texts=None):
     s.status, s.stage_index, s.started_at, s.submitted_at = "submitted", 5, now_utc(), now_utc()
     db.commit()
     db.close()
+
+
+# --- the 7-batch study scaffold -------------------------------------------------
+
+STUDY_ORIGIN = "real_study"
+
+
+def build_study(client, w, n_cohorts=7, size=7, origin=STUDY_ORIGIN, seed="study-seed-1", protocol="v4",
+                freeze=True, code_prefix="C", student_offset=0):
+    """Register ``n_cohorts`` complete cohorts and (by default) freeze both research draws.
+
+    Enrollment happens before either draw, exactly as the protocol requires (form
+    order first, then the cluster-group allocation). Returns the cohort codes.
+    """
+    assert len(w.students) >= student_offset + n_cohorts * size, "build_world needs enough students"
+    login(client, "admin_user")
+    codes = []
+    for i in range(n_cohorts):
+        code = f"{code_prefix}{i + 1}"
+        r = client.post("/api/assessments/admin/cohorts", json={
+            "cohort_code": code, "label": f"批次{code}", "expected_size": size, "data_origin": origin})
+        assert r.status_code == 200, r.text
+        slice_ = w.students[student_offset + i * size:student_offset + (i + 1) * size]
+        r = client.post(f"/api/assessments/admin/cohorts/{code}/enrollments", json={"student_ids": slice_})
+        assert r.status_code == 200, r.text
+        codes.append(code)
+    if not freeze:
+        return codes
+    r = client.post("/api/assessments/admin/allocations/form-order",
+                    json={"data_origin": origin, "protocol_version": protocol, "seed": seed + "-order"})
+    assert r.status_code == 200, r.text
+    r = client.post("/api/assessments/admin/allocations/cluster",
+                    json={"data_origin": origin, "protocol_version": protocol, "mode": "randomized",
+                          "seed": seed + "-group"})
+    assert r.status_code == 200, r.text
+    return codes
+
+
+def _win(start_min, end_min):
+    s, e = window(start_min, end_min)
+    return {"start": s, "end": e}
+
+
+def study_windows(codes, t0=(-1, 120), t1=(121, 600)):
+    """One T0 and one T1 window per cohort, with T0 closing before T1 opens."""
+    return {code: {"T0": _win(*t0), "T1": _win(*t1)} for code in codes}
+
+
+def post_schedule(client, w, forms, windows, **extra):
+    login(client, "admin_user")
+    body = {"data_origin": STUDY_ORIGIN, "forms": forms, "windows": windows,
+            "rater_a_id": w.users["rater_a"], "rater_b_id": w.users["rater_b"],
+            "adjudicator_user_id": w.users["adjudicator"]}
+    body.update(extra)
+    return client.post("/api/assessments/admin/design/schedule", json=body)
+
+
+def design_rows(client, origin=STUDY_ORIGIN):
+    login(client, "admin_user")
+    r = client.get(f"/api/assessments/admin/design/assignments?data_origin={origin}")
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def scheduled_rows(db_factory):
+    """(student_id, timepoint) -> (form_id, form_order, study_group, cohort_code) as stored."""
+    from app.assessment_models import AssessmentSitting
+    db = db_factory()
+    rows = {(s.student_id, s.timepoint): (s.form_id, s.form_order, s.study_group, s.cohort_code)
+            for s in db.query(AssessmentSitting).filter(AssessmentSitting.status != "voided")}
+    db.close()
+    return rows
+
