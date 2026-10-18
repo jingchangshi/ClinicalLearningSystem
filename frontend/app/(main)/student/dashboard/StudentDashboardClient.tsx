@@ -88,7 +88,7 @@ export function StudentDashboardClient() {
       </section>
 
       <div className="grid gap-4 md:grid-cols-4">
-        <MetricCard title="综合胜任力指数" value={String(competencyAverage)} note="八维能力画像均值" icon={TrendingUp} />
+        <MetricCard title="综合胜任力指数" value={String(competencyAverage)} note="九维能力画像均值" icon={TrendingUp} />
         <MetricCard title="已完成训练" value={String(completedTraining || dashboard.progress.completed_cases)} note={completedTraining ? "五模块训练总计" : "病例训练"} icon={ClipboardCheck} />
         <MetricCard title="当前主要短板" value={weakAbilities[0]?.label ?? "暂无"} note={`当前分数 ${weakAbilities[0]?.score ?? "-"}`} icon={Target} />
         <MetricCard title="AI推荐下一任务" value={nextTask} note="基于最近训练表现生成" icon={Route} />
@@ -126,7 +126,7 @@ export function StudentDashboardClient() {
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="font-semibold">八维能力画像</h2>
+          <h2 className="font-semibold">九维能力画像</h2>
           <CompetencyRadar data={dashboard.competency.expanded_chart_data} />
         </section>
 

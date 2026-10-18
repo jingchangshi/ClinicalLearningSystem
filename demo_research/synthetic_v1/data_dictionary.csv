@@ -1,0 +1,28 @@
+﻿entity,field,type,definition,requirement
+participants,study_id,string,唯一匿名研究号；真实研究以现场分配编号替代，严禁用姓名,必填
+participants,data_origin,enum,SYNTHETIC_DEMO_NOT_REAL_STUDENTS 或 REAL_CONSENTED,必填
+participants,group,enum,CBL / CLINPATH,必填
+participants,cohort,string,见习轮转批次,必填
+participants,ethics_or_consent,string,真实研究记录同意/伦理状态；演示为NOT_APPLICABLE_SYNTHETIC,必填
+assessments,timepoint,enum,T0 / T1；真实研究时间由方案指定,必填
+assessments,assessment_case_id,string,独立前后测病例编号，训练库不复用,必填
+assessments,independent_total,number (0-100),独立教师评分主结局；演示由虚拟评分者生成,必填
+assessments,rater_A_total,number (0-100),评分者A总分；真实研究须真实评分记录,必填
+assessments,rater_B_total,number (0-100),评分者B总分；真实研究须真实评分记录,必填
+assessments,rater_origin,enum,SIMULATED_NOT_HUMAN / REAL_BLINDED_RATER,必填
+assessments,medical_knowledge,number (0-100),医学知识运用维度,必填
+assessments,key_information,number (0-100),关键信息提取维度,必填
+assessments,differential_diagnosis,number (0-100),鉴别诊断维度,必填
+assessments,evidence_integration,number (0-100),临床证据整合维度,必填
+assessments,clinical_decision,number (0-100),检查与临床决策维度,必填
+assessments,evidence_based_medicine,number (0-100),循证依据与安全意识维度,必填
+sessions,session_id,string,训练记录唯一ID,必填
+sessions,training_score_internal,number/empty,平台内部形成性评分，不得替代独立主要结局,选填
+sessions,evaluation_mode,enum,SIMULATED_AI / REAL_AI / RULE_FALLBACK / NO_AI,必填
+sessions,model_id,string,真实调用模型版本，合成数据注明模拟生成策略,条件必填
+reasoning_steps,initial_student_answer_synthetic,text,模型风格模拟学生初次作答，非真实学生文字,演示必填
+reasoning_steps,ai_tutor_question_synthetic,text,模拟AI追问，非必然为实际API结果,演示必填
+reasoning_steps,revised_student_answer_synthetic,text,模拟学生修订作答,演示必填
+analysis,gain_score,formula/number,T1−T0；真实研究优先比较基线校正后组间差异,衍生字段
+expert_review,reviewer_name,string,须由实际参与教师填写，不能合成,真实审核必填
+expert_review,final_approval,enum,PENDING / APPROVED / REVISE；完成前不得声称已审核,真实审核必填

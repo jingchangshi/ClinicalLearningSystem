@@ -42,7 +42,7 @@ export function GrowthTrendChart({ points }: { points: GrowthTrendPoint[] }) {
 
   if (points.length === 1) {
     return (
-      <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
+      <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm text-slate-600" data-testid="growth-trend-chart">
         当前仅有 1 次有效训练记录，完成更多训练后可形成趋势。
         <div className="mt-1 text-slate-500">
           {formatDateTime(points[0].created_at)} · {points[0].module_label} · {points[0].score ?? "待评分"} 分

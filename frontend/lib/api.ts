@@ -835,6 +835,172 @@ export function exportResearchData() {
   }>("/api/teacher/export/research-data");
 }
 
+// --- Work package D: synthetic teaching-research demo -----------------------
+// Read-only and separate from the real research export above. Every payload
+// carries its provenance so a component cannot forget to display it.
+
+export type DemoResearchDimension = { key: string; label: string; weight: number; score: number };
+
+export type DemoResearchMeta = {
+  dataset_id: string;
+  data_origin: string;
+  rater_origin: string;
+  banner: string;
+  title: string;
+  description: string;
+  seed: number;
+  generator: { script: string; version: string; ai_text_generation: string; note: string };
+  design: {
+    groups: { key: string; label: string; n: number }[];
+    timepoints: string[];
+    assessment: string;
+    primary_outcome: string;
+    cohorts: string[];
+  };
+  counts: { students: number; assessments: number; learning_sessions: number; reasoning_steps: number };
+  scenario_assumptions: Record<string, string | number>;
+  dimensions: { key: string; label: string; weight: number }[];
+  methods: Record<string, string>;
+  files: { name: string; path: string; sha256: string }[];
+  expert_review: {
+    status: string;
+    pending_rows: number;
+    total_rows: number;
+    template: string;
+    note: string;
+  };
+};
+
+export type DemoResearchGroup = {
+  label: string;
+  n: number;
+  pre_mean: number;
+  post_mean: number;
+  gain_mean: number;
+  gain_sd: number;
+};
+
+export type DemoResearchSummary = {
+  banner: string;
+  data_origin: string;
+  rater_origin: string;
+  groups: Record<"CBL" | "CLINPATH", DemoResearchGroup>;
+  difference: {
+    label: string;
+    value: number;
+    ci95: [number, number];
+    welch_t: number;
+    welch_df: number;
+    welch_p: number;
+  };
+  ancova: { label: string; value: number; ci95: [number, number]; p_value: number };
+  analysis_note: string;
+  scenario: Record<string, string | number>;
+};
+
+export type DemoResearchStudent = {
+  study_id: string;
+  group: "CBL" | "CLINPATH";
+  group_label: string;
+  cohort: string;
+  pre_score: number | null;
+  post_score: number | null;
+  gain_score: number | null;
+  training_session_count: number;
+  reasoning_step_count: number;
+  data_origin: string;
+  rater_origin: string;
+};
+
+export type DemoResearchStudentDetail = DemoResearchStudent & {
+  cohort_program: string;
+  study_status: string;
+  ethics_or_consent: string;
+  assessments: {
+    timepoint: string;
+    assessment_case_id: string;
+    assessment_type: string;
+    independent_total: number;
+    rater_A: { id: string; total: number };
+    rater_B: { id: string; total: number };
+    rater_origin: string;
+    dimensions: DemoResearchDimension[];
+  }[];
+  sessions: {
+    session_id: string;
+    week: number;
+    case_code: string;
+    teaching_mode: string;
+    training_score_internal: number | null;
+    evaluation_mode: string;
+    model_id: string;
+    simulated_teacher_intervention: string;
+    date_relative: string;
+    reasoning_steps: {
+      step_id: string;
+      step_label: string;
+      initial_answer: string;
+      tutor_question: string;
+      revised_answer: string;
+      answer_text_generation: string;
+      is_real_student: string;
+    }[];
+  }[];
+  notes: string[];
+};
+
+export function getDemoResearchMeta() {
+  return request<DemoResearchMeta>("/api/teacher/demo-research/meta");
+}
+
+export function getDemoResearchSummary() {
+  return request<DemoResearchSummary>("/api/teacher/demo-research/summary");
+}
+
+export function getDemoResearchStudents(params: { group?: string; q?: string } = {}) {
+  const query = new URLSearchParams();
+  if (params.group) query.set("group", params.group);
+  if (params.q) query.set("q", params.q);
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return request<{
+    banner: string;
+    data_origin: string;
+    rater_origin: string;
+    count: number;
+    students: DemoResearchStudent[];
+  }>(`/api/teacher/demo-research/students${suffix}`);
+}
+
+export function getDemoResearchStudent(studyId: string) {
+  return request<DemoResearchStudentDetail>(
+    `/api/teacher/demo-research/students/${encodeURIComponent(studyId)}`,
+  );
+}
+
+export function getDemoResearchDictionary() {
+  return request<{
+    banner: string;
+    data_origin: string;
+    fields: { entity: string; field: string; type: string; definition: string; requirement: string }[];
+  }>("/api/teacher/demo-research/dictionary");
+}
+
+export function getDemoResearchExpertReview() {
+  return request<{
+    banner: string;
+    status: string;
+    note: string;
+    rows: {
+      reviewer_slot: string;
+      reviewer_name: string;
+      review_date: string;
+      case_id: string;
+      case_topic: string;
+      final_approval: string;
+    }[];
+  }>("/api/teacher/demo-research/expert-review");
+}
+
 export type LearningHistoryItem = {
   session_id: number;
   case_id: number;
@@ -867,8 +1033,12 @@ export function listTeachingInterventions() {
       id: number;
       title: string;
       target_ability: string;
+      /** Chinese label resolved by the backend display layer. */
+      target_ability_label: string;
       target_students: number[];
       intervention_type: string;
+      /** Chinese label resolved by the backend display layer. */
+      intervention_type_label: string;
       description: string;
       created_at: string;
     }[]

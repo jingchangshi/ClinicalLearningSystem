@@ -933,3 +933,72 @@ backend/tools/ai_concurrency.py  有界真实 provider 并发
 因此演示数据集的每一行 AI 评分都能追溯到 `ai_invocations`。
 反复执行是幂等的：第二次运行会删除并重建同一批记录，
 `tests/test_prepare_presentation_data.py` 断言两次运行后的行数完全一致。
+
+---
+
+## 18. 合成教学研究演示层（工作包 D，本阶段新增）
+
+2026 年浙江省本科教改申报需要一个"研究数据采集字段、导出与统计流程可复现"的演示。
+它必须是**独立层**：60 名虚拟学生不是平台用户，虚拟评分者不是教师，模拟显著性不是教学效果。
+
+### 18.1 位置与数据来源
+
+| 项目 | 事实源 |
+| --- | --- |
+| 数据集 | 仓库内版本化只读目录 `demo_research/synthetic_v1/`（`data/*.csv`、`templates/`、`figures/`、`metrics_SYNTHETIC.json`） |
+| 读取器 | `backend/app/services/demo_research.py`（纯读，**不 import `app.models` / `app.database`**） |
+| 路由 | `backend/app/routes/demo_research.py` → `/api/teacher/demo-research/*`（`Depends(require_role(["teacher"]))`） |
+| 页面 | `frontend/app/(main)/teacher/research-demo/` |
+
+数据集以目录版本化：未来的 `synthetic_v2` 是一个新目录 + 新 `DATASET_ID`，
+**不修改** `synthetic_v1`，因此已经引用的申报截图与 SHA 仍然可复核。
+`meta` 输出每个数据文件的 sha256，页面显示前 12 位。
+
+### 18.2 与真实研究数据的隔离（硬约束）
+
+- 合成数据**不写入、也不读取**任何业务表：`students`、`case_sessions`、
+  `learning_evidence_events`、`teacher_score_reviews` 均不参与。
+  路由层没有 `db: Session = Depends(get_db)` 参数，服务层没有 ORM import；
+  `tests/test_demo_research.py` 断言这两点，并在调用全部 7 个端点前后比对四张表行数不变。
+- 真实研究导出仍是 `/api/teacher/export/research-data[.csv]`，页面仍是
+  `/teacher/research-export`；两条路径互不引用数据，只在页面上互相链接。
+  真实研究页新增一句显式声明"本页不含合成数据"。
+- CSV 下载文件名固定含 `SYNTHETIC`，首列 `SYNTHETIC_DATA_ORIGIN`，每行带
+  `DISCLAIMER`，响应头 `X-Data-Origin`。"去掉合成标记下载"没有对应的参数。
+
+### 18.3 统计真值源（页面 = CSV = 离线工作簿）
+
+所有描述统计与检验**由服务端从同一份 CSV 现算**，页面、JSON 与 CSV 下载共用一个结果：
+
+- 均值/标准差：`Decimal` 精确求和 + 四舍五入（`ROUND_HALF_UP`）。浮点 `sum` 的顺序
+  差异会让 4.325 落到 4.32 或 4.33，而离线工作簿报告 4.33。
+- 提升差：Welch 不等方差 t 检验，双尾，`df` 用 Welch–Satterthwaite。
+- 基线校正：OLS `post ~ 1 + group + pre`，HC3 稳健标准误。
+  两个容易写错、且会与 statsmodels 静默分歧的点已按下述实现：
+  1. HC3 的杠杆校正作用在**白化残差**上，即 `(e_i / (1-h_i))^2`，
+     不是 `e_i^2 / (1-h_i)^2`（后者在本数据上把方差放大、P 值差约 20 个数量级）；
+  2. `cov_type="HC3"` 的参考分布是**正态**（statsmodels `use_t=False`），
+     若改用 t 分布，95%CI 会从 13.59–18.27 偏移到 13.54–18.32。
+- 纯标准库实现 `_betai` / `t_two_sided_p` / `normal_two_sided_p`，不引入 scipy/statsmodels
+  作为后端运行依赖。`tests/test_demo_research.py` 将结果与
+  `metrics_SYNTHETIC.json` 逐项对齐（P 值在对数尺度比较，因为跨度达 20 个数量级）。
+
+### 18.4 标识不变量
+
+- 每个数据行携带 `data_origin=SYNTHETIC_DEMO_NOT_REAL_STUDENTS`，
+  评分者携带 `rater_origin=SIMULATED_NOT_HUMAN`。
+- 页面顶部橙色横幅**sticky**：滚动到任何位置、任何截图裁剪都仍在视野内：
+  「合成教学研究演示｜虚拟学生、虚拟评分者｜不代表真实教学成效」。
+- 图表的标题与图例、学生详情的"计算机模拟评分者（非真实教师）"、
+  推理文本上方的"模板化模拟作答"提示，都是必填文案，不是可选装饰。
+- 真实教师审核区只显示 `PENDING_REAL_REVIEW` 与空白的审核人/日期；
+  `meta.expert_review.pending_rows == total_rows` 由测试固定。
+
+### 18.5 不做什么
+
+- 不生成逐条线上模型调用：`reasoning_steps_SYNTHETIC.csv` 的
+  `answer_text_generation=MODEL_AUTHORED_TEMPLATE_PLUS_DETERMINISTIC_VARIATION`，
+  页面照抄这个事实，不写成 "AI 生成了 450 条学生回答"。
+- 不把模拟 P 值放进任何真实研究页面或导出。
+- 不因为"演示更好看"而调低 P 值或改变种子：换种子必须同时改变
+  表格、图表与下载，因为三者同源。

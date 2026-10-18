@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, BarChart3, BookOpen, GraduationCap, History, LogIn, LogOut, Route, Settings, UserPlus, UserRound, Users } from "lucide-react";
+import { Activity, BarChart3, BookOpen, FlaskConical, GraduationCap, History, LogIn, LogOut, Route, Settings, UserPlus, UserRound, Users } from "lucide-react";
 
 import { useAuth } from "@/components/AuthProvider";
 
@@ -20,6 +20,7 @@ const teacherLinks = [
   { href: "/teacher/dashboard", label: "教学驾驶舱", icon: GraduationCap },
   { href: "/teacher/students", label: "学生画像", icon: Users },
   { href: "/teacher/research-export", label: "研究数据", icon: BarChart3 },
+  { href: "/teacher/research-demo", label: "模拟研究", icon: FlaskConical },
   { href: "/teacher/runtime", label: "系统状态", icon: Activity },
 ];
 

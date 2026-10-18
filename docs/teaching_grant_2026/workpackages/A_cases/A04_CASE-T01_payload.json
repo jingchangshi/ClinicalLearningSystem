@@ -1,0 +1,46 @@
+{
+  "_file_purpose": "Dry-run payload for POST /api/teacher/cases. NEVER EXECUTED. Only for schema evaluation by the platform owner.",
+  "_status": "DRAFT_ONLY_NOT_IMPORTED",
+  "_review_status": "PENDING_REAL_REVIEW",
+  "_source_card": "docs/teaching_grant_2026/workpackages/A_cases/A01_training_SLE.md",
+  "_warnings": [
+    "The platform Case table has no case_type / review_status / stage-release columns. Importing this payload would create an ordinary trainable case visible to every student.",
+    "Do not POST this payload until two real teachers have reviewed CASE-T01.",
+    "This file is a mapping demonstration, not an executed import."
+  ],
+  "title": "CASE-T01 系统性红斑狼疮（训练病例·待审）",
+  "disease_category": "系统性红斑狼疮",
+  "difficulty": "基础",
+  "learning_objectives": [
+    "从青年女性发热—皮疹—关节痛—脱发—口腔溃疡的症状群中提取SLE核心线索，并区分关键阳性与关键阴性",
+    "说出2019 EULAR/ACR SLE分类标准的主要临床域与免疫学域，并解释分类标准不等于临床诊断",
+    "判断是否存在肾脏、血液系统、神经系统等器官受累，并据此提出初始评估计划",
+    "列出至少4个需要鉴别的疾病，并说明各自的支持点与反对点",
+    "说出SLE初始治疗的三条原则：羟氯喹为基础、按器官受累分层、免疫抑制前完成感染筛查"
+  ],
+  "chief_complaint": "患者A，女性，24岁，反复低热、面部皮疹、双手关节痛2个月。",
+  "history": "近2个月间断低热（多在午后），乏力，体重下降约2kg。双颊及鼻梁融合性红斑，日晒后加重。双手掌指关节、近端指间关节对称性疼痛，晨僵约30分钟，无关节畸形。近1个月洗头时脱发明显增多，反复无痛性口腔溃疡。近2周晨起眼睑及双下肢轻度水肿，尿中泡沫增多。无口眼干燥、无雷诺现象、无明确诱发药物史、无近期感染接触史。",
+  "physical_exam": "蝶形红斑；双腕、掌指关节轻压痛，无关节畸形；双下肢凹陷性水肿（+）；血压138/86 mmHg；体温37.6℃；无皮下结节；无腮腺肿大；无肢端溃疡。",
+  "lab_results": "血常规：白细胞3.2×10^9/L，血红蛋白108 g/L，血小板168×10^9/L；尿常规：蛋白2+，红细胞8-12/HP；24小时尿蛋白定量1.2 g；血肌酐76 μmol/L；ANA 1:640阳性；抗dsDNA阳性；抗Sm阳性；补体C3 0.52 g/L（下降）、C4 0.08 g/L（下降）；ESR 46 mm/h；CRP 6 mg/L；抗磷脂抗体待查；直接抗人球蛋白试验阳性；感染筛查（结核、乙肝、丙肝、HIV）待查。",
+  "imaging": "胸部X线未见明显异常；肾脏超声示双肾大小形态正常，皮髓质分界清；心脏超声未见心包积液。",
+  "standard_diagnosis": "系统性红斑狼疮（疑伴狼疮肾炎），符合2019 EULAR/ACR分类标准；分类标准不等于临床诊断，需结合临床综合判断并排除感染、药物性狼疮等。",
+  "differential_diagnosis": [
+    "病毒感染（EBV、CMV、HIV、细小病毒B19）",
+    "药物性狼疮",
+    "类风湿关节炎",
+    "混合性结缔组织病",
+    "皮肌炎/抗合成酶综合征",
+    "成人Still病",
+    "淋巴瘤",
+    "原发性肾小球疾病"
+  ],
+  "treatment_plan": "原则层面（不做剂量指导）：羟氯喹为所有SLE患者的基础用药并交代眼底监测；按器官受累分层——皮肤、关节、轻度血液系统受累用羟氯喹±小剂量糖皮质激素±免疫抑制剂，狼疮肾炎（III/IV型）、神经精神狼疮、肺泡出血等重症用糖皮质激素联合免疫抑制剂或生物制剂诱导缓解后维持；免疫抑制前必须完成结核、乙肝、丙肝、HIV筛查并评估再激活风险；辅助措施包括防晒、戒烟、避孕与妊娠计划咨询、骨保护、灭活疫苗接种；监测疾病活动度、肾功能与尿蛋白、补体与抗dsDNA、药物不良反应。",
+  "rubric": {
+    "medical_knowledge": "能说出SLE的核心免疫学特征、2019 EULAR/ACR分类标准的入口条件（ANA≥1:80）与“≥10分且至少一个临床域”的规则、器官受累类型。",
+    "key_information": "能提取发热、光敏感皮疹、脱发、口腔溃疡、对称性关节痛、蛋白尿与水肿；能保留关键阴性（无关节畸形、无口眼干、无雷诺现象、无诱发药物史），并指出“无关节畸形”对排除RA的意义。",
+    "differential_diagnosis": "能列出≥5个鉴别诊断，每个都给出本病例层面的支持点与反对点，并说明排序理由；至少覆盖感染、药物性狼疮、RA、MCTD、成人Still病。",
+    "evidence_integration": "能把症状、免疫学（ANA、抗dsDNA、抗Sm、低补体）、器官受累（蛋白尿、血细胞减少）三类证据组织成一条推理链，明确说明哪条证据支持、哪条反对、权重如何。",
+    "clinical_decision": "每项检查对应一个具体临床问题（是否器官受累、是否感染、是否可安全免疫抑制）；治疗按器官受累分层；写出监测与随访计划。",
+    "evidence_based_medicine": "引用2019 EULAR/ACR分类标准与EULAR SLE管理推荐（版本待教师核对），写出感染筛查、避孕、防晒、眼底监测等安全要点。"
+  }
+}

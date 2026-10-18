@@ -1,0 +1,8 @@
+
+Running 3 tests using 1 worker
+
+  ✓  1 [chromium] › tests/e2e/research-demo.spec.ts:33:7 › synthetic teaching-research demo › a teacher sees the synthetic banner and downloads the SYNTHETIC CSV (2.9s)
+  ✓  2 [chromium] › tests/e2e/research-demo.spec.ts:83:7 › synthetic teaching-research demo › a student is redirected away and the API answers 403 (1.2s)
+  ✓  3 [chromium] › tests/e2e/research-demo.spec.ts:106:7 › synthetic teaching-research demo › the real research export is unchanged and still offers its own CSV (1.6s)
+
+  3 passed (7.4s)

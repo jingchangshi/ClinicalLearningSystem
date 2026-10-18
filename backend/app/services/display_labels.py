@@ -39,6 +39,16 @@ PATHWAY_STAGE_LABELS = {
     for index, stage in enumerate(PATHWAY_STAGES, start=1)
 }
 
+# Teaching-intervention kinds recorded by ``POST /api/teacher/interventions``.
+# These reach a teacher's screen verbatim, so they belong in this module rather
+# than in each page that happens to render one.
+INTERVENTION_TYPE_LABELS = {
+    "micro_lesson": "专题小课",
+    "case_discussion": "病例讨论",
+    "remedial_training": "补救训练",
+    "curriculum_adjustment": "课程调整",
+}
+
 # Stage keys that older rows still carry after a rename or a bad write.
 LEGACY_STAGE_KEYS = {
     "stage_1_basic_knowledge": "stage_1_basic_recognition",
@@ -59,6 +69,10 @@ def event_label(key: str) -> str:
 
 def competency_label(key: str) -> str:
     return ABILITY_LABELS.get(key, key)
+
+
+def intervention_type_label(key: str) -> str:
+    return INTERVENTION_TYPE_LABELS.get(key, key)
 
 
 def competency_changes(updates: dict) -> list[dict]:

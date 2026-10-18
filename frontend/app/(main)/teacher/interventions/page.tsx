@@ -24,9 +24,10 @@ export default async function InterventionsPage() {
             <div key={item.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="font-semibold text-ink">{item.title}</h2>
-                <span className="rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-clinic">{item.intervention_type}</span>
+                {/* Chinese label comes from the backend display layer; the page keeps no second vocabulary. */}
+                <span className="rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-clinic">{item.intervention_type_label}</span>
               </div>
-              <p className="mt-3 text-sm text-slate-600">目标能力：{item.target_ability}</p>
+              <p className="mt-3 text-sm text-slate-600">目标能力：{item.target_ability_label}</p>
               <p className="mt-3 text-sm leading-6 text-slate-700">{item.description}</p>
               <p className="mt-3 text-xs text-slate-400">{String(item.created_at).slice(0, 10)}</p>
             </div>

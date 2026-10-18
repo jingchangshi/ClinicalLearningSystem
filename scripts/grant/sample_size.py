@@ -1,0 +1,231 @@
+#!/usr/bin/env python3.11
+"""E5 样本量可行性计算（仅标准库，可离线复现）。
+
+用途：为 docs/teaching_grant_2026/evidence/E5_protocol/E5_02_SAP_statistical_analysis_plan.md
+提供真实可复现的算术输出。**本脚本不读取任何真实学生数据**；第 4 节读取合成演示
+CSV，唯一目的是说明"模拟数据不能用来估计效应量"，不产生任何效应量估计。
+
+运行：
+    python3.11 scripts/grant/sample_size.py
+
+实现约定：
+- 正态分位数使用标准库 statistics.NormalDist().inv_cdf（不引入 scipy）。
+- t 分位数用不完全 Beta 函数 + 二分法，与 backend/app/services/demo_research.py
+  同一套纯标准库做法，避免"论文里一个数、平台里另一个数"。
+"""
+
+from __future__ import annotations
+
+import csv
+import math
+from pathlib import Path
+from statistics import NormalDist
+
+N = NormalDist()
+ALPHA = 0.05
+POWER = 0.80
+
+
+# --------------------------------------------------------------------------
+# 分布工具
+# --------------------------------------------------------------------------
+def z(p: float) -> float:
+    return N.inv_cdf(p)
+
+
+def _betacf(a: float, b: float, x: float) -> float:
+    """不完全 Beta 函数的连分式（Lentz 法）。"""
+    tiny, eps, max_iter = 1e-300, 3e-16, 400
+    qab, qap, qam = a + b, a + 1.0, a - 1.0
+    c, d = 1.0, 1.0 - qab * x / qap
+    if abs(d) < tiny:
+        d = tiny
+    d = 1.0 / d
+    h = d
+    for m in range(1, max_iter + 1):
+        m2 = 2 * m
+        aa = m * (b - m) * x / ((qam + m2) * (a + m2))
+        d = 1.0 + aa * d
+        d = tiny if abs(d) < tiny else d
+        c = 1.0 + aa / c
+        c = tiny if abs(c) < tiny else c
+        d = 1.0 / d
+        h *= d * c
+        aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2))
+        d = 1.0 + aa * d
+        d = tiny if abs(d) < tiny else d
+        c = 1.0 + aa / c
+        c = tiny if abs(c) < tiny else c
+        d = 1.0 / d
+        delta = d * c
+        h *= delta
+        if abs(delta - 1.0) < eps:
+            break
+    return h
+
+
+def _betai(a: float, b: float, x: float) -> float:
+    """正则化不完全 Beta 函数 I_x(a, b)。"""
+    if x <= 0.0:
+        return 0.0
+    if x >= 1.0:
+        return 1.0
+    log_beta = math.lgamma(a + b) - math.lgamma(a) - math.lgamma(b)
+    front = math.exp(log_beta + a * math.log(x) + b * math.log1p(-x))
+    if x < (a + 1.0) / (a + b + 2.0):
+        return front * _betacf(a, b, x) / a
+    return 1.0 - front * _betacf(b, a, 1.0 - x) / b
+
+
+def t_cdf(t: float, df: float) -> float:
+    x = df / (df + t * t)
+    tail = 0.5 * _betai(df / 2.0, 0.5, x)
+    return 1.0 - tail if t >= 0 else tail
+
+
+def t_quantile(p: float, df: float) -> float:
+    """二分法求 t 分位数（p > 0.5）。"""
+    lo, hi = 0.0, 100.0
+    for _ in range(200):
+        mid = (lo + hi) / 2.0
+        if t_cdf(mid, df) < p:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2.0
+
+
+# --------------------------------------------------------------------------
+# 样本量
+# --------------------------------------------------------------------------
+def n_normal(d: float, alpha: float = ALPHA, power: float = POWER) -> float:
+    """两组等量、双尾、正态近似：n/组 = 2(z_{1-α/2}+z_{1-β})² / d²。"""
+    return 2.0 * (z(1 - alpha / 2) + z(power)) ** 2 / d**2
+
+
+def n_t(d: float, alpha: float = ALPHA, power: float = POWER) -> int:
+    """t 分布修正：power(n) = Φ(d·√(n/2) − t_{1−α/2, 2n−2})，向上搜索。"""
+    start = max(2, int(math.ceil(n_normal(d, alpha, power))))
+    for n in range(start, start + 500):
+        crit = t_quantile(1 - alpha / 2, 2 * n - 2)
+        achieved = N.cdf(d * math.sqrt(n / 2.0) - crit)
+        if achieved >= power:
+            return n
+    raise RuntimeError("no convergence")
+
+
+def achieved_power(d: float, n: int, alpha: float = ALPHA) -> float:
+    crit = t_quantile(1 - alpha / 2, 2 * n - 2)
+    return N.cdf(d * math.sqrt(n / 2.0) - crit)
+
+
+def mdd(n: int, alpha: float = ALPHA, power: float = POWER) -> float:
+    """给定 n/组，80% 功效可检出的最小标准化差值（正态近似）。"""
+    return (z(1 - alpha / 2) + z(power)) * math.sqrt(2.0 / n)
+
+
+def clusters_per_arm(d: float, m: int, rho: float, alpha: float = ALPHA, power: float = POWER) -> float:
+    """整群分配（每群 m 人，组内相关 rho）所需群数/组。"""
+    deff = 1.0 + (m - 1) * rho
+    return n_normal(d, alpha, power) * deff / m
+
+
+# --------------------------------------------------------------------------
+# 输出
+# --------------------------------------------------------------------------
+def main() -> None:
+    za, zb = z(1 - ALPHA / 2), z(POWER)
+    print("=" * 74)
+    print("E5 样本量可行性计算   α=0.05（双尾）  power=0.80  两组等量")
+    print("=" * 74)
+    print(f"z_(1-α/2) = {za:.6f}")
+    print(f"z_(1-β)   = {zb:.6f}")
+    print(f"(z_(1-α/2)+z_(1-β))^2 = {(za + zb) ** 2:.6f}")
+    print(f"2*(...)^2 = {2 * (za + zb) ** 2:.6f}   → n/组 = {2 * (za + zb) ** 2:.4f} / d^2")
+    print()
+
+    print("-" * 74)
+    print("[1] 正态近似 vs t 分布修正（d = 组间差值 / 变化量标准差）")
+    print("-" * 74)
+    print(f"{'d':>5} {'n/组(正态)':>12} {'n/组(t修正)':>12} {'+15%脱落':>10} {'合计N':>8}")
+    for d in (0.40, 0.50, 0.60, 0.70, 0.80, 1.00):
+        raw = n_normal(d)
+        exact = n_t(d)
+        inflated = math.ceil(exact / 0.85)
+        print(f"{d:>5.2f} {raw:>12.2f} {exact:>12d} {inflated:>10d} {2 * inflated:>8d}")
+    print()
+
+    print("-" * 74)
+    print("[2] 可行性反推：若只能招到 n/组，80% 功效能检出多大的 d？")
+    print("-" * 74)
+    print(f"{'n/组':>6} {'最小可检出d':>14} {'d=0.50功效':>12} {'d=0.60功效':>12} {'d=0.70功效':>12}")
+    for n in (20, 25, 30, 40, 45, 60, 90):
+        print(
+            f"{n:>6d} {mdd(n):>14.3f} {achieved_power(0.50, n):>12.3f} "
+            f"{achieved_power(0.60, n):>12.3f} {achieved_power(0.70, n):>12.3f}"
+        )
+    print()
+
+    print("-" * 74)
+    print("[3] 若按轮转班次整群分配（每群 m=30 人）")
+    print("-" * 74)
+    print(f"{'d':>5} {'rho':>6} {'设计效应':>10} {'群数/组':>10} {'人数/组':>10}")
+    for d in (0.50, 0.60, 0.70):
+        for rho in (0.05, 0.10):
+            k = clusters_per_arm(d, 30, rho)
+            print(f"{d:>5.2f} {rho:>6.2f} {1 + 29 * rho:>10.2f} {math.ceil(k):>10d} {math.ceil(k) * 30:>10d}")
+    print()
+
+    print("-" * 74)
+    print("[4] ANCOVA 相对变化量检验的效率比 sqrt((1+rho)/2)（rho = 前后测相关）")
+    print("-" * 74)
+    for rho in (0.30, 0.50, 0.70):
+        ratio = math.sqrt((1 + rho) / 2)
+        print(f"rho={rho:.2f}  方差比={ratio ** 2:.3f}  n 可乘以 {ratio ** 2:.3f}"
+              f"  （例：t修正 64/组 → {math.ceil(64 * ratio ** 2)}/组）")
+    print()
+
+    print("-" * 74)
+    print("[4b] 以原始分标准差表达的效应量 → ANCOVA 规划用 d_adj = d_raw / sqrt(1-rho)")
+    print("-" * 74)
+    print(f"{'d_raw':>6} {'rho':>5} {'d_adj':>7} {'n/组(t修正)':>12} {'+15%脱落':>10}")
+    for d_raw in (0.40, 0.50, 0.60):
+        for rho in (0.30, 0.50, 0.70):
+            d_adj = d_raw / math.sqrt(1 - rho**2)
+            n = n_t(d_adj)
+            print(f"{d_raw:>6.2f} {rho:>5.2f} {d_adj:>7.3f} {n:>12d} {math.ceil(n / 0.85):>10d}")
+    print()
+
+    print("-" * 74)
+    print("[5] 合成演示数据为什么不能提供效应量（只读 demo_research/synthetic_v1）")
+    print("-" * 74)
+    root = Path(__file__).resolve().parents[2]
+    path = root / "demo_research" / "synthetic_v1" / "data" / "assessments_SYNTHETIC.csv"
+    if not path.exists():
+        print(f"未找到 {path}（跳过，不影响以上计算）")
+        return
+    with path.open(encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    paired: dict[str, dict[str, float]] = {}
+    for row in rows:
+        paired.setdefault(row["study_id"], {})[row["timepoint"]] = float(row["independent_total"])
+    gains: dict[str, list[float]] = {"CBL": [], "CLINPATH": []}
+    group_of = {row["study_id"]: row["group"] for row in rows}
+    for sid, tp in paired.items():
+        if "T0" in tp and "T1" in tp:
+            gains[group_of[sid]].append(tp["T1"] - tp["T0"])
+    sd = {}
+    for g in ("CBL", "CLINPATH"):
+        xs = gains[g]
+        mu = sum(xs) / len(xs)
+        sd[g] = math.sqrt(sum((x - mu) ** 2 for x in xs) / (len(xs) - 1))
+        print(f"{g:>9}: n={len(xs):>3d}  提升均值={mu:.2f}  提升标准差={sd[g]:.2f}")
+    pooled = math.sqrt((sd["CBL"] ** 2 + sd["CLINPATH"] ** 2) / 2)
+    diff = sum(gains["CLINPATH"]) / len(gains["CLINPATH"]) - sum(gains["CBL"]) / len(gains["CBL"])
+    print(f"提升差 = {diff:.2f}   合并标准差 = {pooled:.2f}   折算 d = {diff / pooled:.2f}")
+    print("说明：该 d 是生成脚本**预先设定**的（nominal 6 vs 18），不是估计值，")
+    print("      只能证明统计流程可跑通，不能用于样本量规划。")
+
+
+if __name__ == "__main__":
+    main()

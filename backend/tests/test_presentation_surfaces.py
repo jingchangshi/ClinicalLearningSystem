@@ -502,3 +502,44 @@ def test_research_export_is_teacher_only(db_factory, client, path):
     db.close()
 
     assert client.get(path).status_code == 401
+
+
+def test_intervention_rows_carry_chinese_labels(db_factory, client):
+    """A teacher must read ``专题小课``, not ``micro_lesson``.
+
+    The backend resolves the label (same rule as ``module_label``), so the
+    interventions page does not keep a second Chinese vocabulary that can drift
+    from ``display_labels``.
+    """
+
+    from app.models import TeachingIntervention
+
+    db = db_factory()
+    db.add(
+        TeachingIntervention(
+            title="第7周增设指南推荐等级小课",
+            target_ability="evidence_based_medicine",
+            target_students_json=dumps_json([1, 2]),
+            intervention_type="micro_lesson",
+            description="针对循证依据薄弱环节。",
+        )
+    )
+    db.commit()
+    db.close()
+
+    _login(client, db_factory, username="teacher_interventions", role="teacher")
+    rows = client.get("/api/teacher/interventions").json()
+
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["intervention_type"] == "micro_lesson"
+    assert row["intervention_type_label"] == "专题小课"
+    assert row["target_ability"] == "evidence_based_medicine"
+    assert row["target_ability_label"] == "循证医学"
+
+    # No raw developer key leaks through the label fields either.
+    visible = " ".join(
+        [row["title"], row["intervention_type_label"], row["target_ability_label"], row["description"]]
+    )
+    assert "micro_lesson" not in visible
+    assert "evidence_based_medicine" not in visible

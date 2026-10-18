@@ -1,0 +1,48 @@
+{
+  "data_origin": "SYNTHETIC_DEMO_NOT_REAL_STUDENTS",
+  "seed": 20261018,
+  "n_students": 60,
+  "n_CBL": 30,
+  "n_CLINPATH": 30,
+  "n_assessments": 120,
+  "n_learning_sessions": 180,
+  "n_synthetic_reasoning_steps": 450,
+  "groups": {
+    "CBL": {
+      "n": 30,
+      "pre_mean": 58.81,
+      "post_mean": 63.14,
+      "gain_mean": 4.33,
+      "gain_sd": 4.05
+    },
+    "CLINPATH": {
+      "n": 30,
+      "pre_mean": 61.44,
+      "post_mean": 81.58,
+      "gain_mean": 20.15,
+      "gain_sd": 4.78
+    }
+  },
+  "illustrative_statistics": {
+    "gain_diff_clinpath_minus_cbl": 15.82,
+    "welch_t_stat": 13.835,
+    "welch_t_p": 8.59254636413107e-20,
+    "gain_diff_ci95": [
+      13.53,
+      18.11
+    ],
+    "ancova_clinpath_effect_adjusting_T0": 15.93,
+    "ancova_hc3_p": 1.410192774706726e-40,
+    "ancova_ci95": [
+      13.59,
+      18.27
+    ],
+    "analysis_note": "ALL VALUES ARE SYNTHETIC. The improvement was deliberately assumed in the simulator. These p-values are not evidence of educational effectiveness."
+  },
+  "scenario_assumptions": {
+    "nominal_CBL_gain": 6,
+    "nominal_CLINPATH_gain": 18,
+    "measurement": "two computer-simulated raters, not real humans",
+    "scale": "0-100"
+  }
+}

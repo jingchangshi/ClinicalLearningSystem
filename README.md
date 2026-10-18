@@ -387,6 +387,10 @@ E2E_RUN_MUTATING=1 E2E_EXPECT_REAL_AI=1 E2E_TEACHER_USERNAME=<staff> E2E_TEACHER
 - `/teacher/dashboard`：教师驾驶舱
 - `/teacher/cases`：病例管理页
 - `/teacher/case-generator`：AI 病例生成器
+- `/teacher/research-export`：真实学习记录的匿名化研究导出
+- `/teacher/research-demo`：**合成**教学研究演示（60 名虚拟学生；数据在
+  `demo_research/synthetic_v1/`，只读、不写任何业务表，页面与导出均带
+  `SYNTHETIC_DEMO_NOT_REAL_STUDENTS` 标记）
 
 ## 主要 API
 
@@ -429,6 +433,12 @@ E2E_RUN_MUTATING=1 E2E_EXPECT_REAL_AI=1 E2E_TEACHER_USERNAME=<staff> E2E_TEACHER
 - `DELETE /api/teacher/cases/{case_id}`
 - `POST /api/teacher/case-generator/generate`
 - `POST /api/teacher/case-generator/{draft_id}/approve`
+- `GET /api/teacher/export/research-data`（真实记录）
+- `GET /api/teacher/export/research-data.csv`（真实记录）
+- `GET /api/teacher/demo-research/meta`（合成演示）
+- `GET /api/teacher/demo-research/summary`（合成演示，统计由 CSV 现算）
+- `GET /api/teacher/demo-research/students` / `students/{study_id}`（合成演示）
+- `GET /api/teacher/demo-research/export.csv`（合成演示，文件名含 `SYNTHETIC`）
 - `GET /api/system/version`
 - `GET /api/system/ai-status`
 - `POST /api/system/ai-probe`

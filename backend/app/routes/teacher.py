@@ -37,7 +37,12 @@ from app.services import ai_enrichment
 from app.services.pathway_context import load_pathway_catalog
 from app.services.recommendation_service import build_learning_pathway, determine_pathway_stage, choose_recommendation
 from app.services.competency_projector import COMPETENCY_PROJECTOR_VERSION, confirmed_total, reproject_competencies
-from app.services.display_labels import module_label, stage_label
+from app.services.display_labels import (
+    competency_label,
+    intervention_type_label,
+    module_label,
+    stage_label,
+)
 from app.services.serializers import (
     ABILITY_LABELS,
     ALL_COMPETENCIES,
@@ -594,6 +599,8 @@ def _serialize_intervention(intervention: TeachingIntervention) -> dict:
         "target_ability": intervention.target_ability,
         "target_students": loads_json(intervention.target_students_json, []),
         "intervention_type": intervention.intervention_type,
+        "intervention_type_label": intervention_type_label(intervention.intervention_type),
+        "target_ability_label": competency_label(intervention.target_ability),
         "description": intervention.description,
         "created_at": intervention.created_at,
     }

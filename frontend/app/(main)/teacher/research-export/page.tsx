@@ -21,6 +21,10 @@ export default async function ResearchExportPage() {
           <p className="mt-2 text-slate-600">
             只导出匿名学生编号，不包含学生姓名，用于形成性评价的课题研究数据整理。
           </p>
+          <p className="mt-2 rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-600">
+            本页是<strong>真实学习记录</strong>的匿名化导出，不包含任何合成研究数据。
+            合成研究演示在独立页面展示。
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <a
@@ -30,6 +34,12 @@ export default async function ResearchExportPage() {
           >
             下载完整匿名化 CSV
           </a>
+          <Link
+            href="/teacher/research-demo"
+            className="rounded-md border-2 border-amber-400 bg-amber-50 px-4 py-2 font-semibold text-amber-900 hover:bg-amber-100"
+          >
+            查看模拟研究演示（合成数据）
+          </Link>
           <Link href="/teacher/dashboard" className="rounded-md border border-slate-300 px-4 py-2 hover:border-clinic">
             返回教学驾驶舱
           </Link>
