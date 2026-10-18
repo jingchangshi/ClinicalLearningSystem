@@ -19,7 +19,7 @@
 | E-D-05 | 真实研究导出页（对照） | PLATFORM_EVIDENCE | `/teacher/research-export`；截图 `.../06_real_export_separation.png` | 2026-10-18 | 见"生成基线" | 项目组（技术） | 可复查 | "平台已具备匿名化学习证据导出功能" |
 | E-R2-01 | 病例医学一致性修订 | DRAFT_PENDING_REVIEW | `workpackages/A_cases/MEDICAL_REVIEW_ISSUES_v1.md` + 三份已修订病例卡 | 2026-10-18（第二轮） | 见"生成基线" | AI 自查 | **待真实教师确认**；12 个待裁定问题见该文件第三节 | "病例卡已完成内部一致性自查与计分复核" |
 | E-R2-02 | 评分来源区分 | PLATFORM_EVIDENCE | `workpackages/SCORING_SOURCE_SPEC.md`；迁移 `20261018_07`；`tests/test_review_score_provenance.py` | 2026-10-18（第二轮） | 见"生成基线" | 项目组（技术） | 测试通过（7 用例） | "平台区分规则分、AI 分、教师确认与独立盲评四类来源" |
-| E-R2-03 | 研究方案 v1.1 修订 | DRAFT_PENDING_REVIEW | `evidence/E5_protocol/PROTOCOL_REVISION_NOTES_v1.md` + E5-01/E5-02 | 2026-10-18（第二轮） | 见"生成基线" | 项目组（技术） | 待教研室确认分组单位 | "研究方案已按整群/班内两种设计分别给出统计模型" |
+| E-R2-03 | 研究方案 v1.1 修订 | DRAFT_PENDING_REVIEW | `evidence/E5_protocol/PROTOCOL_REVISION_NOTES_v1.md` + E5-01/E5-02 | 2026-10-18（第二轮） | 见"生成基线" | 项目组（技术） | 已作废（v1.1 历史记录） | "（历史条目，现行方案见 E-R4-01）" |
 | E-R2-04 | 申报书六栏正文 | DRAFT_PENDING_REVIEW | `evidence/E5_protocol/E5_04_application_text.md`；字数校验 `scripts/grant/check_application_text.py` | 2026-10-18（第二轮） | 见"生成基线" | 项目组（技术） | 6/6 栏在限内；含 `〔待用户填写〕` 占位 | "申报书六栏正文已按官方模板起草并校验字数" |
 | E-R2-05 | 第二轮独立验收 | PLATFORM_EVIDENCE | `workpackages/ACCEPTANCE_v2.md` | 2026-10-18（第二轮） | 见"生成基线" | 项目组（技术） | 6/6 E2E 通过；1 项因数据量未过 | "在隔离栈完成第二轮浏览器验收" |
 | E-R2-06 | 教师审核材料包 | DRAFT_PENDING_REVIEW | `TEACHER_REVIEW_PACKET.md` | 2026-10-18（第二轮） | 见"生成基线" | 项目组（技术） | **待两位真实教师填写与签字** | "已准备可供两位教师审核的材料包" |
@@ -71,7 +71,7 @@
 | 条目ID | 内容 | 来源类别 | 文件路径 | 审核状态 | 可用于申报书的准确句子 |
 | --- | --- | --- | --- | --- | --- |
 | E-R3-01 | 7 天见习教学实施表 | DRAFT_PENDING_REVIEW | `evidence/E5_protocol/T2_7day_teaching_plan.md` | 待教研室确认 | "已按每批 7 天设计分步形成性训练的最小有效剂量" |
-| E-R3-02 | 两种分组方案比较 | DRAFT_PENDING_REVIEW | `evidence/E5_protocol/T3_design_comparison.md` | 待教研室决定 A 或 B | "已就整群与班内随机两种分组方案给出可行性与统计方案" |
+| E-R3-02 | 两种分组方案比较 | DRAFT_PENDING_REVIEW | `evidence/E5_protocol/T3_design_comparison.md` | **已被第四轮取代**：现为方案 A 唯一设计说明（见 E-R4-01） | "（历史条目）" |
 | E-R3-03 | 独立考核质量控制 | DRAFT_PENDING_REVIEW | `workpackages/A_cases/A04_assessment_quality_control.md`；`A04_difficulty_calibration_BLANK.csv` | 待两位教师校准 | "已对两份独立考核病例做难度与覆盖比较并提出题本顺序平衡方案" |
 | E-R3-04 | 研究方案 v2.0 | DRAFT_PENDING_REVIEW | `evidence/E5_protocol/E5_02_SAP_statistical_analysis_plan.md`；`PROTOCOL_REVISION_NOTES_v2.md` | 待教研室确认分组单位 | "研究方案已按 49 名学生 / 7 批次的实际规模重算" |
 | E-R3-05 | 申报书六栏正文（第三轮） | DRAFT_PENDING_REVIEW | `evidence/E5_protocol/E5_04_application_text.md` | 6/6 栏在限内；12 项待填 | "申报书六栏正文已按正式项目名称与 7 天见习条件定稿" |
