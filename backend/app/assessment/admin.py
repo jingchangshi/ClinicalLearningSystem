@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.assessment.access import fail, require_admin
 from app.assessment.audit import audit, event
 from app.assessment.blinding import blinding_risk, ensure_research_code, new_blind_code
-from app.assessment.design import design_for
+from app.assessment.design import Design, design_for
 from app.assessment.forms import form_rubric, get_form, load, require_published
 from app.assessment.rating import live_reviews, sitting_disagreement
 from app.assessment.student import effective_end, expire_if_needed
@@ -107,7 +107,8 @@ def assign(payload: SittingIn, db: Session = Depends(get_db), admin: User = Depe
     return _assign(payload, db, admin)
 
 
-def _assign(payload: SittingIn, db: Session, admin: User, *, retake_of: AssessmentSitting | None = None) -> dict:
+def _assign(payload: SittingIn, db: Session, admin: User, *, retake_of: AssessmentSitting | None = None,
+            commit: bool = True) -> dict:
     group = payload.study_group.upper()
     if group not in GROUPS or payload.timepoint not in ("T0", "T1"):
         raise fail(400, "bad_group_or_timepoint", "Invalid study group or timepoint")
@@ -188,7 +189,8 @@ def _assign(payload: SittingIn, db: Session, admin: User, *, retake_of: Assessme
           {"form_id": form.id, "form_version": form.version, "cohort_code": payload.cohort_code, "group": group,
            "timepoint": payload.timepoint, "blinding_risk": sitting.blinding_risk, "data_origin": payload.data_origin,
            "retake_of": retake_of.id if retake_of else None})
-    db.commit()
+    if commit:
+        db.commit()
     return {"id": sitting.id, "status": sitting.status, "blinding_risk": sitting.blinding_risk,
             "attempt_no": sitting.attempt_no}
 
@@ -345,3 +347,121 @@ def identity_map(db: Session = Depends(get_db), admin: User = Depends(require_ad
     db.commit()
     return [{"study_student_code": c.study_student_code, "student_id": st.id, "name": st.name,
              "student_no": st.student_no} for c, st in rows]
+
+
+class WindowIn(BaseModel):
+    start: datetime
+    end: datetime
+
+    @field_validator("start", "end")
+    @classmethod
+    def _utc(cls, v: datetime) -> datetime:
+        return _aware(v)
+
+
+class BulkScheduleIn(BaseModel):
+    data_origin: str
+    forms: dict[str, int]  # {"A01": form_id, "A02": form_id}
+    windows: dict[str, dict[str, WindowIn]]  # cohort_code -> {"T0": window, "T1": window}
+    rater_a_id: int
+    rater_b_id: int
+    adjudicator_user_id: int | None = None
+
+
+@router.get("/design/assignments")
+def design_assignments(data_origin: str, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """Who is in which cohort, arm and form order, as frozen by the allocation records."""
+    if data_origin not in DATA_ORIGINS:
+        raise fail(400, "bad_data_origin", f"data_origin must be one of {DATA_ORIGINS}")
+    rows = []
+    for c in db.query(StudyCohort).filter_by(data_origin=data_origin).order_by(StudyCohort.cohort_code):
+        for e in db.query(StudyEnrollment).filter_by(cohort_id=c.id).order_by(StudyEnrollment.student_id):
+            d = design_for(db, c.cohort_code, e.student_id, data_origin)
+            code = db.query(ResearchCode).filter_by(student_id=e.student_id).first()
+            rows.append({"student_id": e.student_id, "study_student_code": code.study_student_code if code else None,
+                         "cohort_code": c.cohort_code, "enrollment_status": e.status,
+                         "study_group": d.study_group if d else None, "form_order": d.form_order if d else None})
+    audit(db, admin, "design.read", "design", data_origin, {"rows": len(rows)})
+    db.commit()
+    return rows
+
+
+@router.post("/design/schedule")
+def schedule_study(payload: BulkScheduleIn, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """Create every enrolled student's T0 and T1 sitting from the frozen records, all-or-nothing.
+
+    T0/T1 forms follow the student's frozen form order (X: A01 then A02, Y: A02 then A01).
+    A repeat call is idempotent only when every sitting it would create already exists and
+    is still untouched (same form, arm, form order and window); anything else — a started
+    or submitted sitting, a changed window, a different form — is refused, so the planner
+    can never produce a duplicate or a silently different schedule.
+    """
+    from app.research import FORM_BY_ORDER
+
+    if payload.data_origin not in DATA_ORIGINS:
+        raise fail(400, "bad_data_origin", f"data_origin must be one of {DATA_ORIGINS}")
+    if set(payload.forms) != {"A01", "A02"}:
+        raise fail(400, "bad_forms", "forms must map exactly A01 and A02 to published form ids")
+    if payload.forms["A01"] == payload.forms["A02"]:
+        raise fail(400, "bad_forms", "T0 and T1 must be two different forms")
+    cohorts = db.query(StudyCohort).filter_by(data_origin=payload.data_origin).order_by(StudyCohort.cohort_code).all()
+    if not cohorts:
+        raise fail(409, "no_cohorts", f"No cohort is registered with data_origin={payload.data_origin}")
+    unknown = sorted(set(payload.windows) - {c.cohort_code for c in cohorts})
+    if unknown:
+        raise fail(400, "unknown_cohort", f"windows given for unknown cohorts: {unknown}")
+
+    plan: list[tuple[StudyCohort, StudyEnrollment, Design, str, WindowIn]] = []
+    per_cohort: dict[str, int] = {}
+    for c in cohorts:
+        win = payload.windows.get(c.cohort_code)
+        if not win or set(win) != {"T0", "T1"}:
+            raise fail(400, "missing_window", f"Cohort {c.cohort_code} needs both a T0 and a T1 window")
+        if win["T1"].start <= win["T0"].end:
+            raise fail(400, "bad_timepoint_order", f"Cohort {c.cohort_code}: the T0 window must close before T1 opens")
+        enrolled = (db.query(StudyEnrollment).filter_by(cohort_id=c.id, status="enrolled")
+                    .order_by(StudyEnrollment.student_id).all())
+        if not enrolled:
+            raise fail(409, "cohort_empty", f"Cohort {c.cohort_code} has no enrolled students")
+        per_cohort[c.cohort_code] = len(enrolled)
+        for e in enrolled:
+            d = design_for(db, c.cohort_code, e.student_id, payload.data_origin)
+            if d is None or d.form_order is None:
+                raise fail(409, "allocation_required", "Freeze form order and group allocation first")
+            for tp in ("T0", "T1"):
+                plan.append((c, e, d, tp, win[tp]))
+
+    student_ids = sorted({e.student_id for _, e, _, _, _ in plan})
+    # A student may hold at most one live sitting per timepoint; index by both keys.
+    existing = {(r.student_id, r.timepoint): r for r in db.query(AssessmentSitting).filter(
+        AssessmentSitting.status != "voided", AssessmentSitting.student_id.in_(student_ids))}
+    made, already = [], []
+    try:
+        for c, e, d, tp, win in plan:
+            form_id = payload.forms[FORM_BY_ORDER[d.form_order][tp]]
+            cur = existing.get((e.student_id, tp))
+            if cur is not None:
+                same = (cur.form_id == form_id and cur.cohort_code == c.cohort_code and cur.study_group == d.study_group
+                        and cur.form_order == d.form_order and cur.data_origin == payload.data_origin
+                        and cur.window_start == win.start and cur.window_end == win.end)
+                if not same or cur.status != "assigned":
+                    raise fail(409, "schedule_conflict",
+                               f"Student {e.student_id} {tp} is already scheduled differently; "
+                               "void or extend that sitting instead of re-planning")
+                already.append(cur.id)
+                continue
+            body = SittingIn.model_construct(
+                student_id=e.student_id, form_id=form_id, cohort_code=c.cohort_code, study_group=d.study_group,
+                timepoint=tp, window_start=win.start, window_end=win.end, rater_a_id=payload.rater_a_id,
+                rater_b_id=payload.rater_b_id, adjudicator_user_id=payload.adjudicator_user_id,
+                data_origin=payload.data_origin, form_order=d.form_order)
+            made.append(_assign(body, db, admin, commit=False)["id"])
+    except Exception:
+        # Nothing is committed before the whole plan succeeds; drop the staged rows and audit entries.
+        db.rollback()
+        raise
+    audit(db, admin, "design.schedule", "design", payload.data_origin,
+          {"created": len(made), "existing": len(already), "cohorts": per_cohort})
+    db.commit()
+    return {"created": len(made), "existing": len(already), "students": len(student_ids),
+            "cohorts": per_cohort, "sitting_ids": made, "existing_ids": already}
