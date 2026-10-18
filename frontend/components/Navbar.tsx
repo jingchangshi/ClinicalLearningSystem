@@ -23,12 +23,14 @@ const teacherLinks = [
   { href: "/teacher/research-export", label: "研究数据", icon: BarChart3 },
   { href: "/teacher/research-demo", label: "模拟研究", icon: FlaskConical },
   { href: "/teacher/assessments", label: "独立盲评", icon: BookOpen },
+  { href: "/teacher/assessment-forms", label: "病例审核", icon: BookOpen },
   { href: "/teacher/runtime", label: "系统状态", icon: Activity },
 ];
 
 const adminLinks = [
   { href: "/teacher/dashboard", label: "教学驾驶舱", icon: GraduationCap },
   { href: "/teacher/cases", label: "病例管理", icon: Settings },
+  { href: "/teacher/assessment-admin", label: "考核管理", icon: Settings },
   { href: "/teacher/assessments", label: "独立盲评", icon: BookOpen },
   { href: "/teacher/students", label: "学生画像", icon: Users },
   { href: "/teacher/runtime", label: "系统状态", icon: Activity },

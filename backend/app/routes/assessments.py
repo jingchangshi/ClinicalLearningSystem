@@ -73,6 +73,20 @@ def _in_window(sitting: AssessmentSitting):
     if sitting.status == "submitted":
         raise HTTPException(409, "Assessment already submitted")
 
+@router.get("/forms/reviewable", dependencies=[Depends(require_role(["teacher"]))])
+def reviewable_forms(db:Session=Depends(get_db),user:User=Depends(get_current_user)):
+    if user.role!="teacher":raise HTTPException(403,"Teacher account required")
+    forms=db.query(AssessmentForm).filter_by(review_status="PENDING_REAL_REVIEW").all()
+    return [{"id":f.id,"code":f.code,"title":f.title,"stages":_load(f.stages_json),
+             "rubric":_load(f.rubric_json),"answer_key":_load(f.key_json),
+             "reviewed_by_me":db.query(AssessmentFormReview).filter_by(form_id=f.id,teacher_user_id=user.id).first() is not None}
+            for f in forms]
+
+@router.get("/forms/admin/all", dependencies=[Depends(require_role(["admin"]))])
+def all_forms(db:Session=Depends(get_db)):
+    forms=db.query(AssessmentForm).order_by(AssessmentForm.id).all()
+    return [{"id":f.id,"code":f.code,"title":f.title,"review_status":f.review_status} for f in forms]
+
 @router.post("/forms", dependencies=[Depends(require_role(["admin"]))])
 def create_form(payload: FormIn, db: Session = Depends(get_db)):
     if len(payload.stages) != 5 or any(not all(k in s and s[k] for k in ("title", "clinical_information", "question")) for s in payload.stages):

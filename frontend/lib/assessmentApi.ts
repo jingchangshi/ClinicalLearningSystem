@@ -16,3 +16,11 @@ export const submitAssessment=(id:number)=>call<{status:string}>("/assessments/m
 export const getBlindQueue=()=>call<BlindQueueItem[]>("/assessments/blind/queue");
 export const getBlindDetail=(code:string)=>call<BlindDetail>("/assessments/blind/"+encodeURIComponent(code));
 export const submitBlindReview=(code:string,scores:Record<string,number>)=>call<{status:string}>("/assessments/blind/"+encodeURIComponent(code)+"/review",{method:"POST",body:JSON.stringify({scores})});
+
+export const reviewableForms=()=>call<Array<{id:number;code:string;title:string;stages:Array<{title:string;clinical_information:string;question:string}>;rubric:unknown;answer_key:unknown;reviewed_by_me:boolean}>>("/assessments/forms/reviewable");
+export const recordFormReview=(id:number,decision:"approve"|"reject",comment:string)=>call<{status:string}>("/assessments/forms/"+id+"/review",{method:"POST",body:JSON.stringify({decision,comment})});
+export const allAssessmentForms=()=>call<Array<{id:number;code:string;title:string;review_status:string}>>("/assessments/forms/admin/all");
+export const createAssessmentForm=(payload:unknown)=>call<{id:number}>("/assessments/forms",{method:"POST",body:JSON.stringify(payload)});
+export const approveAssessmentForm=(id:number)=>call<{id:number}>("/assessments/forms/"+id+"/approve",{method:"POST"});
+export const assignAssessment=(payload:unknown)=>call<{id:number}>("/assessments/sittings",{method:"POST",body:JSON.stringify(payload)});
+export const researchAssessmentExport=()=>call<unknown>("/assessments/admin/export");
