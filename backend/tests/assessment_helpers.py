@@ -140,3 +140,17 @@ def with_scores(delta=0, **overrides):
     s = {k: min(100, max(0, v + delta)) for k, v in SCORES.items()}
     s.update(overrides)
     return s
+
+
+def seed_submitted(db_factory, sitting_id, texts=None):
+    """Mark a sitting as submitted with five answers, without bcrypt logins (fast path for bulk tests)."""
+    from app.assessment_models import AssessmentAnswer, AssessmentSitting
+    from app.assessment.audit import sha256_text
+    db = db_factory()
+    s = db.get(AssessmentSitting, sitting_id)
+    for i in range(5):
+        t = (texts or {}).get(i, f"回答{i}")
+        db.add(AssessmentAnswer(sitting_id=s.id, stage_index=i, answer_text=t, answer_sha256=sha256_text(t)))
+    s.status, s.stage_index, s.started_at, s.submitted_at = "submitted", 5, now_utc(), now_utc()
+    db.commit()
+    db.close()

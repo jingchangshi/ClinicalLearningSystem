@@ -337,35 +337,9 @@ def test_teacher_reads_profile_and_records_an_intervention(db_factory, client):
     assert row["target_students"] == [student_id]
 
 
-# --- Documented gap: no assessment-only mode --------------------------------
-
-
-@pytest.mark.xfail(
-    reason=(
-        "GAP: the platform cannot distinguish an assessment submission from a "
-        "training one. CaseSession has no mode/type field, and "
-        "POST /api/sessions/{id}/submit unconditionally calls "
-        "update_competency_from_case + writes a LearningRecommendation. An "
-        "independent T0/T1 assessment submitted through this route would enter "
-        "the formative profile that drives D4-D5 personalisation."
-    ),
-    strict=False,
-)
-def test_an_assessment_session_does_not_enter_the_formative_profile(db_factory, client):
-    """Desired: an independent assessment leaves the formative profile untouched."""
-
-    db = db_factory()
-    make_case(db)
-    student, user = make_student(db, name="考核生", username="assessee")
-    db.commit()
-    student_id, user_id = student.id, user.id
-    db.close()
-
-    _sign_in(client, db_factory, user_id)
-    _submit_case(client, 1)  # the only route a T0/T1 assessment could use
-
-    db = db_factory()
-    profile = db.get(Student, student_id).competency_profile
-    assert profile.medical_knowledge == BASELINE
-    assert profile.evidence_based_medicine == BASELINE
-    db.close()
+# --- Assessment isolation ------------------------------------------------------
+# The former xfail here ("an assessment session does not enter the formative
+# profile") documented that /api/sessions has no assessment mode. Independent
+# assessments no longer use that route at all: they live in their own domain
+# (app/assessment, /api/assessments, assessment_* tables) and the isolation is
+# proven positively in tests/test_assessment_isolation.py.

@@ -24,9 +24,10 @@ class RubricError(ValueError):
 
 
 def _num(value: Any, what: str) -> float:
+    """A finite number; integral values stay ints so re-normalising a stored rubric is a no-op."""
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
         raise RubricError(f"{what} must be a finite number")
-    return float(value)
+    return int(value) if float(value).is_integer() else float(value)
 
 
 def validate_weights(weights: Any) -> dict[str, float]:

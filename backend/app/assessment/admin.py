@@ -150,10 +150,10 @@ def _assign(payload: SittingIn, db: Session, admin: User, *, retake_of: Assessme
         form_order = design.form_order or form_order
     live = db.query(AssessmentSitting).filter(AssessmentSitting.student_id == payload.student_id,
                                               AssessmentSitting.status != "voided").all()
-    if any(r.form_id == form.id for r in live):
-        raise fail(409, "same_form_twice", "T0 and T1 must use different forms")
     if any(r.timepoint == payload.timepoint for r in live):
         raise fail(409, "timepoint_assigned", "Student timepoint already assigned")
+    if any(r.form_id == form.id for r in live):
+        raise fail(409, "same_form_twice", "T0 and T1 must use different forms")
     # A seven-student teaching batch is indivisible: no within-batch allocation.
     batch = db.query(AssessmentSitting).filter(AssessmentSitting.cohort_code == payload.cohort_code,
                                                AssessmentSitting.status != "voided").all()
