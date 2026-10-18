@@ -90,6 +90,14 @@
       "clinical_decision": 20,
       "evidence_based_medicine": 10
     },
+    "weights": {
+      "medical_knowledge": 10,
+      "key_information": 20,
+      "differential_diagnosis": 25,
+      "evidence_integration": 15,
+      "clinical_decision": 20,
+      "evidence_based_medicine": 10
+    },
     "scale": "Each dimension rated 0-100, weights sum to 100; weights and anchors are pending authentic clinical teacher validation. Training rubric weights (20/20/20/15/15/10) are a separate scale and are untouched.",
     "anchors": {
       "medical_knowledge": {
@@ -128,6 +136,7 @@
         "mid": "Mentions guidelines in general terms or covers only some safety points.",
         "low": "No evidence basis, or recommends unsafe or unindicated treatment."
       }
-    }
+    },
+    "weights_note": "Same values as `dimensions`; `weights` is the key POST /api/assessments/forms reads. Without it the form silently falls back to the study defaults."
   }
 }

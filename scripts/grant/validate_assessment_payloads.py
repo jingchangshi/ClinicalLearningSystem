@@ -141,6 +141,13 @@ def check_payload(path: Path, report: Report) -> dict | None:
         dims = rubric.get("dimensions")
         weights_ok = isinstance(dims, dict) and dims == RESEARCH_WEIGHTS and sum(dims.values()) == 100
         report.add(name, "six dimensions, weights 10/20/25/15/20/10", weights_ok, json.dumps(dims, ensure_ascii=False) if not weights_ok else "")
+        # ``weights`` is the key POST /api/assessments/forms actually reads. A payload that
+        # carries only ``dimensions`` would be transcribed into a form that silently falls
+        # back to the study defaults, so require the API key too and require them to agree.
+        api_weights = rubric.get("weights")
+        report.add(name, "rubric.weights present and equal to dimensions (the API key)",
+                    isinstance(api_weights, dict) and api_weights == dims,
+                    json.dumps(api_weights, ensure_ascii=False) if api_weights != dims else "")
         anchors = rubric.get("anchors")
         if not isinstance(anchors, dict):
             report.add(name, "rubric anchors present", False, "rubric.anchors missing")

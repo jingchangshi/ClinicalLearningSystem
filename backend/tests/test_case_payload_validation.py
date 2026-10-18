@@ -40,6 +40,11 @@ def _failed_checks(path: Path) -> list[str]:
     return [row["check"] for row in report.failed]
 
 
+def _failed_weights(path: Path) -> bool:
+    """True when the run failed the check that the payload carries the API's weights key."""
+    return any("rubric.weights" in check for check in _failed_checks(path))
+
+
 @pytest.fixture
 def a02_payload() -> dict:
     return json.loads(A02.read_text(encoding="utf-8"))
@@ -99,6 +104,17 @@ def test_missing_anchor_fails(tmp_path, a02_payload):
     no_anchors = copy.deepcopy(a02_payload)
     del no_anchors["rubric"]["anchors"]
     assert "rubric anchors present" in _failed_checks(_write(tmp_path, "A02_y.json", no_anchors))
+
+
+def test_missing_or_mismatched_api_weights_fail(tmp_path, a02_payload):
+    """`weights` is what the assessment API reads; a payload carrying only `dimensions`
+    would transcribe into a form that silently uses the study defaults instead."""
+    broken = copy.deepcopy(a02_payload)
+    del broken["rubric"]["weights"]
+    assert _failed_weights(_write(tmp_path, "A02_x.json", broken))
+    mismatch = copy.deepcopy(a02_payload)
+    mismatch["rubric"]["weights"]["clinical_decision"] = 15
+    assert _failed_weights(_write(tmp_path, "A02_y.json", mismatch))
 
 
 def test_anchor_weight_mismatch_fails(tmp_path, a02_payload):
