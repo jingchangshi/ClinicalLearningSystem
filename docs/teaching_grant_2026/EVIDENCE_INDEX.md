@@ -44,7 +44,7 @@
 分支       teaching-grant-2026-wpd（未合并、未部署）
 第二轮     d65267e932b3fa30db187bb870c60d9d907a1f96
 第三轮     e175d6a8560155d7cefc638ed22620f34c522e4d
-第四轮     94856335cbe6f0d2ba4392fc9e7563c5815bb34f（分支 teaching-grant-2026-wpd，未合并、未部署）
+第四轮     68c14e87ff1ea53a5daf8e3196778ac936bf372b（分支 teaching-grant-2026-wpd，未合并、未部署）
 生产       仍运行 1d4ef48；本批未部署
 ```
 
