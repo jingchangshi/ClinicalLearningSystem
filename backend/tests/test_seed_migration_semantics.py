@@ -15,7 +15,17 @@ import pytest
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 
-HEAD_REVISION = "20261018_07"
+def _head_revision() -> str:
+    # Derived, not hard-coded: a stale constant here silently rotted when new migrations landed.
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    config = Config(str(BACKEND_DIR / "alembic.ini"))
+    config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
+    return ScriptDirectory.from_config(config).get_current_head()
+
+
+HEAD_REVISION = _head_revision()
 
 
 def _run_seed(database: Path) -> subprocess.CompletedProcess:

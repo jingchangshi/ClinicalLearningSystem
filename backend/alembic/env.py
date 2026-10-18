@@ -3,6 +3,7 @@ from logging.config import fileConfig
 from alembic import context
 from app.database import Base, DATABASE_URL
 import app.models  # noqa: F401 - registers metadata
+import app.assessment_models  # noqa: F401 - registers independent assessment tables
 
 config = context.config
 if config.config_file_name:

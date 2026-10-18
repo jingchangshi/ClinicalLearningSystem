@@ -7,7 +7,14 @@ branch_labels=None
 depends_on=None
 
 def upgrade():
-    op.create_table("assessment_forms",
+    # Idempotent like the rest of the chain: a database built by ``create_all`` (fresh
+    # install, or ``seed_data`` before ``upgrade``) already has these tables.
+    existing = set(sa.inspect(op.get_bind()).get_table_names())
+    _create_missing(existing)
+
+
+def _create_missing(existing):
+    _create(existing,"assessment_forms",
         sa.Column("id",sa.Integer,primary_key=True),
         sa.Column("code",sa.String(60),nullable=False,unique=True),
         sa.Column("version",sa.Integer,nullable=False),
@@ -17,7 +24,7 @@ def upgrade():
         sa.Column("rubric_json",sa.Text,nullable=False),
         sa.Column("review_status",sa.String(30),nullable=False),
         sa.Column("created_at",sa.DateTime,nullable=False))
-    op.create_table("assessment_form_reviews",
+    _create(existing,"assessment_form_reviews",
         sa.Column("id",sa.Integer,primary_key=True),
         sa.Column("form_id",sa.Integer,sa.ForeignKey("assessment_forms.id"),nullable=False),
         sa.Column("teacher_user_id",sa.Integer,sa.ForeignKey("users.id"),nullable=False),
@@ -25,7 +32,7 @@ def upgrade():
         sa.Column("comment",sa.Text,nullable=False),
         sa.Column("reviewed_at",sa.DateTime,nullable=False),
         sa.UniqueConstraint("form_id","teacher_user_id",name="uq_assess_form_teacher"))
-    op.create_table("assessment_sittings",
+    _create(existing,"assessment_sittings",
         sa.Column("id",sa.Integer,primary_key=True),
         sa.Column("student_id",sa.Integer,sa.ForeignKey("students.id"),nullable=False),
         sa.Column("form_id",sa.Integer,sa.ForeignKey("assessment_forms.id"),nullable=False),
@@ -41,14 +48,14 @@ def upgrade():
         sa.Column("stage_index",sa.Integer,nullable=False),
         sa.Column("submitted_at",sa.DateTime),
         sa.UniqueConstraint("student_id","timepoint",name="uq_assess_student_timepoint"))
-    op.create_table("assessment_answers",
+    _create(existing,"assessment_answers",
         sa.Column("id",sa.Integer,primary_key=True),
         sa.Column("sitting_id",sa.Integer,sa.ForeignKey("assessment_sittings.id"),nullable=False),
         sa.Column("stage_index",sa.Integer,nullable=False),
         sa.Column("answer_text",sa.Text,nullable=False),
         sa.Column("submitted_at",sa.DateTime,nullable=False),
         sa.UniqueConstraint("sitting_id","stage_index",name="uq_assess_answer_stage"))
-    op.create_table("assessment_reviews",
+    _create(existing,"assessment_reviews",
         sa.Column("id",sa.Integer,primary_key=True),
         sa.Column("sitting_id",sa.Integer,sa.ForeignKey("assessment_sittings.id"),nullable=False),
         sa.Column("rater_user_id",sa.Integer,sa.ForeignKey("users.id"),nullable=False),
@@ -56,6 +63,10 @@ def upgrade():
         sa.Column("total_score",sa.Float,nullable=False),
         sa.Column("reviewed_at",sa.DateTime,nullable=False),
         sa.UniqueConstraint("sitting_id","rater_user_id",name="uq_assess_independent_rater"))
+
+def _create(existing,name,*items):
+    if name not in existing:
+        op.create_table(name,*items)
 
 def downgrade():
     op.drop_table("assessment_reviews")
