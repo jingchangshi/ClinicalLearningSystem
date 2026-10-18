@@ -6,8 +6,10 @@
 > 执行时间：2026-10-18 15:23 UTC
 > 环境：Linux 6.8.0-1049-oracle aarch64；uv 0.11.16；Python 3.11.15；SQLite（Python 标准库 `sqlite3`）
 > 结论适用范围：本文件只证明**数据库迁移**。前端、浏览器、部署不在本文件范围。
-> **没有对任何生产数据库执行迁移。** 本机没有经过授权的生产库副本，因此 R8.3 中「生产库副本」一项
-> **未执行**，下文使用的是一个**开发数据库的只读副本**（来源见第 3 节），并如实标注。
+> **没有对生产数据库本身执行任何迁移或写入。** 本轮以**只读**方式把生产库复制到临时目录，
+> 再对**副本**执行迁移循环（R8.3 允许使用生产库副本验证）。生产库位于主检出
+> `backend/clinical_learning.db`（生产 `backend.env` 未设 `DATABASE_URL`，使用代码默认相对路径）；
+> 复制前后该文件的 `mtime` 与 `schema_revision` 均未变化（见第 3 节）。
 
 ## 0. 验收结论
 
@@ -19,8 +21,8 @@
 | 表结构检查（迁移结果 vs `create_all` 全新安装） | 通过：52 个对象，规范化后 0 处差异 | 附录 A 步骤 7 |
 | 历史训练数据行数与内容不变 | 通过：14 张训练表逐行字节一致（升级 / 降级 / 再升级三次比较） | 附录 A |
 | 训练成绩与画像不变性 | 通过：`scores`、`competency_profiles`、`learning_evidence_events` 内容未变 | 附录 A、B |
-| 真实（开发库）数据副本上的同循环 | 通过：25 张表逐行一致；07 新增的两列不改变任何历史行（该表 0 行） | 附录 B |
-| 生产库 / 生产库副本迁移 | **未执行**（本机无授权副本） | 第 6 节 |
+| 生产数据库只读副本上的同循环 | 通过：25 张表逐行一致；07 新增的两列不改变任何历史行（该表 0 行） | 附录 B |
+| 生产数据库**本身**的迁移/写入 | **未执行**（`mtime`、`schema_revision` 均未变） | 第 3、6 节 |
 
 **发现并已修复的问题**：`assessment_sittings.created_at` 在「降级→再升级」后变为可空（ORM 声明为必填）。
 修复提交 `d117899`，回归测试 `backend/tests/test_migration_down_up_cycle.py`（移除修复后该测试确实失败）。
@@ -36,9 +38,9 @@
 
 - 一个由 `alembic upgrade head` 从零建起的数据库，在 `20261018_07` 处**已经**存在 `assessment_*` 表，
   且是当前（加固后）的形状；`20261018_08/09` 对这类库是幂等的空操作。
-- `20261018_08/09` 真正执行 DDL 的路径是：**已经处于旧形状的数据库**（例如本仓库另一个工作目录中的开发库，
+- `20261018_08/09` 真正执行 DDL 的路径是：**已经处于旧形状的数据库**（例如主检出的生产库，
   revision `20260915_06`，完全没有考核表）以及**降级之后的再升级**。
-- 本文件的两次验收分别覆盖这两条路径：第 2 节（隔离库循环 → 走 08/09 的真实重建分支）与第 3 节（真实旧库副本）。
+- 本文件的两次验收分别覆盖这两条路径：第 2 节（隔离库循环 → 走 08/09 的真实重建分支）与第 3 节（生产库只读副本）。
 
 ## 2. 隔离数据库上的完整循环
 
@@ -56,14 +58,27 @@
         schema equivalent (modulo clause order, quoting and server defaults)
 ```
 
-## 3. 真实开发数据库副本（只读复制）
+## 3. 生产数据库的只读副本
 
 来源：`/home/jcshi/workspace/clinical_learning_system/backend/clinical_learning.db`
-——这是**另一个工作目录中的开发数据库**（revision `20260915_06`，不含任何考核表），
-**不是生产库**；生产运行版本为 `1d4ef48`（见 `EVIDENCE_INDEX.md` 生成基线），其数据库不在本机。
+——**这就是生产数据库**：生产 `backend.env` 未设置 `DATABASE_URL`，生产进程因此使用代码默认的
+相对路径 `sqlite:///./clinical_learning.db`，即主检出的该文件；生产 `/api/system/version` 报告的
+`schema_revision=20260915_06` 与该文件一致（另见 `ENVIRONMENT_ISOLATION.md` §3、§6）。
+该库处于 revision `20260915_06`，**完全没有考核表**，因此它正好覆盖「旧形状数据库」这条迁移路径
+（也就是 `20261018_08/09` 真正执行 DDL 的路径）。
 
-复制方式：以 `file:...?mode=ro` 只读打开源库，用 `sqlite3.Connection.backup` 写入临时副本；
-源文件未做任何写入（复制后 `mtime` 仍为 2026-09-15 16:27）。
+复制方式：以 `file:...?mode=ro` 只读打开源库，用 `sqlite3.Connection.backup` 写入 `/tmp` 下的
+临时副本；**生产库本身未被迁移或写入**。可核查的事实：
+
+```text
+$ ls -la --time-style=full-iso .../backend/clinical_learning.db
+-rw-r--r-- 1 jcshi jcshi 1449984 2026-09-15 16:27:09.237713121 +0000 .../clinical_learning.db
+$ sqlite3（mode=ro）select version_num from alembic_version
+20260915_06
+```
+
+- 复制前后源文件 `mtime` 均为 `2026-09-15 16:27:09`，`schema_revision` 均为 `20260915_06`；
+- 副本含真实教学数据，仅在本机临时目录用于迁移验证，**未导出、未提交**；验收后已删除。
 
 副本中的真实数据规模（迁移前）：
 
@@ -73,7 +88,7 @@ learning_evidence_events 30  learning_recommendations 23  generated_case_drafts 
 students 4  teachers 3  users 8  cases 10  competency_profiles 4
 ```
 
-完整命令与输出见**附录 B**。摘要：
+完整命令与输出见**附录 B**（本次运行时间：2026-10-18 15:36 UTC）。摘要：
 
 ```text
 rev 20260915_06 -> 20261018_07：仅 teacher_score_reviews 增加 baseline_score / baseline_source 两列
@@ -120,7 +135,7 @@ head -> 20261018_07 -> head  ：07 状态与 head 状态两次比较均逐行字
 
 ### 5.3 未修复的历史遗留差异（与本次考核迁移无关，需申请人/后续决定）
 
-真实开发库副本升级到 head 后，与全新 `create_all` 相比有 7 张**训练域**表存在定义差异：
+真实生产库只读副本升级到 head 后，与全新 `create_all` 相比有 7 张**训练域**表存在定义差异：
 
 | 表 | 差异 | 影响 |
 | --- | --- | --- |
@@ -134,8 +149,9 @@ head -> 20261018_07 -> head  ：07 状态与 head 状态两次比较均逐行字
 
 | 项目 | 状态 | 说明 |
 | --- | --- | --- |
-| 生产数据库迁移 | **未执行** | 本轮不合并、不部署（R8.4）；生产运行 `1d4ef48` |
-| 生产数据库**副本**迁移 | **未执行** | 本机无经授权的生产库副本；第 3 节使用的是开发库副本，不得表述为生产验收 |
+| 生产数据库**本身**的迁移/写入 | **未执行** | 只对只读副本执行了循环；生产 `schema_revision` 仍为 `20260915_06`；本轮不合并、不部署（R8.4） |
+| 生产数据库**只读副本**上的迁移 | 已执行 | 只读复制（`sqlite3.Connection.backup`），源库 `mtime`/revision 未变；副本验收后删除 |
+| 副本脱敏 | 未脱敏 | 副本保留真实教学数据，但未离开本机临时目录、未导出、未提交；如今后需长期保留副本，应先按 R0.3 脱敏 |
 | 降级后再降级到根 revision | 未执行 | 08 的 downgrade 会直接删除考核表；无数据的新库上可行，但对有考核数据的库无意义（`20261018_09` 的 downgrade 会在存在 voided 记录/题本多版本时拒绝） |
 | 前端 / 浏览器 / 部署验收 | 不在本文件范围 | 见 E2 其他条目 |
 
@@ -502,15 +518,15 @@ $ echo log: /tmp/clinpath-migration-acceptance.ISl5kB/migration_cycle.log
 log: /tmp/clinpath-migration-acceptance.ISl5kB/migration_cycle.log
 ```
 
-## 附录 B：真实开发数据库副本（只读复制）原样输出
+## 附录 B：生产数据库只读副本的原样输出
 
 ```text
-=== R8.3 legacy-path acceptance on a read-only COPY of a real development database ===
-source: /home/jcshi/workspace/clinical_learning_system/backend/clinical_learning.db
-copy  : /tmp/clinpath-legacy-final.GB3J7d/dev_db_copy.db (written via the sqlite3 backup API; the source was opened read-only)
+=== R8.3 acceptance on a READ-ONLY COPY of the production database ===
+source: /home/jcshi/workspace/clinical_learning_system/backend/clinical_learning.db (opened with file:...?mode=ro; never migrated or written)
+copy  : /tmp/clinpath-prodcopy.f24WUI/prod_copy.db (written via sqlite3.Connection.backup)
 
 --- 0. copy and record the pre-migration state ---
-copy written
+copy written; source opened read-only
 20260915_06
 ai_enrichments	rows=5	columns=11
 ai_invocations	rows=816	columns=15
@@ -534,11 +550,11 @@ students	rows=4	columns=5
 teachers	rows=3	columns=5
 tutor_turns	rows=43	columns=8
 users	rows=8	columns=7
-dumped 25 tables (revision 20260915_06) to /tmp/clinpath-legacy-final.GB3J7d/dump_rev06.json
+dumped 25 tables (revision 20260915_06) to /tmp/clinpath-prodcopy.f24WUI/dump_rev06.json
 
 --- 1. upgrade to 20261018_07 ---
 20261018_07
-dumped 25 tables (revision 20261018_07) to /tmp/clinpath-legacy-final.GB3J7d/dump_07.json
+dumped 25 tables (revision 20261018_07) to /tmp/clinpath-prodcopy.f24WUI/dump_07.json
 compare rev06 -> rev07 (teacher_score_reviews gains two provenance columns by design)
 CHANGED teacher_score_reviews: columns ['id', 'evidence_event_id', 'ai_score', 'teacher_score', 'comment', 'agreement_delta', 'created_at', 'reviewer_user_id', 'confirmed_dimensions_json', 'projector_version'] -> ['id', 'evidence_event_id', 'ai_score', 'teacher_score', 'comment', 'agreement_delta', 'created_at', 'reviewer_user_id', 'confirmed_dimensions_json', 'projector_version', 'baseline_score', 'baseline_source']
 
@@ -549,8 +565,8 @@ NOT EQUIVALENT:
 
 --- 2. upgrade to head ---
 20261018_09 (head)
-dumped 41 tables (revision 20261018_09) to /tmp/clinpath-legacy-final.GB3J7d/dump_head_1.json
-wrote 52 schema objects to /tmp/clinpath-legacy-final.GB3J7d/schema_head_1.json
+dumped 41 tables (revision 20261018_09) to /tmp/clinpath-prodcopy.f24WUI/dump_head_1.json
+wrote 52 schema objects to /tmp/clinpath-prodcopy.f24WUI/schema_head_1.json
 compare rev07 -> head (training data must be identical; assessment tables are added)
 
 training tables seeded and compared: 14; byte-identical: 14
@@ -574,10 +590,10 @@ study_enrollments	rows=0	columns=6
 
 --- 3. downgrade to 20261018_07 and upgrade head again ---
 20261018_07
-dumped 25 tables (revision 20261018_07) to /tmp/clinpath-legacy-final.GB3J7d/dump_07_again.json
+dumped 25 tables (revision 20261018_07) to /tmp/clinpath-prodcopy.f24WUI/dump_07_again.json
 20261018_09 (head)
-dumped 41 tables (revision 20261018_09) to /tmp/clinpath-legacy-final.GB3J7d/dump_head_2.json
-wrote 52 schema objects to /tmp/clinpath-legacy-final.GB3J7d/schema_head_2.json
+dumped 41 tables (revision 20261018_09) to /tmp/clinpath-prodcopy.f24WUI/dump_head_2.json
+wrote 52 schema objects to /tmp/clinpath-prodcopy.f24WUI/schema_head_2.json
 compare rev07 -> rev07 after the cycle (must be byte-identical)
 
 training tables seeded and compared: 14; byte-identical: 14
@@ -588,10 +604,14 @@ training tables seeded and compared: 14; byte-identical: 14
 tables identical: 41, revision 20261018_09 -> 20261018_09
 
 --- 4. migrated head vs a fresh create_all install of the same models ---
-wrote 52 schema objects to /tmp/clinpath-legacy-final.GB3J7d/schema_fresh.json
+wrote 52 schema objects to /tmp/clinpath-prodcopy.f24WUI/schema_fresh.json
 same    table:users
 
 objects: 52 -> 52; differing: 7
 SCHEMA MISMATCH: table:ai_enrichments, table:ai_invocations, table:competency_profiles, table:scores, table:student_answers, table:teacher_score_reviews, table:tutor_turns
 
+--- 5. the production database itself is untouched ---
+-rw-r--r-- 1 jcshi jcshi 1449984 2026-09-15 16:27:09.237713121 +0000 /home/jcshi/workspace/clinical_learning_system/backend/clinical_learning.db
+schema_revision: 20260915_06
+--- copy deleted after the run (it contains real teaching data) ---
 ```
