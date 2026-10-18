@@ -110,3 +110,11 @@ def test_dataset_rules():
         de.build_rows(bad, dataset_version="v", data_origin=DATA_ORIGIN_REAL)
     with pytest.raises(ResearchError):
         de.build_rows(long_rows() + long_rows()[:1], dataset_version="v", data_origin=DATA_ORIGIN_REAL)
+
+
+def test_data_dictionary_lists_exactly_the_export_columns():
+    from pathlib import Path
+    doc = Path(__file__).resolve().parents[2] / "docs/teaching_grant_2026/workpackages/DATA_DICTIONARY.md"
+    documented = [line.split("`")[1] for line in doc.read_text(encoding="utf-8").splitlines()
+                  if line.startswith("| `")]
+    assert documented == list(de.COLUMNS)
