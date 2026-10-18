@@ -11,7 +11,7 @@
 | CASE-T03 | 训练病例 | 第2–3阶段：初步诊断及依据 / 鉴别诊断 / 临床决策入门 | ANCA 相关性血管炎（GPA 倾向，肺肾受累） | 进阶 | PENDING_REAL_REVIEW | `A01_training_AAV.md` |
 | CASE-T04 | 训练病例 | 第2–3阶段：初步诊断及依据 / 鉴别诊断 / 检查策略 | 炎性肌病（抗合成酶综合征伴 ILD） | 进阶 | PENDING_REAL_REVIEW | `A01_training_IIM.md` |
 | CASE-A01 | 独立考核病例 | 第2–3阶段：鉴别诊断 / 进一步检查 | 未分化多关节炎 | 中等 | PENDING_REAL_REVIEW | `A01_assessment_UA.md` |
-| CASE-A02 | 独立考核病例 | 第3阶段：鉴别诊断 / 临床决策入门 | 干燥症状待查（疑似原发性干燥综合征，未确诊） | 中等（待专家校准） | PENDING_REAL_REVIEW | `A01_assessment_multisystem.md` |
+| CASE-A02 | 独立考核病例 | 第3阶段：鉴别诊断 / 临床决策入门 | 干燥症状待查（疑似原发性干燥综合征，未确诊） | 中等（待专家校准） | PENDING_REAL_REVIEW | `A01_assessment_sicca.md` |
 
 ## 训练 / 考核隔离
 
@@ -57,7 +57,10 @@
 | `A01_training_AAV.md` | 训练病例 CASE-T03 |
 | `A01_training_IIM.md` | 训练病例 CASE-T04 |
 | `A01_assessment_UA.md` | 独立考核病例 CASE-A01 |
-| `A01_assessment_multisystem.md` | 独立考核病例 CASE-A02 |
+| `A01_assessment_sicca.md` | 独立考核病例 CASE-A02（原文件名 `A01_assessment_multisystem.md`，已更名；旧 AOSD 内容仅在 Git 历史） |
+| `A01_assessment_payload_DRAFT.json` / `A02_assessment_payload_DRAFT.json` | A01/A02 可导入独立考核系统的待审载荷（学生可见字段已去答案化） |
+| `review_forms/` | 供两位真实教师使用的审核材料包（全部 `PENDING_REAL_REVIEW`，见该目录 README） |
+| `CASE_REVIEW_STATUS_DRAFT.md` | 六份病例的审核状态诚实汇总 |
 | `A01_case_index.md` | 本文件 |
 | `A02_platform_schema_notes.md` | 平台 schema 映射与限制说明 |
 | `A03_teacher_review_form_BLANK.md` | 教师审核表（Markdown 空白模板） |

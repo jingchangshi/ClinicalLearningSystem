@@ -1,3 +1,5 @@
+> **2026-10-18 更新说明（技术/医学草案复核，非真实教师审定）**：本报告是早期 A 工作包的运行记录。其中 CASE-A02 已由原成人 Still 病/MAS 方案**整体替换**为“持续性干燥症状待查”（文件重命名为 `A01_assessment_sicca.md`），下文凡涉及 AOSD/MAS/Yamaguchi/HLH-2004 的 A02 描述均已**失效**，仅作历史记录。现行状态见 `CASE_REVIEW_STATUS_DRAFT.md`。
+
 # Work package A 状态报告（STATUS_A）
 
 - 报告日期：2026-10-18（第一轮）／2026-10-18 第二轮医学一致性修复
@@ -39,7 +41,7 @@
 | `docs/teaching_grant_2026/workpackages/A_cases/A01_training_AAV.md` | CASE-T03 ANCA 相关性血管炎（训练） |
 | `docs/teaching_grant_2026/workpackages/A_cases/A01_training_IIM.md` | CASE-T04 炎性肌病（训练） |
 | `docs/teaching_grant_2026/workpackages/A_cases/A01_assessment_UA.md` | CASE-A01 未分化多关节炎（独立考核） |
-| `docs/teaching_grant_2026/workpackages/A_cases/A01_assessment_multisystem.md` | CASE-A02 成人 Still 病伴 MAS 风险（独立考核） |
+| `docs/teaching_grant_2026/workpackages/A_cases/A01_assessment_sicca.md` | CASE-A02 持续性干燥症状待查（**已取代**旧 AOSD 版；原文件名 `..._multisystem.md`，旧内容仅在 Git 历史） |
 | `docs/teaching_grant_2026/workpackages/A_cases/A01_case_index.md` | 六例索引、训练/考核隔离、六维权重表 |
 | `docs/teaching_grant_2026/workpackages/A_cases/A02_platform_schema_notes.md` | `Case` 列映射、平台支持/不支持清单、差异与风险 |
 | `docs/teaching_grant_2026/workpackages/A_cases/A03_teacher_review_form_BLANK.md` | 空白审核表（Markdown，含填写说明与重点核对事项） |
@@ -71,7 +73,7 @@ $ grep -n '"title":' backend/app/seed_data.py | sed -n '10,20p'
 ```console
 $ python3 -I scripts/grant/check_case_cards.py
 病例卡目录：/home/jcshi/workspace/clinical_learning_system/docs/teaching_grant_2026/workpackages/A_cases
-发现 6 份卡片：A01_training_AAV.md, A01_training_IIM.md, A01_training_RA.md, A01_training_SLE.md, A01_assessment_UA.md, A01_assessment_multisystem.md
+发现 6 份卡片：A01_training_AAV.md, A01_training_IIM.md, A01_training_RA.md, A01_training_SLE.md, A01_assessment_UA.md, A01_assessment_sicca.md（本行为 2026-10-18 重命名后的名称；历史输出原文如下）
 ```
 
 逐项结果表（88 行）节选如下，完整表格见脚本输出：
@@ -131,7 +133,7 @@ JSON_EXIT=0
 
 ```json
 {"ok": true, "total": 88, "passed": 88, "failed": 0,
- "cards": ["A01_training_AAV.md", "A01_training_IIM.md", "A01_training_RA.md", "A01_training_SLE.md", "A01_assessment_UA.md", "A01_assessment_multisystem.md"]}
+ "cards": ["A01_training_AAV.md", "A01_training_IIM.md", "A01_training_RA.md", "A01_training_SLE.md", "A01_assessment_UA.md", "A01_assessment_sicca.md"]}
 ```
 
 ### 3.4 A02 校验脚本的负向对照（证明它真的会 FAIL）

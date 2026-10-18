@@ -1,3 +1,5 @@
+> **2026-10-18**：本空白表保留作 CSV 汇总用；逐项审核请使用 `review_forms/` 下新的六份病例审核表（含签字区）。CASE-A02 已不是成人 Still 病，已改为干燥症状待查。
+
 # A03 真实教师审核表（空白模板）
 
 > **本表为空白模板，尚未由任何真实教师填写。** 所有审核结论保持 `PENDING_REAL_REVIEW`；`reviewer_name` 与 `review_date` 为空；`review_origin` 为 `REAL_HUMAN_REVIEW_NOT_YET_CONDUCTED`（真实人工审核尚未进行）。请勿预填、代签或事后补写审核人姓名与日期。
@@ -68,7 +70,7 @@
 | CASE-T03 | 2022 ACR/EULAR AAV 三份分类标准的前提条件表述；EULAR/ERA-EDTA 推荐版本；KDIGO 指南版本 |
 | CASE-T04 | 2017 EULAR/ACR IIM 分类标准与 2017/2023 管理推荐的版本；抗合成酶综合征与抗 MDA5 的表述；肿瘤筛查建议 |
 | CASE-A01 | “未分化关节炎”的病程界定；本病例 2010 ACR/EULAR 计分 2+2+1+0=5 分（入口条件满足、总分 <6，不满足 RA 分类）的表述是否可接受；病程 5 周与 2 个小关节肿胀的设定是否符合“未分化”教学意图；EULAR 早期关节炎推荐版本 |
-| CASE-A02 | Yamaguchi 标准的条目表述；EULAR/ACR AOSD 管理推荐是否真实存在（若不存在请删除该条引用）；HLH-2004 方案的引用深度 |
+| CASE-A02 | 干燥症状与客观检查（OSS、Schirmer）的一致性；2016 ACR/EULAR 计分与“未评估项”的处理；抗 SSA 阴性的解释；唇腺活检适应证与风险；是否无指征免疫抑制；详见 `review_forms/CASE_REVIEW_FORM_A02.md` |
 
 ## 五、审核流程建议
 

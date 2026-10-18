@@ -7,7 +7,7 @@
 - CASE-A01：未分化多关节炎（原草稿）
 - CASE-A02：原因待查的干燥症状、疑似原发性干燥综合征（新草稿）
 - 两者均为 `PENDING_REAL_REVIEW`，未经真实临床教师审核不用于正式考试
-- 新A02完整草稿见 `A01_assessment_multisystem.md`；可导入独立考核系统的**待审**JSON见 `A02_assessment_payload_DRAFT.json`
+- 新A02完整草稿见 `A01_assessment_sicca.md`（原名 `A01_assessment_multisystem.md`）；A01 待审载荷见 `A01_assessment_payload_DRAFT.json`；可导入独立考核系统的**待审**JSON见 `A02_assessment_payload_DRAFT.json`
 
 ## 必须完成的医学与教育学核验
 
@@ -23,3 +23,9 @@
 ## 状态
 
 本分支只提供系统实现和AI起草材料，真实专家尚未审阅新A02与A01，不能将技术性“页面能审核”解释为“已经完成医学审核”。
+
+## 2026-10-18 技术/医学草案复核补充（非真实教师审定）
+
+- 难度/时间的 AI 估计、A01/A02 难度匹配表、锚点一致性表和争议项见 `review_forms/`；这些估计**未经真实校准**。
+- 考题泄漏审计与跨 7 批传播风险见 `LEAKAGE_AUDIT_DRAFT.md`；备用平行题本的设计需求见 `BACKUP_FORMS_DESIGN_NEEDS_DRAFT.md`（仅草案，未启用）。
+- 本文件第 7 条（跨 7 批外泄）的结论：**批内交叉题本顺序本身就让每个 D6 题本在 5 天前被同批一半同学作答过**，见泄漏审计第 3 节。
