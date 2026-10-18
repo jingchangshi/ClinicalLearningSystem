@@ -5,6 +5,24 @@
 > 数据来源：`ClinPath_WPD_完整工作包D.zip`（离线包原始文件保留在 `docs/` 根目录，未修改）。
 > 集成形式：仓库内只读版本化资源 `demo_research/synthetic_v1/`，**不进入任何业务表**。
 
+## 0. 第二轮（2026-10-18）复核
+
+本轮**未改动**工作包 D 的任何数据、页面或统计逻辑。复核结果：
+
+```text
+cd backend && uv run --python 3.11 --with-requirements requirements.txt \
+  pytest -q tests/test_demo_research.py
+16 passed
+```
+
+- 合成数据仍在 `demo_research/synthetic_v1/`，文件未变；
+- 路由与服务仍不 import ORM / DB 会话；7 个端点调用前后业务表行数不变；
+- 页面顶部合成横幅、`SYNTHETIC` CSV 文件名与逐行标记保持；
+- 与真实研究导出页仍然分离。
+
+第二轮新增的评分来源字段（`baseline_score` / `baseline_source`）只作用于
+**真实业务表** `teacher_score_reviews`，与合成演示层无关。
+
 ## 1. 交付对照（D01–D05）
 
 | 编号 | 任务 | 状态 | 实现位置 | 证据 |
@@ -121,3 +139,21 @@ D05（真实 LLM 生成虚拟学生文本）被任务书标为 P1 **可选**。�
   这是"专家对合成材料的评价"，不是学生教学效果。
 - 真实研究数据的采集须使用 `REAL_CONSENTED` 标记，并与本演示物理/逻辑隔离
   （见 `docs/teaching_grant_2026/evidence/E5_protocol/`）。
+
+## 8. 第二轮隔离复核（2026-10-18，Task 5）
+
+在第二轮改动（评分来源溯源、教师复核页面）之后重跑 D 的隔离测试：
+
+```text
+$ cd backend && uv run --python 3.11 --with-requirements requirements.txt pytest -q tests/test_demo_research.py
+................                                                         [100%]
+16 passed, 1 warning in 2.77s
+```
+
+- 路由与服务仍未 import ORM / DB session（`app/services/demo_research.py`
+  只依赖标准库）。
+- 合成标记逐文件完整：participants 60/60、assessments 120/120、
+  learning_sessions 180/180、reasoning_steps 450/450、analysis_ready 60/60。
+- 浏览器侧 `tests/e2e/research-demo.spec.ts` 在一次性验收栈上 3/3 通过
+  （合成横幅、SYNTHETIC CSV、学生 403、真实导出页仍可用）。
+- 环境与命令见 `../ACCEPTANCE_v2.md`。

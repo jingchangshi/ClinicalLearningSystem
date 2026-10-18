@@ -50,8 +50,8 @@ export function TeacherReviewClient({ evidence }: { evidence: ReviewableEvidence
       <h2 className="font-semibold">待复核病例评分</h2>
       <div className="mt-4 overflow-x-auto">
         <table className="w-full min-w-[700px] text-left text-sm">
-          <thead className="bg-slate-50 text-slate-500"><tr><th className="px-3 py-2">学生</th><th className="px-3 py-2">AI评分</th><th className="px-3 py-2">状态</th><th className="px-3 py-2" /></tr></thead>
-          <tbody>{evidence.map((item) => <tr key={item.evidence_event_id} className="border-b border-slate-100"><td className="px-3 py-3">{item.student_name}</td><td className="px-3 py-3">{item.ai_score}</td><td className="px-3 py-3">{item.teacher_confirmed_score === null ? "待教师确认" : "已确认"}</td><td className="px-3 py-3"><button type="button" onClick={() => openReview(item)} className="rounded-md border border-clinic px-3 py-1 text-clinic">复核</button></td></tr>)}</tbody>
+          <thead className="bg-slate-50 text-slate-500"><tr><th className="px-3 py-2">学生</th><th className="px-3 py-2">对照评分</th><th className="px-3 py-2">评分来源</th><th className="px-3 py-2">状态</th><th className="px-3 py-2" /></tr></thead>
+          <tbody>{evidence.map((item) => <tr key={item.evidence_event_id} className="border-b border-slate-100"><td className="px-3 py-3">{item.student_name}</td><td className="px-3 py-3">{item.baseline_score}</td><td className="px-3 py-3 text-slate-600" data-testid={`baseline-source-${item.evidence_event_id}`}>{item.baseline_source_label}</td><td className="px-3 py-3">{item.teacher_confirmed_score === null ? "待教师确认" : "已确认"}</td><td className="px-3 py-3"><button type="button" onClick={() => openReview(item)} className="rounded-md border border-clinic px-3 py-1 text-clinic">复核</button></td></tr>)}</tbody>
         </table>
         {!evidence.length ? <p className="mt-4 text-sm text-slate-500">暂无可复核的病例评分。</p> : null}
       </div>

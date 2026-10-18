@@ -38,6 +38,7 @@ from app.services.pathway_context import load_pathway_catalog
 from app.services.recommendation_service import build_learning_pathway, determine_pathway_stage, choose_recommendation
 from app.services.competency_projector import COMPETENCY_PROJECTOR_VERSION, confirmed_total, reproject_competencies
 from app.services.display_labels import (
+    BASELINE_SOURCE_LABELS,
     competency_label,
     intervention_type_label,
     module_label,
@@ -353,17 +354,21 @@ def create_score_review(
     if not score:
         raise HTTPException(status_code=404, detail="Original score not found")
     teacher_score = confirmed_total(payload.confirmed_dimensions)
-    authoritative_ai_score = score.ai_score if score.ai_score is not None else score.total_score
+    baseline_score, baseline_source = _review_baseline(score)
     try:
         score.teacher_confirmed_score = teacher_score
         score.teacher_override_reason = payload.comment
         review = TeacherScoreReview(
             evidence_event_id=event.id,
             reviewer_user_id=reviewer.id,
-            ai_score=authoritative_ai_score,
+            # ``ai_score`` is nullable on the model; writing None here is the
+            # point: a rule-fallback review must not claim an AI baseline.
+            ai_score=score.ai_score,
+            baseline_score=baseline_score,
+            baseline_source=baseline_source,
             teacher_score=teacher_score,
             comment=payload.comment,
-            agreement_delta=round(teacher_score - authoritative_ai_score, 1),
+            agreement_delta=round(teacher_score - baseline_score, 1),
             confirmed_dimensions_json=dumps_json(payload.confirmed_dimensions),
             projector_version=COMPETENCY_PROJECTOR_VERSION,
         )
@@ -401,6 +406,50 @@ def list_score_reviews(db: Session = Depends(get_db)) -> list[dict]:
     return [_serialize_review(row) for row in rows]
 
 
+def _review_baseline(score: Score) -> tuple[float, str]:
+    """What a teacher review compares against, and who produced it.
+
+    The distinction matters for research integrity: a review of a
+    ``rule_fallback`` score is *not* a review of an AI score, and agreement
+    statistics must not pool them. Before this helper existed the review row
+    stored ``Score.total_score`` into ``ai_score`` whenever ``ai_score`` was
+    None, so a rule score was indistinguishable from a model score.
+    """
+
+    if score.ai_score is not None and not score.degraded:
+        return score.ai_score, "ai"
+    if score.evaluation_mode == "rule_fallback" or score.degraded:
+        # The compared number is the rule engine's output, whatever the column
+        # happens to hold.
+        return score.total_score, "rule_fallback"
+    if score.ai_score is not None:
+        return score.ai_score, "ai"
+    return score.total_score, "legacy_ambiguous"
+
+
+def _reviewable_evidence_row(event: LearningEvidenceEvent, score: Score, student: Student) -> dict:
+    baseline_score, baseline_source = _review_baseline(score)
+    return {
+        "evidence_event_id": event.id,
+        "student_id": student.id,
+        "student_name": student.name,
+        "case_session_id": event.source_id,
+        # ``ai_score`` keeps its historical meaning for existing consumers; it
+        # is now nullable so a rule-fallback row cannot masquerade as AI.
+        "ai_score": score.ai_score,
+        "rule_score": score.rule_score,
+        "total_score": score.total_score,
+        "evaluation_mode": score.evaluation_mode,
+        "degraded": score.degraded,
+        "baseline_score": baseline_score,
+        "baseline_source": baseline_source,
+        "baseline_source_label": BASELINE_SOURCE_LABELS[baseline_source],
+        "teacher_confirmed_score": score.teacher_confirmed_score,
+        "dimensions": {key: getattr(score, key) for key in CORE_ABILITIES},
+        "created_at": event.created_at,
+    }
+
+
 @router.get("/reviewable-evidence")
 def list_reviewable_evidence(db: Session = Depends(get_db)) -> list[dict]:
     events = (
@@ -415,16 +464,7 @@ def list_reviewable_evidence(db: Session = Depends(get_db)) -> list[dict]:
         student = db.get(Student, event.student_id)
         if not score or not student:
             continue
-        rows.append({
-            "evidence_event_id": event.id,
-            "student_id": student.id,
-            "student_name": student.name,
-            "case_session_id": event.source_id,
-            "ai_score": score.ai_score if score.ai_score is not None else score.total_score,
-            "teacher_confirmed_score": score.teacher_confirmed_score,
-            "dimensions": {key: getattr(score, key) for key in CORE_ABILITIES},
-            "created_at": event.created_at,
-        })
+        rows.append(_reviewable_evidence_row(event, score, student))
     return rows
 
 
@@ -611,6 +651,11 @@ def _serialize_review(review: TeacherScoreReview) -> dict:
         "id": review.id,
         "evidence_event_id": review.evidence_event_id,
         "ai_score": review.ai_score,
+        "baseline_score": review.baseline_score,
+        "baseline_source": review.baseline_source,
+        "baseline_source_label": BASELINE_SOURCE_LABELS.get(
+            review.baseline_source, review.baseline_source
+        ),
         "teacher_score": review.teacher_score,
         "comment": review.comment,
         "agreement_delta": review.agreement_delta,

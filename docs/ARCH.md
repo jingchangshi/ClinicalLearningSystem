@@ -365,6 +365,19 @@ new = old * 0.7 + module_score * 0.3      UPDATE_WEIGHT = 0.3
   教师确认（`TeacherScoreReview.confirmed_dimensions_json`）会替换对应维度的 module_score。
 - 这是可审计的投影，**不是** advanced digital twin，不要这样包装。
 
+### 7.1 评分来源必须可区分（20261018_07）
+
+一次教师复核比较的"基准分"可能来自模型，也可能来自规则回退。二者混同会让
+"教师与 AI 的分歧"和"教师与规则的分歧"无法区分。
+
+- `TeacherScoreReview.baseline_score` + `baseline_source`（`ai` / `rule_fallback` /
+  `legacy_ambiguous`）记录比较对象与生产者；`_review_baseline()` 是唯一判定入口。
+- `ai_score` 保留字段名，但语义收窄为"模型产生的分数，无则为 NULL"。
+  在 20261018_07 之前，规则回退时它曾被写入 `Score.total_score`。
+- 历史行一律标 `legacy_ambiguous`：当时没有 `degraded` 快照，无法诚实重建来源。
+- 任何一致性统计必须按 `baseline_source` 分组，不得把规则与 AI 基线合并。
+- 平台内教师复核会回写能力画像，因此**不是盲法独立评分**；研究主要结局必须离线盲评。
+
 ### Target（尚未实现）
 
 未来版本应考虑 `score`、`confidence`、`evidence count`、`task difficulty`、`recency`、

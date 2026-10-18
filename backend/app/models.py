@@ -486,7 +486,18 @@ class TeacherScoreReview(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     evidence_event_id: Mapped[int] = mapped_column(ForeignKey("learning_evidence_events.id"), nullable=False)
     reviewer_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    ai_score: Mapped[float] = mapped_column(Float, nullable=False)
+    # The number this review was compared against, and who produced it.
+    # ``ai_score`` is retained for existing consumers but is NOT a reliable
+    # producer label: before 20261018_07 it held ``Score.total_score`` whenever
+    # the evaluation had fallen back to rules. New rows write the honest
+    # producer into ``baseline_source``; historic rows are ``legacy_ambiguous``.
+    # Nullable: a rule-fallback review must be able to say "no model produced
+    # this number" instead of copying the rule score into an AI column.
+    ai_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    baseline_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    baseline_source: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="legacy_ambiguous"
+    )
     teacher_score: Mapped[float] = mapped_column(Float, nullable=False)
     comment: Mapped[str] = mapped_column(Text, nullable=False)
     agreement_delta: Mapped[float] = mapped_column(Float, nullable=False)

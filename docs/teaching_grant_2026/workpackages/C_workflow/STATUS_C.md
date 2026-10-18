@@ -1,7 +1,8 @@
 # STATUS_C · 工作包 C（教学闭环演示）
 
 日期：2026-10-18 · 执行环境：验证栈（**非生产**）
-运行版本：`1d4ef4823c75fb9d89a7aec734b8b84d0bfa5c41`（`git_dirty=true`）
+运行版本：`a8aa65d` + 第二轮工作区改动（`git_dirty=true`）
+第二轮复验：`teacher.spec.ts` 3/3、`research-demo.spec.ts` 3/3（隔离栈，见 `../ACCEPTANCE_v2.md`）
 后端 `127.0.0.1:8201` / 前端 `127.0.0.1:8202` / 数据库 `/tmp/clinpath-demo-verify/verify.db`
 
 > **一句话结论**：C01–C04 四份交付物已完成，含一份真实运行记录、一个已实跑通过的新增

@@ -1,5 +1,9 @@
 # 2026 浙江省本科教改项目 — 交付状态总表（STATUS）
 
+> **第二轮（2026-10-18）已完成**：医学病例一致性修复、评分来源口径统一、
+> 研究方案 v1.1、官方模板六栏正文、独立验收与教师审核材料包。
+> 逐项状态见文末 §6「第二轮交付」。
+
 > 生成日期：2026-10-18
 > 仓库：`/home/jcshi/workspace/clinical_learning_system`（分支 `teaching-grant-2026-wpd`，基于 `main`）
 > 基线 SHA：`1d4ef4823c75fb9d89a7aec734b8b84d0bfa5c41`（本批改动之前）
@@ -88,3 +92,54 @@ deploy              ./scripts/verify_deploy.sh       → PASSED（生产仍为 H
 - 不得写"已完成两位带教教师审核"——尚未发生。
 - 不得把平台 `total_score` 当作 `rubric-v0.1` 加权总分——二者权重不同。
 - 不得把模拟评分者写成真实教师评分者。
+
+
+---
+
+## 6. 第二轮交付（2026-10-18）
+
+本轮目标：让 A–D 与 E1–E5 具备**医学专家审核、独立教学演示、申报书定稿**的条件。
+本轮**不合并主分支、不部署生产**。
+
+| 任务 | 状态 | 交付物 | 待谁确认 |
+| --- | --- | --- | --- |
+| 1 医学病例一致性 | **已完成（AI 自查修订）** | `workpackages/A_cases/MEDICAL_REVIEW_ISSUES_v1.md`；CASE-A01/T01/T02/T03 已修订；三份病例新增计分表 | 12 个临床/教学取舍问题（清单第三节）需真实教师裁定 |
+| 2 评分口径与来源 | **已完成（含迁移与测试）** | `workpackages/SCORING_SOURCE_SPEC.md`；迁移 `20261018_07`；`tests/test_review_score_provenance.py`（7 用例） | 量表权重是否对齐（本轮不改） |
+| 3 研究方案修订 | **已完成（v1.1）** | `evidence/E5_protocol/PROTOCOL_REVISION_NOTES_v1.md`；E5-01/E5-02 重写 | **分组单位（整群/班内）须由教研室书面决定** |
+| 4 官方模板六栏正文 | **已完成（字数校验通过）** | `evidence/E5_protocol/E5_04_application_text.md`（3599 / 3900 字）；`scripts/grant/check_application_text.py` | 六处 `〔待用户填写〕` |
+| 5 独立验收与证据 | **已完成** | `workpackages/ACCEPTANCE_v2.md`（12/12 E2E）；`TEACHER_REVIEW_PACKET.md`；`scripts/grant/make_acceptance_dataset.py` | 两位教师填写与签字 |
+
+### 6.1 本轮实测
+
+```text
+backend pytest            235 passed（含新增 7 个评分来源用例）
+frontend typecheck        pass
+frontend lint             pass
+playwright（验收栈 8204）  12 passed（demo-readiness 6 + teacher 3 + research-demo 3）
+check_case_cards.py       88/88 PASS
+check_application_text.py 6/6 栏在限内
+rubric_agreement.py       空真实表 → exit 2（护栏生效）
+迁移 20261018_07          在生产库副本上升级/降级/再升级均通过
+```
+
+### 6.2 本轮的关键修复
+
+1. **CASE-A01 自相矛盾**：原卡同时声称"计分 7 分 ≥6"与"未满足任何分类标准"。
+   现改为病程 5 周（0 分）、2 个小关节（2 分），总分 **2+2+1+0=5 < 6**，
+   标准答案"未分化多关节炎"与计分结论一致，并附初诊/随访两张计分表。
+2. **CASE-T02 算术错误**：关节数实为 12 个小关节（应计 5 分），总分应为 **10** 而非 8。
+3. **规则分冒充 AI 分**：教师复核原先把 `rule_fallback` 的 `total_score` 写进
+   `TeacherScoreReview.ai_score`。现由 `_review_baseline()` 统一判定，
+   新增 `baseline_score` / `baseline_source`，历史行标 `legacy_ambiguous`。
+   页面列标题由「AI评分」改为「对照评分」+「评分来源」。
+4. **整群分析错误**：SAP 原默认个体层面 HC3，并声称 HC3 处理群内相关。
+   现并列整群/班内两种设计，整群用 cluster-robust 或混合模型并强制报告 ICC；
+   删除"单一组别批次内估计组间效应"的错误描述。
+
+### 6.3 第二轮明确未做
+
+- 未合并 `main`，未部署生产（生产仍运行 `1d4ef48`）。
+- 未修改生产数据库，未在生产执行迁移。
+- 未改变平台形成性评分权重（`20/20/20/15/15/10`）。
+- 未伪造任何教师签名、日期或审核结论。
+- 未用合成数据估计真实效应或样本量。

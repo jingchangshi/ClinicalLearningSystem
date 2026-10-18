@@ -1050,7 +1050,12 @@ export function listTeacherScoreReviews() {
     {
       id: number;
       evidence_event_id: number;
-      ai_score: number;
+      /** Null when no model produced the compared score. */
+      ai_score: number | null;
+      /** The number this review compared against, and its producer. */
+      baseline_score: number | null;
+      baseline_source: "ai" | "rule_fallback" | "legacy_ambiguous";
+      baseline_source_label: string;
       teacher_score: number;
       comment: string;
       agreement_delta: number;
@@ -1064,7 +1069,15 @@ export type ReviewableEvidence = {
   student_id: number;
   student_name: string;
   case_session_id: number;
-  ai_score: number;
+  ai_score: number | null;
+  rule_score: number | null;
+  total_score: number;
+  evaluation_mode: string;
+  degraded: boolean;
+  /** What a teacher review will compare against, and who produced it. */
+  baseline_score: number;
+  baseline_source: "ai" | "rule_fallback" | "legacy_ambiguous";
+  baseline_source_label: string;
   teacher_confirmed_score: number | null;
   dimensions: Record<string, number>;
   created_at: string;

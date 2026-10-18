@@ -2,8 +2,12 @@
 """E5 样本量可行性计算（仅标准库，可离线复现）。
 
 用途：为 docs/teaching_grant_2026/evidence/E5_protocol/E5_02_SAP_statistical_analysis_plan.md
-提供真实可复现的算术输出。**本脚本不读取任何真实学生数据**；第 4 节读取合成演示
+提供真实可复现的算术输出。**本脚本不读取任何真实学生数据**；第 [5] 节读取合成演示
 CSV，唯一目的是说明"模拟数据不能用来估计效应量"，不产生任何效应量估计。
+
+**本脚本中的每一个 d 都是"如果真实效应是这个值，需要多少人"的示例假设，
+不是对本研究效应的估计，也不是从任何数据算出来的。** 真实效应量未知，
+必须由预试验或文献确定（见 SAP §7.6）。
 
 运行：
     python3.11 scripts/grant/sample_size.py
@@ -130,6 +134,11 @@ def clusters_per_arm(d: float, m: int, rho: float, alpha: float = ALPHA, power: 
     return n_normal(d, alpha, power) * deff / m
 
 
+def cluster_effective_n(k: int, m: int, rho: float) -> float:
+    """k 个群、每群 m 人时的有效样本量（设计效应校正后）。"""
+    return k * m / (1.0 + (m - 1) * rho)
+
+
 # --------------------------------------------------------------------------
 # 输出
 # --------------------------------------------------------------------------
@@ -138,6 +147,10 @@ def main() -> None:
     print("=" * 74)
     print("E5 样本量可行性计算   α=0.05（双尾）  power=0.80  两组等量")
     print("=" * 74)
+    print("注意：本脚本中的所有 d 都是**示例假设**（“如果真实效应是 d，需要多少人”），")
+    print("      不是本研究的效应估计，也不来自任何真实或合成数据。")
+    print("      真实效应量未知，须由预试验或文献确定（见 SAP §7.6）。")
+    print()
     print(f"z_(1-α/2) = {za:.6f}")
     print(f"z_(1-β)   = {zb:.6f}")
     print(f"(z_(1-α/2)+z_(1-β))^2 = {(za + zb) ** 2:.6f}")
@@ -145,7 +158,7 @@ def main() -> None:
     print()
 
     print("-" * 74)
-    print("[1] 正态近似 vs t 分布修正（d = 组间差值 / 变化量标准差）")
+    print("[1] 正态近似 vs t 分布修正（d = 组间差值 / 变化量标准差；d 为示例假设）")
     print("-" * 74)
     print(f"{'d':>5} {'n/组(正态)':>12} {'n/组(t修正)':>12} {'+15%脱落':>10} {'合计N':>8}")
     for d in (0.40, 0.50, 0.60, 0.70, 0.80, 1.00):
@@ -159,21 +172,43 @@ def main() -> None:
     print("[2] 可行性反推：若只能招到 n/组，80% 功效能检出多大的 d？")
     print("-" * 74)
     print(f"{'n/组':>6} {'最小可检出d':>14} {'d=0.50功效':>12} {'d=0.60功效':>12} {'d=0.70功效':>12}")
-    for n in (20, 25, 30, 40, 45, 60, 90):
+    for n in (10, 15, 20, 25, 30, 40, 45, 60, 90):
         print(
             f"{n:>6d} {mdd(n):>14.3f} {achieved_power(0.50, n):>12.3f} "
             f"{achieved_power(0.60, n):>12.3f} {achieved_power(0.70, n):>12.3f}"
         )
+    print("读法：每年 20–50 名学生、两组等分即 10–25 人/组，对应最小可检出 d ≈ 1.25–0.79。")
+    print("      25 人/组只能稳定检出 d≈0.80 的大效应（这正是 2 臂 RCT 在本规模下的上限）；")
+    print("      想检出 d=0.50 需要 64 人/组，是当前规模的 2.5 倍以上。")
+    print("      因此本研究的定位是**可行性 + 信号生成**，不是确证性优效检验。")
     print()
 
     print("-" * 74)
-    print("[3] 若按轮转班次整群分配（每群 m=30 人）")
+    print("[3] 若按轮转班次整群分配（每群 m=30 人；rho 为示例假设）")
     print("-" * 74)
     print(f"{'d':>5} {'rho':>6} {'设计效应':>10} {'群数/组':>10} {'人数/组':>10}")
     for d in (0.50, 0.60, 0.70):
         for rho in (0.05, 0.10):
             k = clusters_per_arm(d, 30, rho)
             print(f"{d:>5.2f} {rho:>6.2f} {1 + 29 * rho:>10.2f} {math.ceil(k):>10d} {math.ceil(k) * 30:>10d}")
+    print()
+
+    print("-" * 74)
+    print("[3b] 群数很少时（每年 20–50 人 → 每臂 1–3 个班次）有效样本量")
+    print("-" * 74)
+    print(f"{'群数/组':>8} {'每群人数':>8} {'rho':>6} {'设计效应':>10} {'有效n/组':>10} {'总人数/组':>10}")
+    for k in (1, 2, 3, 4):
+        for m in (15, 25):
+            for rho in (0.05, 0.20):
+                deff = 1.0 + (m - 1) * rho
+                print(f"{k:>8d} {m:>8d} {rho:>6.2f} {deff:>10.2f} "
+                      f"{cluster_effective_n(k, m, rho):>10.1f} {k * m:>10d}")
+    print("读法：2 个班次/组、每班 25 人、rho=0.20 时，名义 50 人的每臂有效样本量只有约 9 人，")
+    print("      而 cluster-robust 推断的自由度只由“群数”决定（G−1 或 G−2）。")
+    print("      每臂只有 2–4 个班次时，常规 cluster-robust 标准误**向下偏倚**、")
+    print("      置信区间过窄、P 值过小；必须使用 CR2 / Satterthwaite / wild cluster")
+    print("      bootstrap 等小样本校正。若校正后仍无法给出可信区间，本设计只能作为")
+    print("      **探索性**研究，报告 ICC 与群数，而不报告确证性组间 P 值（见 SAP §3.2）。")
     print()
 
     print("-" * 74)
@@ -223,8 +258,9 @@ def main() -> None:
     pooled = math.sqrt((sd["CBL"] ** 2 + sd["CLINPATH"] ** 2) / 2)
     diff = sum(gains["CLINPATH"]) / len(gains["CLINPATH"]) - sum(gains["CBL"]) / len(gains["CBL"])
     print(f"提升差 = {diff:.2f}   合并标准差 = {pooled:.2f}   折算 d = {diff / pooled:.2f}")
-    print("说明：该 d 是生成脚本**预先设定**的（nominal 6 vs 18），不是估计值，")
-    print("      只能证明统计流程可跑通，不能用于样本量规划。")
+    print("说明：该 d 是生成脚本**预先设定**的（nominal 6 vs 18），是生成器参数，")
+    print("      不是估计值，也不是本研究的预期效应。它只能证明统计流程可跑通，")
+    print("      **禁止**用于任何样本量规划或功效陈述。")
 
 
 if __name__ == "__main__":

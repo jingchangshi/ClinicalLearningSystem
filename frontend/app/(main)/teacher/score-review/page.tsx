@@ -12,7 +12,10 @@ export default async function ScoreReviewPage() {
         <div>
           <p className="text-sm font-semibold tracking-[0.22em] text-clinic">教学驾驶舱 · 评分复核</p>
           <h1 className="mt-2 text-3xl font-semibold text-ink">教师评分复核</h1>
-          <p className="mt-2 text-slate-600">AI形成性评价仅供教学参考，最终评价由教师确认。</p>
+          <p className="mt-2 text-slate-600">
+            AI 或规则形成的形成性评价仅供教学参考，最终评价由教师确认。
+            对照评分的来源逐行标注：规则降级评分不等于 AI 评分。
+          </p>
         </div>
         <Link href="/teacher/dashboard" className="rounded-md border border-slate-300 px-4 py-2 hover:border-clinic">
           返回教师驾驶舱
@@ -28,7 +31,8 @@ export default async function ScoreReviewPage() {
             <thead className="bg-slate-50 text-slate-500">
               <tr>
                 <th className="px-3 py-2">证据事件</th>
-                <th className="px-3 py-2">AI评分</th>
+                <th className="px-3 py-2">对照评分</th>
+                <th className="px-3 py-2">评分来源</th>
                 <th className="px-3 py-2">教师评分</th>
                 <th className="px-3 py-2">差值</th>
                 <th className="px-3 py-2">备注</th>
@@ -38,7 +42,8 @@ export default async function ScoreReviewPage() {
               {reviews.map((review) => (
                 <tr key={review.id} className="border-b border-slate-100">
                   <td className="px-3 py-3">{review.evidence_event_id}</td>
-                  <td className="px-3 py-3">{review.ai_score}</td>
+                  <td className="px-3 py-3">{review.baseline_score ?? "—"}</td>
+                  <td className="px-3 py-3 text-slate-600">{review.baseline_source_label}</td>
                   <td className="px-3 py-3">{review.teacher_score}</td>
                   <td className="px-3 py-3">{review.agreement_delta}</td>
                   <td className="px-3 py-3">{review.comment}</td>

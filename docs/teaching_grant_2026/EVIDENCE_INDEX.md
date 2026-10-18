@@ -17,6 +17,12 @@
 | E-D-03 | 统计可复现性 | SYNTHETIC | `backend/tests/test_demo_research.py`；`backend/app/services/demo_research.py` | 2026-10-18 | 见"生成基线" | 项目组（技术） | 测试通过 | "模拟统计结果可由同源数据逐项复算，并与离线工作簿一致" |
 | E-D-04 | 页面与真实数据的隔离证明 | PLATFORM_EVIDENCE | `tests/test_demo_research.py::test_demo_router_never_touches_the_database` | 2026-10-18 | 见"生成基线" | 项目组（技术） | 测试通过 | "合成演示不写入任何业务表，调用前后业务表行数不变" |
 | E-D-05 | 真实研究导出页（对照） | PLATFORM_EVIDENCE | `/teacher/research-export`；截图 `.../06_real_export_separation.png` | 2026-10-18 | 见"生成基线" | 项目组（技术） | 可复查 | "平台已具备匿名化学习证据导出功能" |
+| E-R2-01 | 病例医学一致性修订 | DRAFT_PENDING_REVIEW | `workpackages/A_cases/MEDICAL_REVIEW_ISSUES_v1.md` + 三份已修订病例卡 | 2026-10-18（第二轮） | 见"生成基线" | AI 自查 | **待真实教师确认**；12 个待裁定问题见该文件第三节 | "病例卡已完成内部一致性自查与计分复核" |
+| E-R2-02 | 评分来源区分 | PLATFORM_EVIDENCE | `workpackages/SCORING_SOURCE_SPEC.md`；迁移 `20261018_07`；`tests/test_review_score_provenance.py` | 2026-10-18（第二轮） | 见"生成基线" | 项目组（技术） | 测试通过（7 用例） | "平台区分规则分、AI 分、教师确认与独立盲评四类来源" |
+| E-R2-03 | 研究方案 v1.1 修订 | DRAFT_PENDING_REVIEW | `evidence/E5_protocol/PROTOCOL_REVISION_NOTES_v1.md` + E5-01/E5-02 | 2026-10-18（第二轮） | 见"生成基线" | 项目组（技术） | 待教研室确认分组单位 | "研究方案已按整群/班内两种设计分别给出统计模型" |
+| E-R2-04 | 申报书六栏正文 | DRAFT_PENDING_REVIEW | `evidence/E5_protocol/E5_04_application_text.md`；字数校验 `scripts/grant/check_application_text.py` | 2026-10-18（第二轮） | 见"生成基线" | 项目组（技术） | 6/6 栏在限内；含 `〔待用户填写〕` 占位 | "申报书六栏正文已按官方模板起草并校验字数" |
+| E-R2-05 | 第二轮独立验收 | PLATFORM_EVIDENCE | `workpackages/ACCEPTANCE_v2.md` | 2026-10-18（第二轮） | 见"生成基线" | 项目组（技术） | 6/6 E2E 通过；1 项因数据量未过 | "在隔离栈完成第二轮浏览器验收" |
+| E-R2-06 | 教师审核材料包 | DRAFT_PENDING_REVIEW | `TEACHER_REVIEW_PACKET.md` | 2026-10-18（第二轮） | 见"生成基线" | 项目组（技术） | **待两位真实教师填写与签字** | "已准备可供两位教师审核的材料包" |
 
 ## 证据包目录
 
@@ -34,8 +40,10 @@
 仓库       /home/jcshi/workspace/clinical_learning_system
 分支       main
 基线 SHA   1d4ef4823c75fb9d89a7aec734b8b84d0bfa5c41（本批改动之前）
-提交       ea145d6ca4cbebe21381860961dce59da8baa010
+提交       ea145d6ca4cbebe21381860961dce59da8baa010（第一轮）
 分支       teaching-grant-2026-wpd（未合并、未部署）
+第二轮     基于 ea145d6 的修复，提交后须在此登记实际 SHA
+生产       仍运行 1d4ef48；本批未部署
 ```
 
 > **规则**：提交后必须把上表的 SHA 更新为实际提交 SHA，并在申报材料中引用该 SHA。
@@ -55,3 +63,13 @@
 | E4-02 | 用户/伦理委员会 | 真实学生试点的伦理与同意材料 | REAL_PENDING |
 | E5-01 | 用户/教研室 | 实际轮转时长、可招募人数、组别实施方式 | REAL_PENDING |
 | E5-02 | 用户/单位 | 伦理申报与单位支持签章 | REAL_PENDING |
+
+## E1–E5 缺项清单（第二轮更新）
+
+| 证据包 | 已有 | 仍缺 | 谁能提供 |
+| --- | --- | --- | --- |
+| E1 教学与人员 | 目录与缺项模板 | 六年见习任务证明、奖项原件、在编确认、团队签字 | 用户 / 教研室 / 人事 |
+| E2 平台基础 | 版本、测试、截图、演示说明、第二轮验收 | 展示授权、教师实际演示反馈 | 院系 / 真实教师 |
+| E3 病例与量表 | 6 份病例（已做一致性修订）、量表 v0.1、16 份模拟作答、空白审核表、审核材料包 | **两位真实教师的审核意见、日期与签名**；量表权重确认 | 两位带教教师 |
+| E4 前期验证 | C 教学闭环真实运行记录、D 合成演示（隔离） | 教师观摩意见；如开展真实试点需伦理批件 | 真实教师 / 伦理委员会 |
+| E5 研究方案 | v1.1 方案、SAP、数据字典、伦理要点、六栏正文 | **分组单位（整群/班内）的书面决定**；轮转时长、可招募人数；伦理批件；单位支持与签章 | 教研室 / 伦理委员会 / 单位 |

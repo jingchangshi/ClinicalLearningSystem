@@ -53,7 +53,7 @@
 | `study_id` | string | 唯一匿名研究编号，格式建议 `R-<年份>-<三位序号>` | 是 | 研究管理表 | **不得**使用姓名、学号、身份证号 |
 | `data_origin` | enum | 见 §1 | 是 | 写入时显式赋值 | 真实研究恒为 `REAL_CONSENTED` |
 | `group` | enum | `CBL` / `CLINPATH` | 是 | 分配记录 | 分配在 T0 前书面确定 |
-| `cohort` | string | 轮转批次（如 `2027春-批次1`） | 是 | 教务排课 | 用于分层与整群分析 |
+| `cohort` | string | 轮转批次（如 `2027春-批次1`） | 是 | 教务排课 | 用于分层、ICC 估计与整群分析；**分组单位未定**，班次整群时即分组单位，班内小组时是分析层 |
 | `site_id` | string | **新增**：见习医院/院区编码 | 是 | 教务 | 单中心时可填唯一值，但**不得留空** |
 | `department_id` | string | **新增**：科室/教研室编码 | 是 | 教务 | 用于确认"同一科室、同一批带教" |
 | `rotation_start` | date | **新增**：轮转开始日期 | 是 | 教务 | T0 必须早于此日期 |
@@ -127,7 +127,7 @@
 | `rater_B_total` | number (0–100) | 评分者 B 总分 | 是 | |
 | `rater_C_id` | string | **新增**：裁决者匿名编号 | 分歧时必填 | |
 | `rater_C_total` | number (0–100) | **新增**：裁决分 | 分歧时必填 | |
-| `independent_total` | number (0–100) | 主结局：两人均分或裁决后分数 | 是 | 规则须在 T0 前固定 |
+| `independent_total` | number (0–100) | **主要结局**：两位真实教师盲评的均分或裁决后分数 | 是 | 规则须在 T0 前固定；**这是主分析唯一的 Y** |
 | `rater_origin` | enum | `REAL_BLINDED_RATER`（真实研究）/ `SIMULATED_NOT_HUMAN`（演示） | 是 | **真实研究必须为 `REAL_BLINDED_RATER`** |
 | `rater_A_blinded_to_group` | boolean | **新增**：A 是否对组别设盲 | 是 | 应为 `true` |
 | `rater_A_blinded_to_timepoint` | boolean | **新增**：A 是否对 T0/T1 设盲 | 是 | 应为 `true` |
@@ -166,7 +166,7 @@
 | `completed` | boolean | 是否完成 | 是 | "完成"的定义须预先写定 |
 | `completed_steps` | integer | **新增**：完成的步骤数（0–5） | 是 | 平台五个推理步骤 |
 | `duration_minutes` | number | **新增**：训练用时 | 否 | 仅描述 |
-| `training_score_internal` | number / empty | 平台形成性评分 | 否 | **不得**替代独立主要结局 |
+| `training_score_internal` | number / empty | 平台形成性评分 | 否 | **过程指标**；**不得**替代独立主要结局，**不得**用于组间比较 |
 | `evaluation_mode` | enum | **新增统一枚举**：`ai` / `rule_fallback` / `no_ai` | 是 | 与平台 `scores.evaluation_mode` 对齐 |
 | `model_id` | string | 真实调用的模型版本 | 条件必填 | 未调用时写 `NONE` |
 | `prompt_version` | string | **新增**：提示词版本 | 条件必填 | 来自 `ai_invocations` |

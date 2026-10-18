@@ -39,6 +39,14 @@ PATHWAY_STAGE_LABELS = {
     for index, stage in enumerate(PATHWAY_STAGES, start=1)
 }
 
+# What a teacher review compared against. ``legacy_ambiguous`` is history, not
+# a guess: rows written before 20261018_07 cannot be resolved after the fact.
+BASELINE_SOURCE_LABELS = {
+    "ai": "AI 评分",
+    "rule_fallback": "规则降级评分（非 AI）",
+    "legacy_ambiguous": "历史记录（来源无法区分）",
+}
+
 # Teaching-intervention kinds recorded by ``POST /api/teacher/interventions``.
 # These reach a teacher's screen verbatim, so they belong in this module rather
 # than in each page that happens to render one.
