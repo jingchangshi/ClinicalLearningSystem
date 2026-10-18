@@ -1,5 +1,4 @@
 /** Independent assessment API; intentionally separate from formative api.ts. */
-import type { RequestInit } from "next/dist/server/web/spec-extension/request";
 const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api";
 async function call<T>(path:string,init?:RequestInit):Promise<T>{
   const res=await fetch(BASE+path,{...init,credentials:"include",cache:"no-store",headers:{"Content-Type":"application/json",...(init?.headers??{})}});

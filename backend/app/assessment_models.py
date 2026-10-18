@@ -16,6 +16,16 @@ class AssessmentForm(Base):
     review_status: Mapped[str] = mapped_column(String(30), default="PENDING_REAL_REVIEW", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
+class AssessmentFormReview(Base):
+    __tablename__ = "assessment_form_reviews"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    form_id: Mapped[int] = mapped_column(ForeignKey("assessment_forms.id"), nullable=False)
+    teacher_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    decision: Mapped[str] = mapped_column(String(20), nullable=False)
+    comment: Mapped[str] = mapped_column(Text, nullable=False)
+    reviewed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    __table_args__ = (UniqueConstraint("form_id","teacher_user_id",name="uq_assess_form_teacher"),)
+
 class AssessmentSitting(Base):
     __tablename__ = "assessment_sittings"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -24,6 +34,8 @@ class AssessmentSitting(Base):
     cohort_code: Mapped[str] = mapped_column(String(70), nullable=False)
     study_group: Mapped[str] = mapped_column(String(20), nullable=False)
     timepoint: Mapped[str] = mapped_column(String(5), nullable=False)
+    rater_a_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    rater_b_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
     blind_code: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     window_start: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     window_end: Mapped[datetime] = mapped_column(DateTime, nullable=False)

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user, require_role
 from app.database import get_db
 from app.models import Student, User
-from app.assessment_models import AssessmentForm, AssessmentSitting, AssessmentAnswer, AssessmentReview
+from app.assessment_models import AssessmentForm, AssessmentSitting, AssessmentAnswer, AssessmentReview, AssessmentFormReview
 
 router = APIRouter(prefix="/api/assessments", tags=["independent-assessments"])
 ABILITIES = ("medical_knowledge", "key_information", "differential_diagnosis",
@@ -33,9 +33,15 @@ class SittingIn(BaseModel):
     timepoint: str
     window_start: datetime
     window_end: datetime
+    rater_a_id: int
+    rater_b_id: int
 
 class AnswerIn(BaseModel):
     answer_text: str = Field(min_length=1, max_length=16000)
+
+class FormReviewIn(BaseModel):
+    decision: str
+    comment: str = Field(min_length=2)
 
 class ReviewIn(BaseModel):
     scores: dict[str, float]
@@ -79,17 +85,45 @@ def create_form(payload: FormIn, db: Session = Depends(get_db)):
     db.add(form); db.commit(); db.refresh(form)
     return {"id": form.id, "code": form.code, "review_status": form.review_status}
 
+@router.post("/forms/{form_id}/review", dependencies=[Depends(require_role(["teacher"]))])
+def review_form(form_id: int, payload: FormReviewIn, db: Session = Depends(get_db),
+                user: User = Depends(get_current_user)):
+    form = db.get(AssessmentForm, form_id)
+    if form is None: raise HTTPException(404, "Form not found")
+    if user.role != "teacher": raise HTTPException(403, "Independent teacher account required")
+    if payload.decision not in ("approve", "reject"): raise HTTPException(400, "Invalid decision")
+    if form.review_status == "APPROVED_FOR_ASSESSMENT":raise HTTPException(409,"Approved form is frozen")
+    if db.query(AssessmentFormReview).filter_by(form_id=form_id,teacher_user_id=user.id).first():
+        raise HTTPException(409, "Teacher already reviewed")
+    db.add(AssessmentFormReview(form_id=form_id,teacher_user_id=user.id,decision=payload.decision,comment=payload.comment))
+    db.commit()
+    return {"status":"recorded"}
+
+@router.get("/forms/{form_id}/admin", dependencies=[Depends(require_role(["admin"]))])
+def form_review_status(form_id:int,db:Session=Depends(get_db)):
+    form=db.get(AssessmentForm,form_id)
+    if not form:raise HTTPException(404,"Form not found")
+    reviews=db.query(AssessmentFormReview).filter_by(form_id=form_id).all()
+    return {"review_status":form.review_status,"reviews":[{"teacher_user_id":r.teacher_user_id,"decision":r.decision,"comment":r.comment} for r in reviews]}
+
 @router.post("/forms/{form_id}/approve", dependencies=[Depends(require_role(["admin"]))])
 def approve_form(form_id: int, db: Session = Depends(get_db)):
     form = db.get(AssessmentForm, form_id)
     if form is None: raise HTTPException(404, "Form not found")
-    # Approval is an administrative action, not evidence of two real teachers reviewing.
+    reviews=db.query(AssessmentFormReview).filter_by(form_id=form_id).all()
+    if len(reviews)<2 or any(r.decision!="approve" for r in reviews):
+        raise HTTPException(409, "Two distinct teacher approvals required")
     form.review_status = "APPROVED_FOR_ASSESSMENT"
     db.commit()
     return {"id": form.id, "review_status": form.review_status}
 
 @router.post("/sittings", dependencies=[Depends(require_role(["admin"]))])
 def assign(payload: SittingIn, db: Session = Depends(get_db)):
+    if payload.rater_a_id==payload.rater_b_id:
+        raise HTTPException(400,"Two different raters required")
+    raters=[db.get(User,payload.rater_a_id),db.get(User,payload.rater_b_id)]
+    if any(r is None or r.role!="teacher" for r in raters):
+        raise HTTPException(400,"Both raters must be teacher users")
     if payload.study_group not in ("CLINPATH", "CBL") or payload.timepoint not in ("T0", "T1"):
         raise HTTPException(400, "Invalid study group or timepoint")
     if payload.window_start >= payload.window_end:
@@ -102,7 +136,7 @@ def assign(payload: SittingIn, db: Session = Depends(get_db)):
         raise HTTPException(409, "Student timepoint already assigned")
     sitting = AssessmentSitting(student_id=payload.student_id,form_id=form.id,cohort_code=payload.cohort_code,
                                 study_group=payload.study_group,timepoint=payload.timepoint,
-                                blind_code=secrets.token_urlsafe(24),window_start=payload.window_start,
+                                blind_code=secrets.token_urlsafe(24),rater_a_id=payload.rater_a_id,rater_b_id=payload.rater_b_id,window_start=payload.window_start,
                                 window_end=payload.window_end)
     db.add(sitting);db.commit();db.refresh(sitting)
     return {"id": sitting.id, "status": sitting.status}
@@ -144,7 +178,7 @@ def submit(sitting_id:int,db:Session=Depends(get_db),user:User=Depends(get_curre
 
 @router.get("/blind/queue", dependencies=[Depends(require_role(["teacher"]))])
 def blind_queue(db:Session=Depends(get_db),user:User=Depends(get_current_user)):
-    qs=db.query(AssessmentSitting).filter_by(status="submitted").all()
+    qs=[s for s in db.query(AssessmentSitting).filter_by(status="submitted").all() if user.id in (s.rater_a_id,s.rater_b_id)]
     return [{"blind_code":s.blind_code,"reviewed":db.query(AssessmentReview).filter_by(sitting_id=s.id,rater_user_id=user.id).first() is not None}
             for s in qs]
 
@@ -152,6 +186,7 @@ def blind_queue(db:Session=Depends(get_db),user:User=Depends(get_current_user)):
 def blind_detail(blind_code:str,db:Session=Depends(get_db),user:User=Depends(get_current_user)):
     s=db.query(AssessmentSitting).filter_by(blind_code=blind_code,status="submitted").first()
     if s is None:raise HTTPException(404,"Submitted assessment not found")
+    if user.id not in (s.rater_a_id,s.rater_b_id):raise HTTPException(403,"Not assigned as blind rater")
     form=db.get(AssessmentForm,s.form_id)
     answers=db.query(AssessmentAnswer).filter_by(sitting_id=s.id).order_by(AssessmentAnswer.stage_index).all()
     # No student identity, group, cohort or T0/T1 in this response. No other rater's scores.
@@ -164,6 +199,7 @@ def blind_detail(blind_code:str,db:Session=Depends(get_db),user:User=Depends(get
 def review(blind_code:str,payload:ReviewIn,db:Session=Depends(get_db),user:User=Depends(get_current_user)):
     s=db.query(AssessmentSitting).filter_by(blind_code=blind_code,status="submitted").first()
     if s is None:raise HTTPException(404,"Submitted assessment not found")
+    if user.id not in (s.rater_a_id,s.rater_b_id):raise HTTPException(403,"Not assigned as blind rater")
     if db.query(AssessmentReview).filter_by(sitting_id=s.id,rater_user_id=user.id).first():
         raise HTTPException(409,"Review already locked")
     if set(payload.scores)!=set(ABILITIES) or any(not 0<=v<=100 for v in payload.scores.values()):

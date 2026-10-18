@@ -27,11 +27,26 @@ def setup_sitting(client,student_id):
          "answer_key":{"diagnosis":"hidden"},"rubric":{"dimensions":list(SCORES)}})
     assert form.status_code==200,form.text
     form_id=form.json()["id"]
+    assert client.post(f"/api/assessments/forms/{form_id}/approve").status_code==409
+    for name in ("reviewer_a","reviewer_b"):
+        login(client,name)
+        assert client.post(f"/api/assessments/forms/{form_id}/review",
+            json={"decision":"approve","comment":"真实审核接口测试，非实际医师签名"}).status_code==200
+    login(client,"admin_user")
     assert client.post(f"/api/assessments/forms/{form_id}/approve").status_code==200
+    from app.database import get_db
+    sess=next(iter(client.app.dependency_overrides[get_db]()))
+    rater_ids={u.username:u.id for u in sess.query(User).filter(User.username.in_(["reviewer_a","reviewer_b"])).all()}
+    sess.close()
+    from app.database import get_db
+    sess=next(iter(client.app.dependency_overrides[get_db]()))
+    rater_ids={u.username:u.id for u in sess.query(User).filter(User.username.in_(["reviewer_a","reviewer_b"])).all()}
+    sess.close()
     now=datetime.utcnow()
     sit=client.post("/api/assessments/sittings",json={"student_id":student_id,"form_id":form_id,
          "cohort_code":"cohort1","study_group":"CLINPATH","timepoint":"T0",
-         "window_start":(now-timedelta(minutes=1)).isoformat(),"window_end":(now+timedelta(hours=2)).isoformat()})
+         "window_start":(now-timedelta(minutes=1)).isoformat(),"window_end":(now+timedelta(hours=2)).isoformat(),
+         "rater_a_id":rater_ids["reviewer_a"],"rater_b_id":rater_ids["reviewer_b"]})
     assert sit.status_code==200,sit.text
     return sit.json()["id"]
 
@@ -49,7 +64,7 @@ def test_independent_exam_stages_and_blind_double_review(db_factory,client):
         post=client.post(f"/api/assessments/my/{sitting_id}/answer",json={"answer_text":f"独立作答{index}"})
         assert post.status_code==200,post.text
     assert client.post(f"/api/assessments/my/{sitting_id}/submit").status_code==200
-    assert client.get(f"/api/assessments/my/{sitting_id}").status_code==403
+    assert client.get(f"/api/assessments/my/{sitting_id}").status_code==409
     db=db_factory()
     assert db.query(Score).count()==0
     assert db.query(CaseSession).count()==0
@@ -81,5 +96,6 @@ def test_reject_unapproved_form(db_factory,client):
     now=datetime.utcnow()
     sit=client.post("/api/assessments/sittings",json={"student_id":student_id,"form_id":form.json()["id"],
         "cohort_code":"B2","study_group":"CBL","timepoint":"T1",
-        "window_start":now.isoformat(),"window_end":(now+timedelta(hours=1)).isoformat()})
+        "window_start":now.isoformat(),"window_end":(now+timedelta(hours=1)).isoformat(),
+        "rater_a_id":rater_ids["reviewer_a"],"rater_b_id":rater_ids["reviewer_b"]})
     assert sit.status_code==409
