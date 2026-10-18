@@ -15,7 +15,7 @@ from app.models import CaseSession, LearningRecommendation, Score, Student, User
 from app.services.llm_service import LLMService
 from tests.assessment_helpers import (
     ANCHORS, SECRET_KEY, _win, build_study, build_world, design_rows, login, post_schedule, publish_form,
-    schedule, study_windows, stages,
+    schedule, seed_submitted, study_windows, stages,
 )
 from tests.factories import make_case
 from tests.test_assessment_isolation import _training_snapshot
@@ -153,6 +153,12 @@ def test_a_repeat_call_creates_no_second_sitting_and_a_changed_plan_is_refused(d
     assert len(sitting_tuples(db_factory)) == 49
     assert audit_actions(client).count("design.schedule") == 2  # the refused call wrote nothing
 
+    # Once a sitting has been sat it is never re-planned, even with identical inputs.
+    seed_submitted(db_factory, ids[0])
+    sat = post_schedule(client, w, forms, windows)
+    assert sat.status_code == 409 and sat.json()["detail"]["code"] == "schedule_conflict"
+    assert len(sitting_tuples(db_factory)) == 49
+
 
 def test_nothing_is_scheduled_from_an_unapproved_unknown_or_odd_form(db_factory, client):
     w, forms, codes = study(db_factory, client)
@@ -164,7 +170,7 @@ def test_nothing_is_scheduled_from_an_unapproved_unknown_or_odd_form(db_factory,
     assert draft.status_code == 200, draft.text
     assert draft.json()["review_status"] != "APPROVED_FOR_ASSESSMENT"
 
-    # The unapproved form is refused mid-plan and every staged sitting is dropped with it.
+    # An unapproved form is refused before the first sitting is staged.
     r = post_schedule(client, w, {"A01": forms["A01"], "A02": draft.json()["id"]}, windows)
     assert r.status_code == 409 and r.json()["detail"]["code"] == "form_not_approved"
     assert sitting_tuples(db_factory) == {}
@@ -350,6 +356,41 @@ def test_the_export_of_a_planned_study_is_coded_complete_and_origin_scoped(db_fa
     assert not [n for n in names if n and n in blob]  # no student name reaches a research export
     # Another origin exports nothing: the two studies never mix in one file.
     assert client.get("/api/assessments/admin/export?data_origin=pilot_test").json()["records"] == []
+
+
+def test_real_and_synthetic_study_data_never_mix(db_factory, client):
+    """R1.2 / R6.4: a demo cohort can never stand in for, or be frozen into, the real study."""
+    w = build_world(db_factory, n_students=14, student_accounts=False)
+    forms = approved_forms(client, w)
+    real = build_study(client, w, n_cohorts=7, size=1, origin="real_study", seed="real", code_prefix="R",
+                       student_offset=0)
+    demo = build_study(client, w, n_cohorts=7, size=1, origin="synthetic_demo", seed="demo", code_prefix="D",
+                       student_offset=7)
+    real_windows, demo_windows = study_windows(real), study_windows(demo)
+    assert post_schedule(client, w, forms, real_windows).json()["created"] == 14
+    assert post_schedule(client, w, forms, demo_windows, data_origin="synthetic_demo").json()["created"] == 14
+
+    login(client, "admin_user")
+    # Each origin exports only its own rows, and the row itself says which it is.
+    real_rows = client.get("/api/assessments/admin/export?data_origin=real_study").json()["records"]
+    demo_rows = client.get("/api/assessments/admin/export?data_origin=synthetic_demo").json()["records"]
+    assert {r["data_origin"] for r in real_rows} == {"real_study"} and len(real_rows) == 14
+    assert {r["data_origin"] for r in demo_rows} == {"synthetic_demo"} and len(demo_rows) == 14
+    assert not {r["study_student_code"] for r in real_rows} & {r["study_student_code"] for r in demo_rows}
+    # A frozen dataset version carries one origin and cannot be read as the other.
+    lock = client.post("/api/assessments/admin/dataset-locks",
+                       json={"dataset_version": "demo-only-v1", "data_origin": "synthetic_demo",
+                             "allow_incomplete": True})
+    assert lock.status_code == 200, lock.text
+    snapshot = client.get("/api/assessments/admin/dataset-locks/demo-only-v1").json()["snapshot"]
+    assert snapshot["data_origin"] == "synthetic_demo"
+    assert {r["data_origin"] for r in snapshot["records"]} == {"synthetic_demo"}
+    # Re-running for either origin is a no-op; the other origin's batches are never touched.
+    assert post_schedule(client, w, forms, real_windows).json()["created"] == 0
+    assert post_schedule(client, w, forms, demo_windows, data_origin="synthetic_demo").json()["created"] == 0
+    # A batch code that belongs to the other origin is not a batch of this one.
+    r = post_schedule(client, w, forms, {**real_windows, demo[0]: real_windows[real[0]]})
+    assert r.status_code == 400 and r.json()["detail"]["code"] == "unknown_cohort"
 
 
 def stored_record(db_factory, kind):

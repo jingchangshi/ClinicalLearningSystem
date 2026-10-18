@@ -404,6 +404,10 @@ def schedule_study(payload: BulkScheduleIn, db: Session = Depends(get_db), admin
         raise fail(400, "bad_forms", "forms must map exactly A01 and A02 to published form ids")
     if payload.forms["A01"] == payload.forms["A02"]:
         raise fail(400, "bad_forms", "T0 and T1 must be two different forms")
+    # Resolve both forms once, before any sitting is staged: an unapproved or unknown
+    # form is an input error, not something to discover 90 rows into the plan.
+    for form_id in payload.forms.values():
+        require_published(get_form(db, form_id))
     cohorts = db.query(StudyCohort).filter_by(data_origin=payload.data_origin).order_by(StudyCohort.cohort_code).all()
     if not cohorts:
         raise fail(409, "no_cohorts", f"No cohort is registered with data_origin={payload.data_origin}")
