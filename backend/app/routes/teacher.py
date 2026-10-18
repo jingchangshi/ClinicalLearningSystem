@@ -604,17 +604,28 @@ def _teaching_insight_fallback(weak_dimensions: list[dict], training_summary: di
 
 def _student_row(student: Student) -> dict:
     profile = serialize_profile(student.competency_profile)
-    weakest = min(CORE_ABILITIES, key=lambda key: profile[key])
     completed = [session for session in student.sessions if session.status == "completed" and session.score]
-    return {
+    row = {
         "id": student.id,
         "name": student.name,
         "current_stage": student.current_stage,
         "current_stage_label": stage_label(student.current_stage),
         "recent_score": completed[-1].score.total_score if completed else None,
-        "weakest_ability": ABILITY_LABELS[weakest],
-        "recommended_training": _training_direction(weakest),
+        "has_profile": profile["has_profile"],
+        "weakest_ability": NO_PROFILE_LABEL,
+        "recommended_training": NO_PROFILE_TRAINING,
     }
+    if profile["has_profile"]:
+        # Only a learner with formative evidence has a weakest dimension. Reporting the
+        # first dimension of an all-zero profile would invent a weakness.
+        weakest = min(CORE_ABILITIES, key=lambda key: profile[key])
+        row["weakest_ability"] = ABILITY_LABELS[weakest]
+        row["recommended_training"] = _training_direction(weakest)
+    return row
+
+
+NO_PROFILE_LABEL = "尚无训练数据"
+NO_PROFILE_TRAINING = "完成首次病例训练后生成建议"
 
 
 def _training_direction(weakest: str) -> str:

@@ -124,7 +124,24 @@ def serialize_case_summary(case: Case) -> dict:
     }
 
 
-def serialize_profile(profile: CompetencyProfile) -> dict:
+def serialize_profile(profile: CompetencyProfile | None) -> dict:
+    """The learner's competency profile, or an explicitly empty one when there is none.
+
+    A student who has not trained yet has no ``CompetencyProfile`` row. That is a
+    normal state — the 49-student study enrolls a whole batch before any training —
+    so it serialises to zeros carrying ``has_profile: False`` instead of raising.
+    Zeros here mean "no formative evidence yet", never "measured zero": the flag
+    says which of the two it is, and ``updated_at`` stays null.
+    """
+    if profile is None:
+        return {
+            "has_profile": False,
+            **{key: 0 for key in ALL_COMPETENCIES},
+            "learning_engagement": 0,
+            "updated_at": None,
+            "chart_data": [{"dimension": ABILITY_LABELS[key], "score": 0} for key in CORE_ABILITIES],
+            "expanded_chart_data": [{"dimension": ABILITY_LABELS[key], "score": 0} for key in ALL_COMPETENCIES],
+        }
     skill_operation = _profile_value(
         profile,
         "skill_operation",
@@ -144,6 +161,7 @@ def serialize_profile(profile: CompetencyProfile) -> dict:
         "humanistic_care": humanistic_care_score,
     }
     return {
+        "has_profile": True,
         "medical_knowledge": profile.medical_knowledge,
         "skill_operation": skill_operation,
         "key_information": profile.key_information,
