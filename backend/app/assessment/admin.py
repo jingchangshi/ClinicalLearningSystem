@@ -469,3 +469,23 @@ def schedule_study(payload: BulkScheduleIn, db: Session = Depends(get_db), admin
     db.commit()
     return {"created": len(made), "existing": len(already), "students": len(student_ids),
             "cohorts": per_cohort, "sitting_ids": made, "existing_ids": already}
+
+
+@router.get("/staff")
+def list_staff(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """Staff directory so the UI can name reviewers/raters/adjudicators instead of printing ids.
+
+    Deliberately narrow: the four fields the pickers need. No credential, hash or
+    contact column is ever selected, so a compromised admin session cannot use this
+    route to enumerate secrets.
+    """
+    rows = []
+    for user in db.query(User).filter(User.role.in_(("teacher", "admin"))).order_by(User.id).all():
+        teacher = user.teacher
+        name = (teacher.name if teacher is not None else None) or user.username
+        rows.append({"user_id": user.id, "display_name": name, "role": user.role,
+                     "teacher_no": teacher.teacher_no if teacher is not None else None})
+    rows.sort(key=lambda r: (r["display_name"], r["user_id"]))
+    audit(db, admin, "staff.read", "staff", "directory", {"rows": len(rows)})
+    db.commit()
+    return rows

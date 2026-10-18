@@ -251,3 +251,25 @@ def approve_form(form_id: int, db: Session = Depends(get_db), admin: User = Depe
            "approving_teacher_user_ids": sorted(r.teacher_user_id for r in good)})
     db.commit()
     return {"id": form.id, "review_status": form.review_status}
+
+
+@router.get("/forms/mine")
+def my_forms(db: Session = Depends(get_db), user: User = Depends(require_author)):
+    """Forms this author created, newest version per code, metadata only.
+
+    A teacher needs this to reopen their own draft and to start a new version; the
+    admin listing is admin-only and the reviewable list only shows forms they were
+    invited to review. Bodies are omitted on purpose — a new version is built from
+    the version's own admin detail, not from a list response.
+    """
+    rows = db.query(AssessmentForm).filter(AssessmentForm.author_user_id == user.id).all()
+    newest: dict[str, AssessmentForm] = {}
+    for form in rows:
+        seen = newest.get(form.code)
+        if seen is None or form.version > seen.version:
+            newest[form.code] = form
+    out = [{"id": f.id, "code": f.code, "version": f.version, "title": f.title,
+            "review_status": f.review_status, "published_at": iso_z(f.published_at)}
+           for f in newest.values()]
+    out.sort(key=lambda r: (r["code"], r["version"]))
+    return out
