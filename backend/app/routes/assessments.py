@@ -148,6 +148,15 @@ def assign(payload: SittingIn, db: Session = Depends(get_db)):
     if db.get(Student, payload.student_id) is None: raise HTTPException(404, "Student not found")
     if db.query(AssessmentSitting).filter_by(student_id=payload.student_id,timepoint=payload.timepoint).first():
         raise HTTPException(409, "Student timepoint already assigned")
+    # A seven-student teaching batch is indivisible: no within-batch allocation.
+    cohort_rows=db.query(AssessmentSitting).filter_by(cohort_code=payload.cohort_code).all()
+    if any(row.study_group!=payload.study_group for row in cohort_rows):
+        raise HTTPException(409, "Cohort group assignment is immutable; cannot split a batch")
+    if len({row.student_id for row in cohort_rows}|{payload.student_id})>7:
+        raise HTTPException(409, "A clerkship cohort cannot contain more than seven students")
+    cross_rows=db.query(AssessmentSitting).filter_by(student_id=payload.student_id).all()
+    if any(row.cohort_code!=payload.cohort_code or row.study_group!=payload.study_group for row in cross_rows):
+        raise HTTPException(409, "Student's T0/T1 must share the same cohort and allocation")
     sitting = AssessmentSitting(student_id=payload.student_id,form_id=form.id,cohort_code=payload.cohort_code,
                                 study_group=payload.study_group,timepoint=payload.timepoint,
                                 blind_code=secrets.token_urlsafe(24),rater_a_id=payload.rater_a_id,rater_b_id=payload.rater_b_id,window_start=payload.window_start,
