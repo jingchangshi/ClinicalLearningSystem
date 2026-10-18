@@ -17,7 +17,7 @@
 | R6.3 | E1—E5 证据包 | **已更新（本成员）** | `evidence/E1…E5`；E2 的真实截图/运行记录标 PENDING 直至实际产生 |
 | R6.4 | 合成 Demo | 保留 | `demo_research/synthetic_v1/` 未改动；`SYNTHETIC / SIMULATED_NOT_HUMAN` |
 | R7 | 申报材料 | **草稿已交付（本成员）**；官方模板 **BLOCKED** | `APPLICATION_PACKAGE/`、`E5_04_application_text.md` |
-| R8.1 | 后端测试 | 已执行（中期） | 见 `TEST_REPORT.md`：基线 `47f7e6d` 307 通过 / 5 失败 / 1 xfail |
+| R8.1 | 后端测试 | 已执行（中期） | 见 `TEST_REPORT.md`：`f7f737c` 329 通过 / 1 失败 / 1 xfail（`47f7e6d` 为 307 / 5 / 1） |
 | R8.2 | 前端/浏览器 | **未执行（本成员）** | worktree 未安装 `node_modules`，`tsc: not found`，不得视为通过 |
 | R8.3 | 迁移验收 | **未执行（本成员）** | 他人负责；部分迁移测试在基线失败 |
 | R8.4 | 生产保护 | 遵守 | 未合并 `main`、未部署、未对生产库迁移 |

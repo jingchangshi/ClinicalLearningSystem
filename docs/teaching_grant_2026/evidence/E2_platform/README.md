@@ -8,6 +8,7 @@
 | 编号 | 证据 | Git SHA | 环境 | 时间 (UTC) | 位置 | 结果 |
 | --- | --- | --- | --- | --- | --- | --- |
 | E2-01 | 后端全量 pytest（干净检出） | `47f7e6d` | aarch64 Linux / uv / Python 3.11 / 临时 SQLite | 2026-10-18 14:18—14:20 | `test_runs/backend_pytest_47f7e6d.log` | **307 passed，5 failed，1 xfailed**（失败项见 `../../FINAL_DELIVERY/TEST_REPORT.md`） |
+| E2-01b | 后端全量 pytest（干净检出，第二次，**最新**） | `f7f737c` | 同上 | 2026-10-18 14:25—14:27 | `test_runs/backend_pytest_f7f737c.log` | **329 passed，1 failed，1 xfailed**（失败：`test_version_endpoint`） |
 | E2-02 | 训练闭环四链路核验与端到端测试 | 前几轮提交 | 同上 | 2026-10-18（第四轮） | `../E5_protocol/T3_personalization_validation.md`、`backend/tests/test_7day_personalization_loop.py` | 第四轮记录 4 passed / 1 xfailed；当前以 E2-01 为准 |
 | E2-03 | 工作包 C：SLE 端到端真实运行记录（验证栈，非生产） | 见 `../../EVIDENCE_INDEX.md` 生成基线 | 隔离验证栈 | 2026-10-18（第一轮） | `../../workpackages/C_workflow/` | 评分走 `rule_fallback`，提问走真实模型；不得写成 AI 评分 |
 | E2-04 | 页面截图（训练与教师侧、合成演示页） | 同上 | 同上 | 同上 | `../../workpackages/C_workflow/C04_screenshots/`、`../../workpackages/D_research_demo/D01_screenshots/` | **属早期版本截图**，不含独立考核页面；引用时须写明其对应的早期 SHA |

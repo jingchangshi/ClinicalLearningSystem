@@ -13,7 +13,7 @@
 
 | # | 检查项 | 状态 |
 | --- | --- | --- |
-| 1 | 后端测试全绿（`uv run --python 3.11 --with-requirements requirements.txt pytest -q`）；失败项逐条说明 | 未满足（基线 307 通过 / 5 失败，见 `TEST_REPORT.md`） |
+| 1 | 后端测试全绿（`uv run --python 3.11 --with-requirements requirements.txt pytest -q`）；失败项逐条说明 | 未满足（`f7f737c`：329 通过 / 1 失败，见 `TEST_REPORT.md`） |
 | 2 | `npm run typecheck && npm run lint && npm run build` | 未执行（本成员 worktree 无 `node_modules`） |
 | 3 | Playwright 全量，含独立考核中断恢复 | 未执行 |
 | 4 | **带时间戳的 SQLite 备份**（任何 schema/数据变更前） | 未执行；生产库本成员未触碰 |

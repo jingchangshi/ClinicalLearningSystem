@@ -1,0 +1,31 @@
+date_utc: 2026-10-18T14:25:31Z
+sha: f7f737ccbb9b3466f3e4bbea7c3918aa4d22cc84
+checkout: clean detached worktree of the SHA
+host: Linux 6.8.0-1049-oracle aarch64
+command: cd backend && uv run --python 3.11 --with-requirements requirements.txt pytest -q
+..........................................F                              [100%]
+=================================== FAILURES ===================================
+________________ test_version_endpoint_reports_deployment_truth ________________
+
+client = <starlette.testclient.TestClient object at 0xfd8d5a64df10>
+
+    def test_version_endpoint_reports_deployment_truth(client):
+        response = client.get("/api/system/version")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["environment"]
+        assert payload["backend_source_fingerprint"].startswith("v1:")
+>       assert payload["schema_revision"]
+E       assert None
+
+tests/test_version_endpoint.py:52: AssertionError
+=============================== warnings summary ===============================
+../../../../home/jcshi/.cache/uv/archive-v0/dvAqh2s2pOALJYP3/lib/python3.11/site-packages/starlette/testclient.py:40
+  /home/jcshi/.cache/uv/archive-v0/dvAqh2s2pOALJYP3/lib/python3.11/site-packages/starlette/testclient.py:40: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = typing.Callable[[], typing.ContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_version_endpoint.py::test_version_endpoint_reports_deployment_truth
+1 failed, 329 passed, 1 xfailed, 1 warning in 120.59s (0:02:00)
+finished_utc: 2026-10-18T14:27:34Z

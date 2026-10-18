@@ -96,7 +96,7 @@
 | E-F-01 | 申报六栏正文（终稿轮）与占位符清单（13 项） | DRAFT_PENDING_REVIEW | `evidence/E5_protocol/E5_04_application_text.md`、`E5_04_placeholders.md` | 见 `git log -- 该文件` | 字数与 R7.4 内容检查通过；`【待填】` 待真实人员 | "申报书六栏正文已起草并通过字数与一致性检查；待填项待申请人提供" |
 | E-F-02 | 申报材料包（md + docx，非官方模板） | DRAFT_PENDING_REVIEW | `APPLICATION_PACKAGE/` | 同上 | **官方原件未获得（BLOCKED）** | "已准备可编辑申报材料草稿；官方模板待申请人提供" |
 | E-F-03 | 研究方案 v3.1 | DRAFT_PENDING_REVIEW | `evidence/E5_protocol/E5_01_research_protocol.md` | 同上 | 待教研室确认排期与随机化执行方式 | "研究采用 7 批次整批分配，D1/D6 为 ClinPath 独立在线考核" |
-| E-F-04 | 后端全量测试记录（干净检出，中期） | PLATFORM_EVIDENCE | `evidence/E2_platform/test_runs/backend_pytest_47f7e6d.log` | `47f7e6d` | **307 通过 / 5 失败 / 1 xfail**（如实） | "（仅陈述实测数字，不写“全部通过”）" |
+| E-F-04 | 后端全量测试记录（干净检出，中期） | PLATFORM_EVIDENCE | `evidence/E2_platform/test_runs/backend_pytest_47f7e6d.log`、`backend_pytest_f7f737c.log` | `47f7e6d`、`f7f737c` | `47f7e6d`：307 通过 / 5 失败 / 1 xfail；`f7f737c`：**329 通过 / 1 失败 / 1 xfail**（如实） | "（仅陈述实测数字，不写“全部通过”）" |
 | E-F-05 | 申报文本/一致性检查脚本及其自测 | PLATFORM_EVIDENCE | `scripts/grant/check_*.py`、`backend/tests/test_grant_checkers.py` | 见 `git log` | 44 项自测通过 | "文本与方案由脚本做机械一致性检查" |
 | E-F-06 | 最终交付文件骨架 | DRAFT | `FINAL_DELIVERY/`（11 个文件） | 同上 | 待牵头成员集成后更新测试与状态 | — |
 

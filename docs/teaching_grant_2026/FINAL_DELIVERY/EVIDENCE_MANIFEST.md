@@ -8,6 +8,7 @@
 | ID | 内容 | Git SHA | 环境 | 执行时间 (UTC) | 日志 / 位置 | 结果 |
 | --- | --- | --- | --- | --- | --- | --- |
 | M-01 | 后端全量 pytest（干净检出） | `47f7e6d` | 本机 aarch64 Linux，uv + Python 3.11，detached worktree（无他人未提交改动） | 2026-10-18 14:18—14:20 | `../evidence/E2_platform/test_runs/backend_pytest_47f7e6d.log` | **307 passed / 5 failed / 1 xfailed**；失败项列在 `TEST_REPORT.md` |
+| M-01b | 后端全量 pytest（干净检出，第二次） | `f7f737c` | 同上 | 2026-10-18 14:25—14:27 | `../evidence/E2_platform/test_runs/backend_pytest_f7f737c.log` | **329 passed / 1 failed / 1 xfailed** |
 | M-02 | 申报正文字数与内容检查 | 本提交 | 本机 python3 | 见 `TEST_REPORT.md` | `python3 scripts/grant/check_application_text.py` | 见 `TEST_REPORT.md` |
 | M-03 | 方案一致性检查 | 本提交 | 本机 python3 | 见 `TEST_REPORT.md` | `python3 scripts/grant/check_protocol_consistency.py` | 见 `TEST_REPORT.md` |
 | M-04 | 检查脚本自测 | 本提交 | uv + pytest | 见 `TEST_REPORT.md` | `backend/tests/test_grant_checkers.py` | 见 `TEST_REPORT.md` |
