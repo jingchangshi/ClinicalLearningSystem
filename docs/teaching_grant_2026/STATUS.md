@@ -228,7 +228,7 @@ python3.11 scripts/grant/sample_size.py              按 49 人 / 7 批次重算
 - **预先固定 3 批 ClinPath / 4 批 CBL**，从 **C(7,3)=35** 种合法分配中随机产生；
   记录随机种子、批次日期、执行人与结果。
 - **主要分析单位 = 批次（7 个群）**；精确随机化检验枚举全部 35 种分配，
-  **最小双侧 P = 2/35 ≈ 0.057，α = 0.05 不可达**，因此不承诺统计显著性。
+  双侧 P = #{|T_perm| ≥ |T_obs|}/35，**最小值取决于数据**（唯一最大 → 1/35；并列 → ≥ 2/35，并非无条件 2/35），一律按探索性报告，不承诺统计显著性。
 - 辅助：整群稳健/混合模型，明确报告 G−2 = 5、t=2.571、wild bootstrap 下限 0.0156。
 - **不使用**个体层面 HC3 代替整群处理；**不使用**合成 Demo 估计真实效应。
 
@@ -249,7 +249,7 @@ python3.11 scripts/grant/sample_size.py              按 49 人 / 7 批次重算
 python3.11 scripts/grant/check_protocol_consistency.py   PASS（0 违规）
 python3.11 scripts/grant/check_application_text.py       6/6 栏在限内，合计 3575/3900
 python3.11 scripts/grant/check_case_cards.py             88/88 PASS
-python3.11 scripts/grant/sample_size.py                  exit 0（方案 A：21 vs 28，2/35 下限）
+python3.11 scripts/grant/sample_size.py                  exit 0（方案 A：21 vs 28，P 取 k/35）
 pytest -q tests/test_7day_personalization_loop.py        4 passed, 1 xfailed
 ```
 

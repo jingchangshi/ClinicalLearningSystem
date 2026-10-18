@@ -307,14 +307,15 @@ def main() -> None:
     print(f"  wild cluster bootstrap（Rademacher 权重，G=7）符号组合数 = 2^7 = {2 ** 7}，")
     print(f"  双侧 P 值不可能小于 2/128 = {2 / 2 ** 7:.4f}")
     print(f"  精确随机化检验：全部合法分配数 = C(7,3) = {math.comb(7, 3)} 种（**可精确枚举**）")
-    print(f"  最小可及双侧精确 P = 2/35 = {2 / math.comb(7, 3):.4f} > 0.05")
-    print(f"  → α=0.05 在本设计下**不可达**（7 个群、3 vs 4 分配的固有信息上限）")
+    print(f"  P 值分辨率 1/35 = {1 / math.comb(7, 3):.4f}；最小双侧 P 取决于数据"
+          f"（唯一最大 → 1/35，并列 → ≥ 2/35 = {2 / math.comb(7, 3):.4f}）")
+    print(f"  → p < 0.05 仅当观察分配 |T| 唯一最大；仍为探索性信号（7 个群的固有信息上限）")
     print()
     print("结论：")
     print(f"  · 49 名学生按 7 批次整群分配为 3 批 vs 4 批（{n_small} vs {n_large} 人）；")
     print(f"    较小臂 {n_small} 人/组、未计设计效应时 80% 功效最小可检出 d = {mdd(n_small):.3f}，")
     print(f"    计入整群设计效应后更差；对 d=0.50 的名义功效仅 {achieved_power(0.50, n_small):.3f}。")
-    print(f"  · 组别效应自由度由群数决定（G−2 = {batches - 2}）；精确检验最小双侧 P = 2/35 ≈ 0.057；")
+    print(f"  · 组别效应自由度由群数决定（G−2 = {batches - 2}）；精确检验 P 值分辨率 1/35（最小值取决于数据）；")
     print(f"    wild cluster bootstrap 双侧 P 下限为 2/128 ≈ 0.0156。")
     print(f"  · 若要以 80% 功效检出 d=0.50，需要 {n_t(0.50)} 人/组（合计 {2 * n_t(0.50)} 人），"
           f"是 49 人的 {2 * n_t(0.50) / total:.1f} 倍。")

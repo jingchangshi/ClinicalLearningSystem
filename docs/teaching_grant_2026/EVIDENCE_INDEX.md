@@ -82,7 +82,7 @@
 | 条目ID | 内容 | 来源类别 | 文件路径 | 审核状态 | 可用于申报书的准确句子 |
 | --- | --- | --- | --- | --- | --- |
 | E-R4-01 | 唯一研究设计（7 批次整群随机） | DRAFT_PENDING_REVIEW | `evidence/E5_protocol/T3_design_comparison.md`；`E5_01` §3 | 设计已锁定；待教研室提供批次日期与抽签执行人 | "研究采用 7 批次整群随机分配，从 C(7,3)=35 种合法分配中随机产生" |
-| E-R4-02 | 精确随机化检验与小样本限制 | DRAFT_PENDING_REVIEW | `E5_02` §3.3；`scripts/grant/sample_size.py` | 待统计顾问复核 | "以 7 个批次为分析单位，精确枚举 35 种分配；最小双侧 P=2/35≈0.057" |
+| E-R4-02 | 精确随机化检验与小样本限制 | DRAFT_PENDING_REVIEW | `E5_02` §3.3；`scripts/grant/sample_size.py` | 待统计顾问复核 | "以 7 个批次为分析单位，精确枚举 35 种分配；P 取 k/35、最小值取决于数据（唯一最大时 1/35，并列时 ≥2/35），不宣称确证性" |
 | E-R4-03 | 个性化闭环代码核验 | PLATFORM_EVIDENCE | `evidence/E5_protocol/T3_personalization_validation.md`；`backend/tests/test_7day_personalization_loop.py` | 测试通过（4 passed, 1 xfailed） | "平台已接通训练评分→能力画像→短板推荐→教师干预的闭环" |
 | E-R4-04 | 考核模式缺口（平台无独立考核模式） | PLATFORM_EVIDENCE（缺口） | `evidence/E5_protocol/T3_personalization_gap.md` | 已记录，未改代码 | "平台尚不能在提交层区分训练与独立考核，正式考核前需解决" |
 | E-R4-05 | 题本顺序 X/Y 整批内随机 | DRAFT_PENDING_REVIEW | `workpackages/A_cases/A04_assessment_quality_control.md` §2 | 待两位教师校准 | "题本顺序在整批内部随机平衡，不改变批次所属教学组" |
