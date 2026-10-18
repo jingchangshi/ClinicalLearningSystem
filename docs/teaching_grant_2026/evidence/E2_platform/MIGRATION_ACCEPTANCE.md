@@ -1,8 +1,9 @@
 # R8.3 数据库迁移验收（MIGRATION_ACCEPTANCE）
 
 > 状态：**技术验收通过（存在 1 项历史遗留差异，见第 5 节）**
-> 验收对象：分支 `feat/clinpath-final-2026`，提交 `758c57b7aa471c2d51678aef751bcd9347ffb8ed`
-> 执行时间：2026-10-18 15:10 UTC
+> 验收对象：分支 `feat/clinpath-final-2026`，后端与迁移代码提交 `2fd5558579e8d557d86bef631542688beb3383ee`
+> （运行时分支 tip 为 `5214be523d60c023ea2544399877d8fe86545e69`，该提交只改前端，未触及 `backend/`）
+> 执行时间：2026-10-18 15:23 UTC
 > 环境：Linux 6.8.0-1049-oracle aarch64；uv 0.11.16；Python 3.11.15；SQLite（Python 标准库 `sqlite3`）
 > 结论适用范围：本文件只证明**数据库迁移**。前端、浏览器、部署不在本文件范围。
 > **没有对任何生产数据库执行迁移。** 本机没有经过授权的生产库副本，因此 R8.3 中「生产库副本」一项
@@ -109,7 +110,7 @@ head -> 20261018_07 -> head  ：07 状态与 head 状态两次比较均逐行字
   考核表随迁移出现/消失、再次升级后的结构与首次升级及 `create_all` 等价，并显式断言
   `created_at DATETIME NOT NULL`。**临时移除修复后该测试确实失败**（报错行即该断言）。
 
-### 5.2 需要知悉：根 revision 的 `create_all(checkfirst)` 约定
+### 5.2 需要知悉：根 revision 在空库上 `create_all` 的约定
 
 如第 1 节所述，`20261018_07` 处已有考核表。这意味着：
 
@@ -165,7 +166,7 @@ uv run --python 3.11 --with-requirements requirements.txt \
 
 ```text
 
-=== isolated database: /tmp/clinpath-migration-acceptance.j5XK1p/acceptance.db (temporary; no other database is read or written) ===
+=== isolated database: /tmp/clinpath-migration-acceptance.ISl5kB/acceptance.db (temporary; no other database is read or written) ===
 
 === 1. upgrade to 20261018_07 (before the assessment revisions) ===
 
@@ -176,13 +177,13 @@ $ uv run --python 3.11 --with-requirements requirements.txt alembic current
 
 === 2. seed the pre-existing training rows ===
 
-$ uv run --python 3.11 --with-requirements requirements.txt python tools/migration_acceptance.py seed --db /tmp/clinpath-migration-acceptance.j5XK1p/acceptance.db
+$ uv run --python 3.11 --with-requirements requirements.txt python tools/migration_acceptance.py seed --db /tmp/clinpath-migration-acceptance.ISl5kB/acceptance.db
 seeded the training fixture rows
 
 === 3. dump the training data BEFORE the assessment migrations ===
 
-$ uv run --python 3.11 --with-requirements requirements.txt python tools/migration_acceptance.py dump --db /tmp/clinpath-migration-acceptance.j5XK1p/acceptance.db --out /tmp/clinpath-migration-acceptance.j5XK1p/dump_pre_assessment.json
-dumped 41 tables (revision 20261018_07) to /tmp/clinpath-migration-acceptance.j5XK1p/dump_pre_assessment.json
+$ uv run --python 3.11 --with-requirements requirements.txt python tools/migration_acceptance.py dump --db /tmp/clinpath-migration-acceptance.ISl5kB/acceptance.db --out /tmp/clinpath-migration-acceptance.ISl5kB/dump_pre_assessment.json
+dumped 41 tables (revision 20261018_07) to /tmp/clinpath-migration-acceptance.ISl5kB/dump_pre_assessment.json
 
 === 4. upgrade head ===
 
@@ -191,13 +192,13 @@ $ uv run --python 3.11 --with-requirements requirements.txt alembic upgrade head
 $ uv run --python 3.11 --with-requirements requirements.txt alembic current
 20261018_09 (head)
 
-$ uv run --python 3.11 --with-requirements requirements.txt python tools/migration_acceptance.py schema --db /tmp/clinpath-migration-acceptance.j5XK1p/acceptance.db --out /tmp/clinpath-migration-acceptance.j5XK1p/schema_after_upgrade.json
-wrote 52 schema objects to /tmp/clinpath-migration-acceptance.j5XK1p/schema_after_upgrade.json
+$ uv run --python 3.11 --with-requirements requirements.txt python tools/migration_acceptance.py schema --db /tmp/clinpath-migration-acceptance.ISl5kB/acceptance.db --out /tmp/clinpath-migration-acceptance.ISl5kB/schema_after_upgrade.json
+wrote 52 schema objects to /tmp/clinpath-migration-acceptance.ISl5kB/schema_after_upgrade.json
 
-$ uv run --python 3.11 --with-requirements requirements.txt python tools/migration_acceptance.py dump --db /tmp/clinpath-migration-acceptance.j5XK1p/acceptance.db --out /tmp/clinpath-migration-acceptance.j5XK1p/dump_after_upgrade.json
-dumped 41 tables (revision 20261018_09) to /tmp/clinpath-migration-acceptance.j5XK1p/dump_after_upgrade.json
+$ uv run --python 3.11 --with-requirements requirements.txt python tools/migration_acceptance.py dump --db /tmp/clinpath-migration-acceptance.ISl5kB/acceptance.db --out /tmp/clinpath-migration-acceptance.ISl5kB/dump_after_upgrade.json
+dumped 41 tables (revision 20261018_09) to /tmp/clinpath-migration-acceptance.ISl5kB/dump_after_upgrade.json
 
-$ uv run --python 3.11 --with-requirements requirements.txt python tools/migration_acceptance.py compare --before /tmp/clinpath-migration-acceptance.j5XK1p/dump_pre_assessment.json --after /tmp/clinpath-migration-acceptance.j5XK1p/dump_after_upgrade.json
+$ uv run --python 3.11 --with-requirements requirements.txt python tools/migration_acceptance.py compare --before /tmp/clinpath-migration-acceptance.ISl5kB/dump_pre_assessment.json --after /tmp/clinpath-migration-acceptance.ISl5kB/dump_after_upgrade.json
 same    ai_enrichments (0 rows)
 same    ai_invocations (1 rows)
 same    ai_messages (0 rows)
@@ -250,7 +251,7 @@ $ uv run --python 3.11 --with-requirements requirements.txt alembic downgrade 20
 $ uv run --python 3.11 --with-requirements requirements.txt alembic current
 20261018_07
 
-$ uv run --python 3.11 --with-requirements requirements.txt python tools/migration_acceptance.py tables --db /tmp/clinpath-migration-acceptance.j5XK1p/acceptance.db
+$ uv run --python 3.11 --with-requirements requirements.txt python tools/migration_acceptance.py tables --db /tmp/clinpath-migration-acceptance.ISl5kB/acceptance.db
 ai_enrichments	rows=0	columns=11
 ai_invocations	rows=1	columns=15
 ai_messages	rows=0	columns=6
@@ -277,10 +278,10 @@ teaching_interventions	rows=0	columns=7
 tutor_turns	rows=1	columns=8
 users	rows=2	columns=7
 
-$ uv run --python 3.11 --with-requirements requirements.txt python tools/migration_acceptance.py dump --db /tmp/clinpath-migration-acceptance.j5XK1p/acceptance.db --out /tmp/clinpath-migration-acceptance.j5XK1p/dump_after_downgrade.json
-dumped 25 tables (revision 20261018_07) to /tmp/clinpath-migration-acceptance.j5XK1p/dump_after_downgrade.json
+$ uv run --python 3.11 --with-requirements requirements.txt python tools/migration_acceptance.py dump --db /tmp/clinpath-migration-acceptance.ISl5kB/acceptance.db --out /tmp/clinpath-migration-acceptance.ISl5kB/dump_after_downgrade.json
+dumped 25 tables (revision 20261018_07) to /tmp/clinpath-migration-acceptance.ISl5kB/dump_after_downgrade.json
 
-$ uv run --python 3.11 --with-requirements requirements.txt python tools/migration_acceptance.py compare --before /tmp/clinpath-migration-acceptance.j5XK1p/dump_pre_assessment.json --after /tmp/clinpath-migration-acceptance.j5XK1p/dump_after_downgrade.json
+$ uv run --python 3.11 --with-requirements requirements.txt python tools/migration_acceptance.py compare --before /tmp/clinpath-migration-acceptance.ISl5kB/dump_pre_assessment.json --after /tmp/clinpath-migration-acceptance.ISl5kB/dump_after_downgrade.json
 same    ai_enrichments (0 rows)
 same    ai_invocations (1 rows)
 same    ai_messages (0 rows)
@@ -333,13 +334,13 @@ $ uv run --python 3.11 --with-requirements requirements.txt alembic upgrade head
 $ uv run --python 3.11 --with-requirements requirements.txt alembic current
 20261018_09 (head)
 
-$ uv run --python 3.11 --with-requirements requirements.txt python tools/migration_acceptance.py schema --db /tmp/clinpath-migration-acceptance.j5XK1p/acceptance.db --out /tmp/clinpath-migration-acceptance.j5XK1p/schema_after_reupgrade.json
-wrote 52 schema objects to /tmp/clinpath-migration-acceptance.j5XK1p/schema_after_reupgrade.json
+$ uv run --python 3.11 --with-requirements requirements.txt python tools/migration_acceptance.py schema --db /tmp/clinpath-migration-acceptance.ISl5kB/acceptance.db --out /tmp/clinpath-migration-acceptance.ISl5kB/schema_after_reupgrade.json
+wrote 52 schema objects to /tmp/clinpath-migration-acceptance.ISl5kB/schema_after_reupgrade.json
 
-$ uv run --python 3.11 --with-requirements requirements.txt python tools/migration_acceptance.py dump --db /tmp/clinpath-migration-acceptance.j5XK1p/acceptance.db --out /tmp/clinpath-migration-acceptance.j5XK1p/dump_after_reupgrade.json
-dumped 41 tables (revision 20261018_09) to /tmp/clinpath-migration-acceptance.j5XK1p/dump_after_reupgrade.json
+$ uv run --python 3.11 --with-requirements requirements.txt python tools/migration_acceptance.py dump --db /tmp/clinpath-migration-acceptance.ISl5kB/acceptance.db --out /tmp/clinpath-migration-acceptance.ISl5kB/dump_after_reupgrade.json
+dumped 41 tables (revision 20261018_09) to /tmp/clinpath-migration-acceptance.ISl5kB/dump_after_reupgrade.json
 
-$ uv run --python 3.11 --with-requirements requirements.txt python tools/migration_acceptance.py compare --before /tmp/clinpath-migration-acceptance.j5XK1p/dump_pre_assessment.json --after /tmp/clinpath-migration-acceptance.j5XK1p/dump_after_reupgrade.json
+$ uv run --python 3.11 --with-requirements requirements.txt python tools/migration_acceptance.py compare --before /tmp/clinpath-migration-acceptance.ISl5kB/dump_pre_assessment.json --after /tmp/clinpath-migration-acceptance.ISl5kB/dump_after_reupgrade.json
 same    ai_enrichments (0 rows)
 same    ai_invocations (1 rows)
 same    ai_messages (0 rows)
@@ -385,7 +386,7 @@ same    users (2 rows)
 training tables seeded and compared: 14; byte-identical: 14
 tables identical: 41, revision 20261018_07 -> 20261018_09
 
-$ uv run --python 3.11 --with-requirements requirements.txt python tools/migration_acceptance.py compare --before /tmp/clinpath-migration-acceptance.j5XK1p/dump_after_upgrade.json --after /tmp/clinpath-migration-acceptance.j5XK1p/dump_after_reupgrade.json
+$ uv run --python 3.11 --with-requirements requirements.txt python tools/migration_acceptance.py compare --before /tmp/clinpath-migration-acceptance.ISl5kB/dump_after_upgrade.json --after /tmp/clinpath-migration-acceptance.ISl5kB/dump_after_reupgrade.json
 same    ai_enrichments (0 rows)
 same    ai_invocations (1 rows)
 same    ai_messages (0 rows)
@@ -433,12 +434,12 @@ tables identical: 41, revision 20261018_09 -> 20261018_09
 
 === 7. migrated schema vs a fresh create_all install of the same models ===
 
-$ env DATABASE_URL=sqlite:////tmp/clinpath-migration-acceptance.j5XK1p/fresh_create_all.db uv run --python 3.11 --with-requirements requirements.txt python -c from app.database import Base, engine; import app.models, app.assessment_models; Base.metadata.create_all(engine)
+$ env DATABASE_URL=sqlite:////tmp/clinpath-migration-acceptance.ISl5kB/fresh_create_all.db uv run --python 3.11 --with-requirements requirements.txt python -c from app.database import Base, engine; import app.models, app.assessment_models; Base.metadata.create_all(engine)
 
-$ uv run --python 3.11 --with-requirements requirements.txt python tools/migration_acceptance.py schema --db /tmp/clinpath-migration-acceptance.j5XK1p/fresh_create_all.db --out /tmp/clinpath-migration-acceptance.j5XK1p/schema_fresh_install.json
-wrote 52 schema objects to /tmp/clinpath-migration-acceptance.j5XK1p/schema_fresh_install.json
+$ uv run --python 3.11 --with-requirements requirements.txt python tools/migration_acceptance.py schema --db /tmp/clinpath-migration-acceptance.ISl5kB/fresh_create_all.db --out /tmp/clinpath-migration-acceptance.ISl5kB/schema_fresh_install.json
+wrote 52 schema objects to /tmp/clinpath-migration-acceptance.ISl5kB/schema_fresh_install.json
 
-$ python3 /home/jcshi/workspace/clinpath-final/scripts/compare_schema_json.py /tmp/clinpath-migration-acceptance.j5XK1p/schema_after_reupgrade.json /tmp/clinpath-migration-acceptance.j5XK1p/schema_fresh_install.json
+$ python3 /home/jcshi/workspace/clinpath-final/scripts/compare_schema_json.py /tmp/clinpath-migration-acceptance.ISl5kB/schema_after_reupgrade.json /tmp/clinpath-migration-acceptance.ISl5kB/schema_fresh_install.json
 same    index:ix_ai_enrichments_kind
 same    index:ix_ai_invocations_task_type
 same    index:ix_assess_events_sitting
@@ -495,11 +496,10 @@ same    table:users
 objects: 52 -> 52; differing: 0
 schema equivalent (modulo clause order, quoting and server defaults)
 
-=== acceptance complete: artifacts kept in /tmp/clinpath-migration-acceptance.j5XK1p ===
+=== acceptance complete: artifacts kept in /tmp/clinpath-migration-acceptance.ISl5kB ===
 
-$ echo log: /tmp/clinpath-migration-acceptance.j5XK1p/migration_cycle.log
-log: /tmp/clinpath-migration-acceptance.j5XK1p/migration_cycle.log
-
+$ echo log: /tmp/clinpath-migration-acceptance.ISl5kB/migration_cycle.log
+log: /tmp/clinpath-migration-acceptance.ISl5kB/migration_cycle.log
 ```
 
 ## 附录 B：真实开发数据库副本（只读复制）原样输出
