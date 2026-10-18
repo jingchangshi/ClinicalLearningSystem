@@ -31,7 +31,7 @@
 | 前端构建目录 | 生产 `frontend/.next` | 工作树内 `frontend/.next`，与生产物理隔离 |
 | 后端端口 | 8100 | 未占用 8100；测试使用内存/临时 SQLite 与 ASGI 测试客户端 |
 | 前端端口 | 8101 | 未占用 8101；E2E 使用独立端口 |
-| 数据库 | `~/.config/clinpath/backend.env` 所指生产库 | 独立临时 SQLite（`/tmp/...`），迁移验收使用 `alembic upgrade/downgrade/upgrade` |
+| 数据库 | 主检出 `backend/clinical_learning.db`（生产 `backend.env` 未设 `DATABASE_URL`，故使用代码默认相对路径 `sqlite:///./clinical_learning.db`；生产 `/api/system/version` 报告 `schema_revision=20260915_06`，与该文件一致） | 独立临时 SQLite（`/tmp/...`），迁移验收使用 `alembic upgrade/downgrade/upgrade` |
 | 环境变量 | `~/.config/clinpath/*.env`（mode 600） | 测试进程内构造的一次性变量；未读取、未提交生产密钥 |
 | 日志 | 生产单元日志 | 测试进程 stdout / 证据目录内日志文件 |
 | 临时导出目录 | — | `/tmp/clinpath-*` 一次性目录 |
@@ -52,7 +52,20 @@
 端口相同。直接以默认值运行 E2E 会打到生产实例并可能写入生产数据。因此 E2E 必须显式
 设置 `E2E_BASE_URL` 指向独立端口，且独立启动后端/前端。此约束已在执行前通知相关成员。
 
-## 6. 未执行项
+## 6. 生产库只读副本的使用边界
 
-- 生产库副本上的迁移验收：本轮未执行（见 `MIGRATION_ACCEPTANCE.md` 的实际范围）。
+生产数据库**就在本机**（见 §3 与 §2 的 `clinical_learning.db`）。本轮对它的唯一接触是
+**只读**的：
+
+- 以 `file:...?mode=ro` 打开，经 `sqlite3.Connection.backup` 复制到临时目录，再对副本做
+  迁移循环；复制后源文件 `mtime` 仍为 2026-09-15 16:27，可证明未发生写入。
+- 全程**未**对生产库本身执行任何迁移、写入或破坏性测试；生产 `/api/system/version` 的
+  `schema_revision` 仍为 `20260915_06`，与本轮开始时一致。
+
+这与 R8.3「如需真实迁移验证，使用生产数据库的脱敏副本」一致：允许对副本验证，禁止迁移生产库。
+细节与命令输出见 `MIGRATION_ACCEPTANCE.md`。
+
+## 7. 未执行项
+
+- 生产库**本身**的迁移：未执行且未授权（只对只读副本做过验证，见 §6）。
 - 生产环境部署与部署后浏览器验收：按 R8.4 本轮不做，需申请人单独授权。
