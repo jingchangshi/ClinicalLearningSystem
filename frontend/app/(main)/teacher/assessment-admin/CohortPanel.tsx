@@ -8,7 +8,7 @@
  */
 import { useState } from "react";
 
-import { Button, Card, EmptyHint, Feedback, Moment, Pill, SyntheticNotice } from "@/components/assessment/AssessmentUi";
+import { Button, Card, EmptyHint, Feedback, Pill, SyntheticNotice } from "@/components/assessment/AssessmentUi";
 import {
   assessmentErrorMessage,
   createStudyCohort,
@@ -296,10 +296,10 @@ export function CohortPanel({ directory }: { directory: Directory }) {
                 ) : null}
 
                 <p className="mt-2 text-xs text-slate-500">
-                  建立时间以服务器记录为准；教学教师名单：
+                  入库与分配记录均以服务器时间为准；教学教师名单：
                   {cohort.teaching_user_ids.length ? `${cohort.teaching_user_ids.length} 人（用于盲法风险核对）` : "未登记"}
                   {" · "}
-                  最近更新 <Moment value={cohort.planned_start} />
+                  计划起止日期 {cohort.planned_start ?? "—"} 至 {cohort.planned_end ?? "—"}
                 </p>
               </li>
             ))}
