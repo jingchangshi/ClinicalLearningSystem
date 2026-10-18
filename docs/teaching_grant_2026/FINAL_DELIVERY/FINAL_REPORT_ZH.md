@@ -14,7 +14,7 @@
 | 开发分支 | `feat/clinpath-final-2026`（worktree `/home/jcshi/workspace/clinpath-final`） |
 | 起始 SHA | `80ce271`（独立考核开发基线）；教改材料基线 `teaching-grant-2026-wpd@25a9177` |
 | 交付分支顶端 | **`69d300f`**；后端验收 SHA `f2b32d8`（其后 backend/ 零改动） |
-| 提交总数 | 相对起始基线 `80ce271` 共 **63 个提交** |
+| 提交范围 | 起始 `80ce271` → 交付顶端 `454a7bd`（含本文档自身的提交；精确数量随文档提交变动，以 SHA 为准） |
 | 新增迁移 | `20261018_08_independent_assessments`（初版）、`20261018_09`（硬化：版本、草稿、裁决、审计、数据集锁）；`d117899` 修复 `created_at` 可空漂移 |
 | 主要改动 | 后端 `app/assessment/`（新包，11 模块）、`app/research/`（新纯函数包，7 模块）、`app/assessment_models.py`、`routes/assessments.py`、迁移；前端考核四类页面与 `lib/assessmentApi.ts`；`scripts/grant/`（检查器、E2E 隔离栈、迁移验收）；`docs/ARCH.md`、`docs/teaching_grant_2026/**` |
 | 是否合并 `main` | **未合并** |
