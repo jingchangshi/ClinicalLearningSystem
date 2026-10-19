@@ -306,6 +306,15 @@ def content_checks(doc_text: str, section_text: str) -> list[dict]:
         ("荣誉须附待填标记", r"最佳带教老师[^。]{0,40}【待填"),
         ("单位承诺为待填", r"单位承诺[:：]\s*【待填"),
         ("探索性定位", r"探索性"),
+        # §7.4 -- the six technical states must be told apart in the text itself.
+        ("技术状态：独立考核在功能分支实现", r"功能分支"),
+        ("技术状态：新功能尚未正式部署", r"尚未正式部署"),
+        ("技术状态：无真实教师签字", r"无任何真实教师签字"),
+        ("技术状态：病例为待审核草案", r"均为草案[^\n]{0,24}尚无任何教师审核记录"),
+        # §9 -- case identities in the application text
+        ("A01 为未分化多关节炎", r"A01\s*未分化多关节炎"),
+        ("A02 为干燥症状待查", r"A02\s*干燥症状待查"),
+        ("CBL 组不开放 ClinPath 干预训练", r"不开放ClinPath干预训练"),
     )
     for name, pattern in required:
         add(f"必含：{name}", re.search(pattern, section_text) is not None)

@@ -20,6 +20,22 @@ from D2/D3 evidence, synthetic data is never framed as efficacy, a single two-si
 p definition (no unconditional "minimum 2/35"), a truthful ethics status, and the
 real study is never written as completed.
 
+R9 adds two more layers:
+
+* ``R9_CONSISTENCY`` -- the §9 cross-document claims (A01 is undifferentiated
+  polyarthritis, A02 is sicca of undetermined cause, both public drafts are
+  development demos awaiting confidential re-authoring and real teacher review, the
+  six-dimension research weights are provisionally 10/20/25/15/20/10 and the training
+  scale 20/20/20/15/15/10 is not overridden, D1/D6 independent, D2/D3 build the
+  profile, D4/D5 personalise, the CBL arm receives no ClinPath-only training, the
+  unit of study is 7 cohorts, the other 21 students are unconfirmed, and there is no
+  real teaching effect, no ethics approval and no real teacher signature). Each names
+  the file that must carry the statement; a missing file is a failure.
+* ``R9_RULES`` -- per-line honesty rules (A01/A02 topic swap, the training weights
+  being rewritten to the research scale, a claimed real teacher signature).
+* ``R9_DELIVERABLES`` -- the task brief §12 deliverable paths. A missing one is a
+  failure, never a skip.
+
 A key document that is missing is a failure, not a skip.
 
 Usage::
@@ -56,6 +72,7 @@ CURRENT_DOCUMENTS = [
     "evidence/E5_protocol/T3_design_comparison.md",
     "evidence/E5_protocol/T3_personalization_validation.md",
     "workpackages/A_cases/A04_assessment_quality_control.md",
+    "workpackages/DATA_DICTIONARY.md",
     "evidence/E1_teaching_credentials/README.md",
     "evidence/E2_platform/README.md",
     "evidence/E3_cases_rubric/README.md",
@@ -71,6 +88,8 @@ CURRENT_DOCUMENTS = [
     "FINAL_DELIVERY/APPLICATION_SUBMISSION_CHECKLIST.md",
     "FINAL_DELIVERY/DEPLOYMENT_READINESS.md",
     "FINAL_DELIVERY/FINAL_REPORT_ZH.md",
+    "FINAL_DELIVERY/OFFICIAL_APPLICATION_VALIDATION.md",
+    "FINAL_DELIVERY/R9_HUMAN_ACTION_CHECKLIST.md",
 ]
 
 # Globs of additional current documents (their absence is not an error; any match
@@ -240,6 +259,7 @@ def _scan(path: Path) -> list[dict]:
         previous_was_table = is_table_row
 
     violations.extend(_scan_r74(path, text))
+    violations.extend(_scan_r9(path, text))
     return violations
 
 
@@ -293,6 +313,164 @@ def _check_required() -> list[dict]:
     return out
 
 
+# ---------------------------------------------------------------------------
+# R9: §9 cross-document consistency, per-line honesty rules, §12 deliverables
+# ---------------------------------------------------------------------------
+
+# Forbidden statements about the §9 facts. Per line; a line that negates or marks
+# the statement as historical is not a violation.
+R9_RULES: list[tuple[str, str, bool]] = [
+    (r"A01[^\n]{0,4}(干燥|口干|眼干)|A02[^\n]{0,4}未分化多关节炎",
+     "A01/A02 主题互换（A01=未分化多关节炎，A02=干燥症状待查）", False),
+    (r"(训练|形成性)[^\n]{0,12}权重[^\n]{0,12}(改为|调整为|覆盖为|统一为|已改为)\s*10\s*/\s*20",
+     "把平台形成性训练权重 20/20/20/15/15/10 改写成研究量表权重", False),
+    # `[^|\n]` rather than `[^\n]`: the claim must sit inside one table cell, so a
+    # row that honestly says "待两位真实教师填写与签字 | 已准备材料包" is not read as
+    # "the teachers have signed".
+    (r"(真实)?(教师|专家)[^|\n]{0,6}(签字|签名|签署)[^|\n]{0,8}(已|完成|齐备|全部到位)",
+     "声称已取得真实教师签字", True),
+]
+
+# §9 statements that must be present in the named document. The file must also
+# exist: "file not found, so the statement trivially holds" is the bug being
+# guarded against, so a missing file is reported as a violation too.
+R9_CONSISTENCY: list[tuple[str, str, str]] = [
+    # A01 / A02 identities
+    ("evidence/E5_protocol/E5_01_research_protocol.md", r"A01[^\n]{0,6}未分化多关节炎",
+     "研究方案：A01 为未分化多关节炎"),
+    ("evidence/E5_protocol/E5_01_research_protocol.md", r"A02[^\n]{0,12}干燥",
+     "研究方案：A02 为原因待查的干燥症状"),
+    ("evidence/E5_protocol/E5_01_research_protocol.md", r"原因待查",
+     "研究方案：A02 为「原因待查」（未确诊）"),
+    ("evidence/E5_protocol/E5_04_application_text.md", r"A01\s*未分化多关节炎",
+     "申报正文：A01 为未分化多关节炎"),
+    ("evidence/E5_protocol/E5_04_application_text.md", r"A02\s*干燥症状待查",
+     "申报正文：A02 为干燥症状待查"),
+    ("evidence/E5_protocol/T2_7day_teaching_plan.md", r"CASE-A01[^\n]{0,10}未分化多关节炎",
+     "教学实施表：A01 为未分化多关节炎"),
+    ("evidence/E5_protocol/T2_7day_teaching_plan.md", r"CASE-A02[^\n]{0,20}干燥",
+     "教学实施表：A02 为干燥症状"),
+    ("workpackages/A_cases/A04_assessment_quality_control.md", r"A01[^\n]{0,6}未分化多关节炎",
+     "A04：A01 为未分化多关节炎"),
+    ("workpackages/A_cases/A04_assessment_quality_control.md", r"A02[^\n]{0,20}干燥",
+     "A04：A02 为干燥症状"),
+    # public drafts are development demos awaiting confidential re-authoring + review
+    ("workpackages/A_cases/A04_assessment_quality_control.md", r"PENDING_REAL_REVIEW",
+     "A04：两例公开稿为待真实审核的开发演示稿"),
+    ("workpackages/A_cases/A04_assessment_quality_control.md", r"保密重新命制",
+     "A04：正式题本须保密重新命制"),
+    ("evidence/E5_protocol/T2_7day_teaching_plan.md", r"保密重新命制",
+     "教学实施表：正式题本须保密重新命制"),
+    ("FINAL_DELIVERY/OFFICIAL_APPLICATION_VALIDATION.md", r"保密重新命制",
+     "官方核验：正式题本须保密重新命制"),
+    ("FINAL_DELIVERY/OFFICIAL_APPLICATION_VALIDATION.md", r"真实教师审核",
+     "官方核验：正式题本须经真实教师审核"),
+    ("FINAL_DELIVERY/OFFICIAL_APPLICATION_VALIDATION.md", r"无真实教师签字",
+     "官方核验：无真实教师签字"),
+    # six-dimension weights: research scale provisional, training scale not overridden
+    ("evidence/E5_protocol/E5_01_research_protocol.md", r"10/20/25/15/20/10",
+     "研究方案：研究量表权重 10/20/25/15/20/10"),
+    ("evidence/E5_protocol/E5_01_research_protocol.md",
+     r"20/20/20/15/15/10[^\n]{0,12}不得被其覆盖",
+     "研究方案：训练量表权重 20/20/20/15/15/10 不被覆盖"),
+    ("evidence/E5_protocol/T2_7day_teaching_plan.md", r"10/20/25/15/20/10",
+     "教学实施表：研究量表权重 10/20/25/15/20/10 暂定"),
+    ("evidence/E5_protocol/T2_7day_teaching_plan.md",
+     r"20/20/20/15/15/10[^\n]{0,20}(不被|未改|不得)",
+     "教学实施表：训练量表权重不被覆盖、本轮未改"),
+    ("workpackages/A_cases/A04_assessment_quality_control.md", r"10/20/25/15/20/10",
+     "A04：研究量表权重 10/20/25/15/20/10 待确认"),
+    ("workpackages/A_cases/A04_assessment_quality_control.md",
+     r"20/20/20/15/15/10[^\n]{0,20}(不被|未改|不得)",
+     "A04：训练量表权重不被覆盖、本轮未改"),
+    # stage semantics
+    ("evidence/E5_protocol/E5_01_research_protocol.md", r"D2/D3[^\n]{0,20}更新其能力画像",
+     "研究方案：D2/D3 建立能力画像"),
+    ("evidence/E5_protocol/E5_01_research_protocol.md", r"D4/D5[^\n]{0,40}D2/D3\s*形成性训练证据",
+     "研究方案：D4/D5 推荐来自 D2/D3 形成性训练证据"),
+    ("evidence/E5_protocol/E5_01_research_protocol.md", r"D6[^\n]{0,20}T1[^\n]{0,10}独立在线考核",
+     "研究方案：D6 为独立后测 T1"),
+    ("evidence/E5_protocol/T2_7day_teaching_plan.md", r"\| D1 \|[^\n]{0,12}T0 考核",
+     "教学实施表：D1 为独立前测 T0"),
+    ("evidence/E5_protocol/T2_7day_teaching_plan.md", r"\| D6 \|[^\n]{0,12}T1 考核",
+     "教学实施表：D6 为独立后测 T1"),
+    # CBL arm receives no ClinPath-only training
+    ("evidence/E5_protocol/E5_01_research_protocol.md", r"不[^\n]{0,4}使用平台的分步训练与导师追问",
+     "研究方案：对照组不使用平台分步训练与导师追问"),
+    ("evidence/E5_protocol/T2_7day_teaching_plan.md", r"不做平台个性化",
+     "教学实施表：CBL 组不做平台个性化"),
+    ("evidence/E5_protocol/E5_04_application_text.md", r"不开放ClinPath干预训练",
+     "申报正文：CBL 组不开放 ClinPath 干预训练"),
+    # unit of study, population, honest negatives
+    ("evidence/E5_protocol/E5_01_research_protocol.md", r"7 个批次整群随机分配",
+     "研究方案：研究单位为 7 个批次整群分配"),
+    ("evidence/E5_protocol/T2_7day_teaching_plan.md", r"7 个批次",
+     "教学实施表：研究单位为 7 个批次"),
+    ("evidence/E5_protocol/E5_04_application_text.md", r"共7个批次",
+     "申报正文：研究单位为 7 个批次"),
+    ("evidence/E5_protocol/E5_02_SAP_statistical_analysis_plan.md", r"21 名学生[^\n]{0,40}待确认",
+     "SAP：另 21 名学生的构成待确认"),
+    ("evidence/E5_protocol/E5_04_application_text.md", r"21人[^\n]{0,24}【待填",
+     "申报正文：21 人构成与是否重叠为【待填】"),
+    ("evidence/E5_protocol/E5_04_application_text.md", r"无真实教学效果数据",
+     "申报正文：无真实教学效果数据"),
+    ("evidence/E5_protocol/E5_03_ethics_privacy.md", r"尚未获得批件|尚无批件|无批件",
+     "伦理文件：尚无批件"),
+    ("evidence/E5_protocol/E5_04_application_text.md", r"无任何真实教师签字",
+     "申报正文：无任何真实教师签字"),
+    ("FINAL_DELIVERY/R9_HUMAN_ACTION_CHECKLIST.md", r"阻塞研究启动",
+     "真人待办清单：区分是否阻塞研究启动"),
+    ("workpackages/DATA_DICTIONARY.md", r"训练暴露",
+     "数据字典：含训练暴露字段（研究↔训练关联）"),
+]
+
+# Task brief §12 deliverables. Every path must exist; a missing one means the
+# round's evidence set is incomplete and the check fails (exit 2).
+R9_DELIVERABLES: list[str] = [
+    "FINAL_DELIVERY/R9_FINAL_REVIEW.md",
+    "FINAL_DELIVERY/CBL_INTERVENTION_ISOLATION.md",
+    "FINAL_DELIVERY/RESEARCH_TRAINING_LINKAGE.md",
+    "FINAL_DELIVERY/EXAM_SECURITY_FINAL.md",
+    "FINAL_DELIVERY/FORM_ORDER_DECISION_OPTIONS.md",
+    "FINAL_DELIVERY/OFFICIAL_APPLICATION_VALIDATION.md",
+    "FINAL_DELIVERY/R9_TEST_REPORT.md",
+    "FINAL_DELIVERY/R9_HUMAN_ACTION_CHECKLIST.md",
+    "FINAL_DELIVERY/R9_FINAL_REPORT_ZH.md",
+]
+
+
+def _scan_r9(path: Path, text: str) -> list[dict]:
+    """R9 per-line honesty rules. Same honest-marker escape hatch as R7.4."""
+    out: list[dict] = []
+    for number, line in enumerate(text.splitlines(), start=1):
+        for pattern, why, negation_inside in R9_RULES:
+            match = re.search(pattern, line)
+            if match is None:
+                continue
+            if negation_inside and any(n in match.group(0) for n in ("不", "未", "禁止", "无")):
+                continue
+            if any(marker in line for marker in R74_HONEST_MARKERS):
+                continue
+            out.append({"file": str(path.relative_to(REPO_ROOT)), "line": number, "why": why,
+                        "text": line.strip()[:160]})
+            break
+    return out
+
+
+def _check_r9_consistency() -> list[dict]:
+    """§9 statements that must be present in the named documents."""
+    out: list[dict] = []
+    for relative, pattern, description in R9_CONSISTENCY:
+        path = GRANT / relative
+        if not path.is_file():
+            out.append({"file": relative, "line": 0,
+                        "why": f"缺失关键文档，§9 一致性无法核对：{description}", "text": ""})
+            continue
+        if re.search(pattern, path.read_text(encoding="utf-8")) is None:
+            out.append({"file": relative, "line": 0, "why": f"缺少 §9 一致表述：{description}", "text": ""})
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true")
@@ -321,7 +499,12 @@ def main(argv: list[str] | None = None) -> int:
         if not (GRANT / relative).is_file():
             missing.append(relative)
 
+    for relative in R9_DELIVERABLES:
+        if not (GRANT / relative).is_file():
+            missing.append(relative)
+
     violations.extend(_check_required())
+    violations.extend(_check_r9_consistency())
 
     # The historical notes must mark 方案 B as rejected.
     history_problems: list[str] = []
@@ -351,12 +534,13 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  ! {relative}")
         print()
         if violations:
-            print(f"发现 {len(violations)} 处仍引用方案 B：")
+            print(f"发现 {len(violations)} 处违反（方案 B 残留、R7.4 机械规则或 §9 一致性）：")
             for item in violations:
                 print(f"  FAIL {item['file']}:{item['line']}  [{item['why']}]")
-                print(f"       {item['text']}")
+                if item["text"]:
+                    print(f"       {item['text']}")
         else:
-            print("PASS 现行文档中未发现将方案 B 作为推荐、主模型或待确认事项的表述")
+            print("PASS 现行文档未推荐方案 B，R7.4 机械规则与 §9 一致性全部成立")
         if history_problems:
             print("\n历史修订记录问题：")
             for problem in history_problems:
