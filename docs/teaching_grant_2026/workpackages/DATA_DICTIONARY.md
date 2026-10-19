@@ -4,6 +4,11 @@
 > 本文与该常量必须一致（`backend/tests/test_research_agreement_stats.py` 校验列头顺序）。
 > 研究分析只使用**编码数据**；学生真实身份映射表另行存放、限制访问，**不出现在任何导出中**。
 
+> R9 修订：`assessment_form_id` 与题本槽位编码曾被混为一谈——导出写入题本记录 id，
+> 而冻结校验按 `A01`/`A02` 槽位比较，导致真实题本 id 不是 1/2 时冻结链路必然失败。
+> 现拆分为两列：`assessment_form_id`（记录 id，可追溯）与 `assessment_form_slot`
+> （`A01`/`A02` 槽位，**冻结顺序校验的唯一依据**）。
+
 ## 1. 粒度与冻结
 
 - 一行 = 一名学生 × 一个时间点（T0 或 T1）；排序键 `(study_student_code, timepoint)`。
@@ -23,7 +28,8 @@
 | `study_group` | 枚举 | `clinpath` / `cbl`；来自冻结的整批随机化记录 |
 | `randomization_version` | 文本 | 随机化记录版本（含算法、种子、执行人、时间、方案版本的那条记录） |
 | `timepoint` | 枚举 | `T0`（D1 基线）/ `T1`（D6 后测） |
-| `assessment_form_id` | 枚举 | `A01` / `A02`；必须与 `form_order` 和 `timepoint` 一致 |
+| `assessment_form_id` | 整数 | 题本**记录 id**（数据库主键）。这是本地标识，用于回溯到具体题本记录；**不得**与题本槽位编码比较 |
+| `assessment_form_slot` | 枚举 | 该次考核实际使用的**题本槽位** `A01` / `A02`，必须与 `form_order` 和 `timepoint` 一致（`X`：T0=A01, T1=A02；`Y`：T0=A02, T1=A01）。**冻结 CSV 的题本顺序校验以此列为准**，缺失即拒绝 |
 | `assessment_form_version` | 文本 | 所用题本版本 |
 | `form_order` | 枚举 | `X`：T0=A01, T1=A02；`Y`：T0=A02, T1=A01（组内约 4/3，先于组别抽签冻结） |
 | `blinded_rater_1_score` | 数值或空 | 盲评教师 1 的总分（对组别、时间点盲） |

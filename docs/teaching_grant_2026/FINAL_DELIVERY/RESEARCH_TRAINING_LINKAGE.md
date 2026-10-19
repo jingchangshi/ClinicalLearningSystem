@@ -39,6 +39,11 @@
   CBL 行为 `cbl_logged_sessions=…;minutes=…`（教学登记）；无法判定时为 `None`。
 - `intervention_count`：窗口内教师干预条数；无法判定时为 `None`。
 - `cbl_case_topics`：仅 CBL 行，来自教学登记，`;` 分隔。
+- `batch_index`：批次实际时间顺序，仅当该来源的全部批次都登记了开始日期时给出。
+- `assessment_form_slot`：本次考核实际使用的题本槽位（`A01`/`A02`），由冻结题本顺序
+  `FORM_BY_ORDER[form_order][timepoint]` 推出；**冻结 CSV 的题本顺序校验以此列为准**。
+  `assessment_form_id` 仍是题本记录 id，只用于回溯，两者不再混用
+  （见 §8.1 的修复记录）。
 
 ## 3. CBL 教学过程登记（最小结构化）
 
@@ -102,17 +107,28 @@ provenance 等附加键）转换为分析用的 `StudentScores`；拒绝缺少�
 - 只读：导出与冻结不改变 Training 表；冻结版本可复现；同状态字节一致。
 - 统计适配器：真实导出形状可用；非法输入被拒。
 
-## 8. 剩余风险 / 未完成事项
+## 8. 已修复的链路缺陷（R9 集成负责人复核后）
 
-1. **`assessment_form_id` 的形状差异（既有问题，未在本次修改）**：工作导出返回
-   题本数据库 id（`dataset.py:84`），而 `dataset_export.build_rows` 按
-   `FORM_BY_ORDER` 校验题本**编码**（`A01`/`A02`）。真实题本 id 不是 1/2 时，
-   导出记录直接送入 `build_rows` 会被拒。修复会改变既有导出契约与 R4.6 测试，
-   超出本 agent 的 §4 范围，**已上报集成负责人**。
-2. **教师干预的归属**：`teaching_interventions.target_students_json` 只有学生 id，
+1. **`assessment_form_id` 与题本槽位编码混用（已修复）**：工作导出写入题本**记录 id**
+   （`dataset.py`），而 `dataset_export.build_rows` 按 `A01`/`A02` **槽位编码**校验
+   （`FORM_BY_ORDER`），两个组件对同一列含义不一致，真实题本 id ≠ 1/2 时
+   「工作导出 → 冻结 CSV」必然失败（旧测试恰好用 id 1/2 才未暴露）。现拆分为两列：
+   - `assessment_form_id`：题本记录 id，可回溯，**不参与顺序校验**；
+   - `assessment_form_slot`：`A01`/`A02` 槽位，**顺序校验的唯一依据**，缺失即拒绝。
+
+   `build_rows` 仍校验 `assessment_form_slot == FORM_BY_ORDER[form_order][timepoint]`；
+   若有人把槽位编码写进 id 列（旧的歧义形状）则明确拒绝，不再给出
+   “requires A01, got 3” 这类无意义报错。`COLUMNS` 与 `DATA_DICTIONARY.md` 同步更新。
+   证据：`test_the_working_export_feeds_the_frozen_csv_chain` 用 id 不是 1/2、编码不是
+   `A01`/`A02` 的真实导出直接跑通 `build_rows` 与 `freeze`，并断言错误槽位、缺失槽位、
+   旧形状仍被拒绝。
+
+## 9. 剩余风险 / 未完成事项
+
+1. **教师干预的归属**：`teaching_interventions.target_students_json` 只有学生 id，
    无批次字段；窗口过滤依赖批次教学窗口，不是干预自身的批次标注。
-3. **`rule_fallback_count` 覆盖全部 AI 任务**（导师与评分），分类计数另给
+2. **`rule_fallback_count` 覆盖全部 AI 任务**（导师与评分），分类计数另给
    `rule_fallback_by_task`；不要把总数直接当作“AI 导师降级次数”。
-4. 教学登记是**文件**而非数据库表：无审计日志、无并发写保护；写入由教学管理员
+3. 教学登记是**文件**而非数据库表：无审计日志、无并发写保护；写入由教学管理员
    人工完成，版本由 SHA-256 记录。
-5. 真实研究数据尚未产生；本文件中的所有验证均使用隔离测试库中的测试夹具。
+4. 真实研究数据尚未产生；本文件中的所有验证均使用隔离测试库中的测试夹具。

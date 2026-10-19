@@ -21,7 +21,7 @@ from app.assessment_models import (
 )
 from app.database import get_db
 from app.models import User
-from app.research import DATA_ORIGINS
+from app.research import DATA_ORIGINS, FORM_BY_ORDER
 from app.research import teaching_log as teaching_log_module
 from app.research.agreement import icc_two_way_random
 from app.research.linkage import LINKAGE_VERSION, SOURCES, batch_indices, export_fields, training_linkage
@@ -84,6 +84,10 @@ def records(db: Session, origin: str, dataset_version: str | None) -> list[dict]
             "randomization_version": alloc.allocation_version if alloc else None,
             "randomization_mode": alloc.mode if alloc else None,
             "timepoint": s.timepoint, "assessment_form_id": form.id, "assessment_form_code": form.code,
+            # The slot the sitting was scheduled under, from the frozen form order. The
+            # frozen CSV validates *this* against form_order and timepoint; the id above
+            # is a local database key and cannot be compared with a slot code.
+            "assessment_form_slot": FORM_BY_ORDER.get(s.form_order, {}).get(s.timepoint),
             "assessment_form_version": form.version, "form_order": s.form_order, "attempt_no": s.attempt_no,
             "blinded_rater_1_score": a.total_score if a else None,
             "blinded_rater_2_score": b.total_score if b else None,

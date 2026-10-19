@@ -82,7 +82,10 @@ def long_rows(origin=DATA_ORIGIN_REAL):
             form = {"X": {"T0": "A01", "T1": "A02"}, "Y": {"T0": "A02", "T1": "A01"}}[s.form_order][tp]
             out.append(dict(study_student_code=s.study_student_code, cohort_id=s.cohort_id,
                             batch_index=int(s.cohort_id[1:]), study_group="clinpath", randomization_version="r1", timepoint=tp,
-                            assessment_form_id=form, assessment_form_version="1", form_order=s.form_order,
+                            # The form *record id* is local; the slot the student sat is the
+                            # design field the frozen order is checked against.
+                            assessment_form_id={"A01": 1, "A02": 2}[form], assessment_form_slot=form,
+                            assessment_form_version="1", form_order=s.form_order,
                             final_score=score, missingness=None if score is not None else "absent",
                             data_origin=origin))
     return out
@@ -101,7 +104,15 @@ def test_dataset_rules():
     with pytest.raises(MixedDataOriginError):
         de.build_rows(long_rows(DATA_ORIGIN_DEMO), dataset_version="v", data_origin=DATA_ORIGIN_REAL)
     bad = long_rows()
-    bad[0]["assessment_form_id"] = "A02" if bad[0]["assessment_form_id"] == "A01" else "A01"
+    bad[0]["assessment_form_slot"] = "A02" if bad[0]["assessment_form_slot"] == "A01" else "A01"
+    with pytest.raises(ResearchError):
+        de.build_rows(bad, dataset_version="v", data_origin=DATA_ORIGIN_REAL)
+    bad = long_rows()
+    del bad[0]["assessment_form_slot"]  # the slot cannot be omitted: nothing else can be checked
+    with pytest.raises(ResearchError):
+        de.build_rows(bad, dataset_version="v", data_origin=DATA_ORIGIN_REAL)
+    bad = long_rows()
+    bad[0]["assessment_form_id"] = "A01"  # a slot code in the id column is the old ambiguity
     with pytest.raises(ResearchError):
         de.build_rows(bad, dataset_version="v", data_origin=DATA_ORIGIN_REAL)
     bad = long_rows()

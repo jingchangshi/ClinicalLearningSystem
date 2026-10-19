@@ -21,7 +21,7 @@ from app.auth import hash_password
 from app.core import ai_audit
 from app.database import Base
 from app.models import AIInvocation, CaseSession, Score, User
-from app.research import DATA_ORIGIN_DEMO, MixedDataOriginError, ResearchError
+from app.research import DATA_ORIGIN_DEMO, FORM_BY_ORDER, MixedDataOriginError, ResearchError
 from app.research import cohort_stats as cs
 from app.research import dataset_export as de
 from app.research import teaching_log as tl
@@ -79,8 +79,13 @@ def _add_login(db, student_id, username):
                 student_id=student_id))
 
 
-def build(db_factory, client, window=(-1, 1)):
-    """A 7-cohort study with frozen arms, two published forms and all 14 T0/T1 sittings."""
+def build(db_factory, client, window=(-1, 1), spare_forms=0):
+    """A 7-cohort study with frozen arms, two published forms and all 14 T0/T1 sittings.
+
+    The two study forms are deliberately *not* coded "A01"/"A02" and, with
+    ``spare_forms``, do not hold ids 1 and 2 either: the export records must survive
+    the frozen-CSV chain whatever the local form ids and codes happen to be.
+    """
     w = build_world(db_factory, n_students=7, student_accounts=False)
     db = db_factory()
     case_a = make_case(db, title="训练病例A")
@@ -89,7 +94,9 @@ def build(db_factory, client, window=(-1, 1)):
     case_ids = (case_a.id, case_b.id)
     db.commit()
     db.close()
-    forms = {name: publish_form(client, w, code=f"ASSESS-{name}-TEST", tag=name[-2:])
+    for index in range(spare_forms):
+        publish_form(client, w, code=f"SPARE-FORM-{index}", tag="S")  # occupies a form id
+    forms = {name: publish_form(client, w, code=f"STUDY-FORM-{name}", tag=name[-2:])
              for name in ("A01", "A02")}
     codes = build_study(client, w, size=1)
     rows = design_rows(client)
@@ -322,16 +329,45 @@ def test_an_unregistered_log_is_not_no_teaching(db_factory, client):
     assert "absence_of_a_log_entry_is_not_evidence_of_absence_of_teaching" == teaching["interpretation"]
     assert row["training_exposure"] is None and row["cbl_case_topics"] is None
     assert {"indicator": "cbl_teaching", "reason": "cbl_teaching_log_not_registered"} in row["linkage"]["missing"]
-    # The frozen CSV reports the gap instead of filling it. (build_rows compares the
-    # CSV contract's form code, so hand it the code column the export carries.)
-    form_by_order = {"X": {"T0": "A01", "T1": "A02"}, "Y": {"T0": "A02", "T1": "A01"}}
-    rows = de.build_rows([dict(r, batch_index=r["batch_index"] or 1,
-                               assessment_form_id=form_by_order[r["form_order"]][r["timepoint"]])
-                          for r in body["records"] if r["cohort_id"] != study.cp["cohort_code"]],
-                         dataset_version="v1", data_origin=ORIGIN)
+    # The frozen CSV reports the gap instead of filling it. The working export goes in
+    # as-is: the slot column it carries is what the order check uses.
+    rows = de.build_rows(body["records"], dataset_version="v1", data_origin=ORIGIN)
     missing = de.cbl_rows_missing_topics(rows)
     assert study.cbl["study_student_code"] in missing
     assert study.cp["study_student_code"] not in missing
+
+
+def test_the_working_export_feeds_the_frozen_csv_chain(db_factory, client):
+    # Real form ids (not 1 and 2) and codes that are not literally A01/A02.
+    study = build(db_factory, client, spare_forms=2)
+    records = export(client)["records"]
+    ids = {r["assessment_form_id"] for r in records}
+    assert ids and not ids & {1, 2}, ids
+    assert {r["assessment_form_code"] for r in records} == {"STUDY-FORM-A01", "STUDY-FORM-A02"}
+    for row in records:
+        assert row["assessment_form_slot"] == FORM_BY_ORDER[row["form_order"]][row["timepoint"]]
+
+    rows = de.build_rows(records, dataset_version="chain-v1", data_origin=ORIGIN)
+    assert len(rows) == 14 and {r["assessment_form_slot"] for r in rows} == {"A01", "A02"}
+    text, manifest = de.freeze(records, dataset_version="chain-v1", data_origin=ORIGIN)
+    assert manifest.row_count == 14 and de.verify_frozen(text, manifest)
+    assert text.splitlines()[0].split(",") == list(de.COLUMNS)
+
+    # A slot that contradicts the frozen order is still refused, and so is a row that
+    # omits the slot, or one that puts a slot code in the id column.
+    wrong = [dict(r) for r in records]
+    wrong[0]["assessment_form_slot"] = "A02" if wrong[0]["assessment_form_slot"] == "A01" else "A01"
+    with pytest.raises(ResearchError):
+        de.build_rows(wrong, dataset_version="chain-v1", data_origin=ORIGIN)
+    missing_slot = [dict(r) for r in records]
+    missing_slot[0].pop("assessment_form_slot")
+    with pytest.raises(ResearchError):
+        de.build_rows(missing_slot, dataset_version="chain-v1", data_origin=ORIGIN)
+    stale = [dict(r) for r in records]
+    stale[0]["assessment_form_id"] = stale[0]["assessment_form_slot"]
+    with pytest.raises(ResearchError):
+        de.build_rows(stale, dataset_version="chain-v1", data_origin=ORIGIN)
+    assert study.cp["cohort_code"] in {r["cohort_id"] for r in rows}
 
 
 def test_batch_index_comes_from_the_recorded_timetable(db_factory, client):

@@ -24,7 +24,7 @@ from . import (
 
 COLUMNS = (
     "study_student_code", "cohort_id", "batch_index", "study_group", "randomization_version", "timepoint",
-    "assessment_form_id", "assessment_form_version", "form_order",
+    "assessment_form_id", "assessment_form_slot", "assessment_form_version", "form_order",
     "blinded_rater_1_score", "blinded_rater_2_score", "adjudicated_score", "final_score",
     "assessment_completed_at", "training_exposure", "cbl_case_topics", "intervention_count", "missingness",
     "scoring_provenance", "dataset_version", "data_origin",
@@ -32,6 +32,9 @@ COLUMNS = (
 _SCORES = ("blinded_rater_1_score", "blinded_rater_2_score", "adjudicated_score", "final_score")
 TIMEPOINTS = ("T0", "T1")
 MISSINGNESS_OBSERVED = "observed"
+# The slots a frozen form order can prescribe. Distinct from ``assessment_form_id``,
+# which is the local form record id and must never be compared with a slot code.
+FORM_SLOTS = ("A01", "A02")
 
 
 def _fmt(v) -> str:
@@ -62,11 +65,25 @@ def build_rows(records: Iterable[Mapping], *, dataset_version: str, data_origin:
             raise ResearchError(f"form_order must be X or Y: {row['form_order']!r}")
         if row["study_group"] not in STUDY_GROUPS:
             raise ResearchError(f"study_group invalid: {row['study_group']!r}")
+        # The slot the student sat, which the frozen form order prescribes. It is the
+        # design-critical field, so it is required: a row without it cannot be checked
+        # against the order at all, and comparing the form *record id* with a slot code
+        # (as this used to) refused every real dataset.
+        slot = row["assessment_form_slot"]
         expected_form = FORM_BY_ORDER[row["form_order"]][row["timepoint"]]
-        if row["assessment_form_id"] != expected_form:
+        if slot not in FORM_SLOTS:
+            raise ResearchError(
+                f"{row['study_student_code']} {row['timepoint']}: assessment_form_slot must be one of "
+                f"{list(FORM_SLOTS)}, got {slot!r}")
+        if slot != expected_form:
             raise ResearchError(
                 f"{row['study_student_code']} {row['timepoint']}: form order {row['form_order']} "
-                f"requires {expected_form}, got {row['assessment_form_id']!r}")
+                f"requires {expected_form}, got {slot!r}")
+        form_id = row["assessment_form_id"]
+        if isinstance(form_id, str) and form_id in FORM_SLOTS:
+            raise ResearchError(
+                f"{row['study_student_code']} {row['timepoint']}: assessment_form_id carries a slot code; "
+                "the slot belongs in assessment_form_slot and the id must be the form record id")
         if row["final_score"] is None and not row["missingness"]:
             raise ResearchError("a missing final_score needs a missingness reason")
         if row["final_score"] is not None and not row["missingness"]:
