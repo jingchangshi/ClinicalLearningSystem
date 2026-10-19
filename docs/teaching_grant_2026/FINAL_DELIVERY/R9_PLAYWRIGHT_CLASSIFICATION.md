@@ -88,7 +88,7 @@ R8.2 流程原先选中的学生属于 CBL 组，训练被正确拒绝。
 - 输出 `demo_dataset.json`，标注 `SYNTHETIC / SIMULATED_NOT_HUMAN`、`provenance:
   rule_fallback`、`model_calls: 0`。
 
-该步骤在 `scripts/grant/e2e/run_all_ininside.sh` 中排在 7×7 fixture **之前**：运维工具的
+该步骤在 `scripts/grant/e2e/run_all_inside.sh` 中排在 7×7 fixture **之前**：运维工具的
 审计会拒绝触碰含有无法识别学生的数据库，而 7×7 fixture 正是 49 名这样的学生。
 
 ### 3.2 隔离与可复现性
@@ -121,25 +121,36 @@ R8.2 流程原先选中的学生属于 CBL 组，训练被正确拒绝。
 
 ## 5. 原先 11 项跳过用例的分类与处置
 
-基线 11 项跳过。逐项核实后，**9 项在本环境应当运行**，已启用；2 项保留条件跳过。
+基线 11 项跳过。逐项核实后，**11 项在本环境都应当运行**，全部已启用，本轮实测
+**0 跳过**。
 
 | 用例 | 跳过条件 | 本环境是否应运行 | 处置 |
 | --- | --- | --- | --- |
-| training: SP encounter… | `E2E_RUN_MUTATING=1` | 应运行：本栈是一次性栈 | 已启用 |
-| training: knowledge quiz… | 同上 | 应运行 | 已启用 |
-| training: re-saving one step… | 同上 | 应运行 | 已启用 |
-| training: submitting with missing steps… | 同上 | 应运行 | 已启用 |
-| training: student completes a case with Coach… | 同上 | 应运行 | 已启用 |
-| training: teacher confirms six dimensions… | 同上 | 应运行 | 已启用 |
-| training: teacher case authoring… | 同上 | 应运行 | 已启用 |
-| training: a keyless deployment shows the rule fallback honestly | `E2E_EXPECT_FALLBACK=1` | 应运行：本栈按构造无密钥 | 已启用 |
-| auth: route protection fails closed when no JWT_SECRET… | 需要无密钥前端 | 应运行：已加入隔离栈（8402） | 已启用 |
-| assessment: start → draft survives reload → five stages → submit | `E2E_RUN_MUTATING=1` **且**该账号有开放 sitting | 应运行 | 已启用（专用演示考核账号） |
-| assessment: a blinded rater scores… | `E2E_RATER_*` 且队列中有待评答卷 | 运行（通过锁定分支） | 已启用 |
+| training: SP encounter… | `E2E_RUN_MUTATING=1` | 应运行：本栈是一次性栈 | 已启用，通过 |
+| training: knowledge quiz… | 同上 | 应运行 | 已启用，通过 |
+| training: re-saving one step… | 同上 | 应运行 | 已启用，通过 |
+| training: submitting with missing steps… | 同上 | 应运行 | 已启用，通过 |
+| training: student completes a case with Coach… | 同上 | 应运行 | 已启用，通过 |
+| training: teacher confirms six dimensions… | 同上 | 应运行 | 已启用，通过 |
+| training: teacher case authoring… | 同上 | 应运行 | 已启用，通过 |
+| training: a keyless deployment shows the rule fallback honestly | `E2E_EXPECT_FALLBACK=1` | 应运行：本栈按构造无密钥 | 已启用，通过 |
+| auth: route protection fails closed when no JWT_SECRET… | 需要无密钥前端 | 应运行：已加入隔离栈（8402） | 已启用，通过 |
+| assessment: start → draft survives reload → five stages → submit | `E2E_RUN_MUTATING=1` **且**该账号有开放 sitting | 应运行 | 已启用（专用演示考核账号），通过 |
+| assessment: a blinded rater scores… | `E2E_RATER_*` 且队列中有待评答卷 | 应运行 | 已启用，通过 |
 
 说明：`E2E_RUN_MUTATING` 的文档条件就是"disposable deployment"，本栈完全满足
 （一次性 `/tmp` 数据库，`stack.py` 结束时销毁），因此继续关闭它会把本环境**能够**运行的
 覆盖排除在外。
+
+其中两项原先不只是"缺少环境变量"，还缺少前置数据，本轮一并补齐：
+
+- **assessment 的整卷考核**：需要一个能实际参加考核的学生。该账号**不能**是研究学生
+  —— 研究 sittings 是研究数据集、每名学生每个时间点只能有一份，且 CBL 组按规定不能训练。
+  因此夹具用产品自带的 `synthetic_demo` origin 给演示学生王佳建 T0/T1 两份考核，
+  研究导出与 7 项不变量仍只统计研究自身的 98 份 sitting（实测确认）。
+- **auth 的 fail-closed**：需要一台没有 `JWT_SECRET` 的前端。`stack.py serve` 现在用**同一份
+  构建产物**在 8402 再起一台（proxy 在请求时读取密钥，因此无需第二次构建），并导出
+  `E2E_NO_SECRET_BASE_URL`；三台进程由同一个 `finally` 停止。
 
 ## 6. 仍未覆盖的部分（不隐藏）
 
@@ -180,5 +191,12 @@ R8.2 流程原先选中的学生属于 CBL 组，训练被正确拒绝。
 基线复现说明：本轮开始时在起始 SHA `47d191e` 上先跑了一次完整验收，得到与任务书一致的
 26/3/11，确认环境与历史证据一致后，才进行修复。
 
-后端：`pytest -q` 全量结果见 `R9_TEST_REPORT.md`（本轮新增
-`backend/tests/test_demo_dataset_offline.py` 9 项）。
+最终验收 SHA：`95631dc`（工作树干净，`ALL STEPS PASSED`）。
+本轮同时实测后端全量 `pytest -q`：**515 passed, 1 skipped**（跳过项为环境缺 `python-docx`，
+`tests/test_grant_official_forms.py:28`），其中本轮新增
+`backend/tests/test_demo_dataset_offline.py` 9 项全部通过。后端与前端计数汇总另见
+`R9_TEST_REPORT.md`（由本轮其他成员维护）。
+
+隔离核实：本轮结束时 8400/8401/8402 均已释放；生产 8100/8101 仍在运行，生产库
+`clinical_learning.db` 的 `mtime` 仍为 2026-09-15 16:27、WAL 仍为 2026-09-18 16:58
+（与 `INCIDENT_2026-10-18_production_touch.md` 记录一致），**未发生任何写入**。
