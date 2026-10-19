@@ -106,7 +106,7 @@ docs/teaching_grant_2026/workpackages/B_rubric/B02_sample_answers.md
 - 结论中必须逐项列出**未核查或无法观测**的渠道（本轮为 P/W/C；未加 `--history` 时还包括 G）；
 - **生产实际病例目录仍未核查**：不得暗示线上病例库已经检查过。
 
-`--history` 本轮的实际发现（只读、本地引用）：A01/A02 命题材料与 `B02_sample_answers.*`、
+`--history` 本轮的实际发现（只读、本地引用，8 个引用、11 条考核相关路径）：A01/A02 命题材料与 `B02_sample_answers.*`、
 `review_forms/CASE_REVIEW_FORM_A0*.md`、`ANCHOR_CONSISTENCY_TABLE.md`、`DIFFICULTY_MATCH_A01_A02.md`
 出现在 `origin/feat/clinpath-final-2026`、`origin/feat/clinpath-independent-assessment-2026`、
 `origin/teaching-grant-2026-wpd` 等远端分支上；`A01_assessment_multisystem.md`（旧 A02 时代的文件）
@@ -194,7 +194,7 @@ Scanned 1231 items against 2 exam forms (categories: case, frontend, guideline, 
 Findings: HIGH=0 MEDIUM=0 LOW=4
 Leakage channels (five separate risks - a clean static scan covers channel T only):
   [T] 部分核查（有已知盲区） … items_scanned=1231
-  [G] 部分核查（有已知盲区） … refs=8, exposed_paths=10 条考核相关路径（见 §2）
+  [G] 部分核查（有已知盲区） … refs=8, exposed_paths=11 条考核相关路径（见 §2）
   [P] 未核查             … 生产实际病例目录未核查
   [W] 仅建模，无法观测    … students_with_any_within_batch_informant_at_D6=49
   [C] 仅建模，无法观测    … students_with_prior_cohort_informants_at_D1=42
