@@ -25,3 +25,7 @@ backups/
 # Official grant originals supplied by the applicant: never committed.
 docs/teaching_grant_2026/APPLICATION_PACKAGE/official/*
 !docs/teaching_grant_2026/APPLICATION_PACKAGE/official/README.md
+
+# Filled official forms and their private field maps: contain real people's
+# names, units and signatures once filled, so they never enter the public repo.
+docs/teaching_grant_2026/APPLICATION_PACKAGE/official_out/
