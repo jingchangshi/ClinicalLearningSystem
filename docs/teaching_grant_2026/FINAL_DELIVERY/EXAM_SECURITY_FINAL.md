@@ -185,9 +185,9 @@ docs/teaching_grant_2026/workpackages/B_rubric/B02_sample_answers.md
 ```console
 $ python3 -I scripts/grant/publish_safety_scan.py --scope tree
 publish-safety scan --scope tree
-scope      : tree: 516 tracked + 14 untracked-not-ignored file(s), at their working-tree content (changed = differs from HEAD or untracked)
-targets    : 530 (476 content-inspected, 54 not inspectable)
-findings   : BLOCK=0 WARN=0 INFO=83
+scope      : tree: 528 tracked + 7 untracked-not-ignored file(s), at their working-tree content (changed = differs from HEAD or untracked)
+targets    : 535 (482 content-inspected, 53 not inspectable)
+findings   : BLOCK=0 WARN=0 INFO=82
 
 $ python3 -I scripts/grant/audit_exam_leakage.py --channels --history
 Scanned 1231 items against 2 exam forms (categories: case, frontend, guideline, knowledge, service_text, skill, sp, training_card)
@@ -217,7 +217,10 @@ $ uv run --python 3.11 --with-requirements backend/requirements.txt pytest \
 ```
 
 说明：
-- `tree` 范围的数字随文档增删而变；同一次运行中"未检查内容"的 54 个目标是**已跟踪的二进制**
+- `tree` 范围的数字随文档增删而变；同一次运行中"未检查内容"的 53 个目标是**已跟踪的二进制**
   （截图、DOCX、ZIP），它们的内容本轮无法用文本规则检查——已在状态表中如实标注，未声称已检查。
 - 对**新加入**的二进制默认拦下；这一点由测试固定（`--accept-uninspected-binary` 才降为 WARN）。
+- 第一版扫描在本仓库上出现了两类**文档误报**（表格里写变量名 `JWT_SECRET=`、文档描述签名栏规则本身），
+  已在本轮修正（提交 `19e4daa`）：变量名后必须有真实值才算密钥，签名栏只有写出人名才算已填写。
+  否则运维会把告警当噪声忽略，门禁就失去意义。
 - 本轮没有在共享工作树里向索引植入过任何演示泄漏（避免影响其他并行工作）；上面的 6 条 `BLOCK` 证据来自一次性克隆。

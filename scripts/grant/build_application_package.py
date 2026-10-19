@@ -9,11 +9,19 @@ Outputs:
   APPLICATION_PACKAGE/01_FULL_APPLICATION_DRAFT.md   generated: basic info + six sections + appendices
   APPLICATION_PACKAGE/docx/*.docx                    one Word file per source Markdown file
 
-The Word files are **not** the official template (the official originals were not available);
+The Word files are **not** the official template: the applicant's official originals
+(`ClinPath_2026_Official_Source_Templates.zip`, restored in the ChatGPT file sandbox)
+are not readable from this machine -- see
+`docs/teaching_grant_2026/FINAL_DELIVERY/OFFICIAL_APPLICATION_VALIDATION.md` -- so
 every file carries that banner. python-docx is needed only for the .docx step:
 
     uv run --python 3.11 --with python-docx python scripts/grant/build_application_package.py
     python3 scripts/grant/build_application_package.py --markdown-only     # no python-docx needed
+
+After running, re-check the text with::
+
+    python3 scripts/grant/check_application_text.py
+    python3 scripts/grant/check_protocol_consistency.py
 """
 
 from __future__ import annotations

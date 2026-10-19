@@ -129,7 +129,7 @@ EXPOSED_DEV_SAMPLES = {
     # exam-adjacent and already public, so it is recorded here rather than left to trip the
     # "exam-bearing path without a recorded decision" rule on every future run.
     "docs/teaching_grant_2026/workpackages/A_cases/A04_assessment_quality_control.md":
-        "b66d07961bed2008129059b8dd891b379bf6e42cce5b0f65c82c7c2313ef5fb8",
+        "8ec0b29e3a327e8aff49c78c93fc1400df967f90c283f1f71d7edfae1ba37bdb",
 }
 
 # Files that legitimately contain *fictional* identifiers, fake secrets or de-identification
