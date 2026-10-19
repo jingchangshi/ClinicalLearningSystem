@@ -1,41 +1,49 @@
 # 申报材料包（APPLICATION_PACKAGE）
 
 > 项目名称：《基于人工智能辅助临床推理训练的医学生个性化学习与形成性评价教学改革研究》
-> 状态：**可编辑草稿，非官方模板**。生成日期 2026-10-18；提交截止 2026-10-25 20:00（北京时间）。
+> 状态：**官方模板填写版已生成**（来源为公开转载件，待申请人确认版本）；其余材料仍为可编辑草稿。
+> 提交截止：以贵校教务处通知为准（省厅对一般项目的收件截止为 2026-11-25；任务书所载 10-25 应为校内截止）。
 
-## 0. 官方模板状态：BLOCKED（原件不在本机）
+## 0. 官方模板状态：**已取得并已填写**（来源为公开转载件，待申请人确认版本）
 
-任务书要求以 2026 年浙江省本科教育教学改革项目的**官方原件**为准：申报通知、附件 1（选题指南）、
-附件 2（教学改革项目申报书）、附件 3（项目申报汇总表）。
+申请人的 `ClinPath_2026_Official_Source_Templates.zip` 在本机确实不存在，但该文件是**省教育厅公开印发**的。
+Agent 已从**宁波大学医学部官网**转载的《浙江省教育厅办公室关于组织 2026 年本科和研究生教育省级教学改革项目
+申报工作的通知》页面取得**真实官方原件**，存放于 `official/`（该目录已 gitignore，不入库）：
 
-申请人此前已把官方原件交给 ChatGPT 并恢复为 **`ClinPath_2026_Official_Source_Templates.zip`**。
-Agent 无法访问 ChatGPT 文件沙盒，因此按任务书 §7.1 在本机查找该 ZIP：
+| 文件 | 内容 | 大小 |
+| --- | --- | --- |
+| `att1_选题指南.pdf` | 附件 1 项目选题指南 | 1.8 MB |
+| `att2_申报书.docx` | 浙江省高等教育 2026 年教学改革项目**申报书** | 172 KB |
+| `att4_汇总表.xlsx` | 浙江省高等教育 2026 年教学改革项目申报**汇总表** | 11.5 KB |
+| `att10_通知.pdf` | 省教育厅办公室通知（含工作流程与截止时间） | 1.9 MB |
 
-已搜索：整个文件系统按文件名、`~`、`~/Downloads`、`~/Documents`、`~/Desktop`、`/tmp`、
-仓库根与 `docs/`、以及所有 `*.docx *.doc/.pdf/.wps/.xlsx/.zip`。
-**结果：该 ZIP 与本机任何一份官方原件均未找到**（仓库内唯一提到「附件1/2/3」的是任务书本身，
-另有 `docs/ClinPath_WPD_完整工作包D.zip` 是工作包 D 的合成演示，不是官方模板）。
-过程与命令见 `../FINAL_DELIVERY/OFFICIAL_APPLICATION_VALIDATION.md` §1。
+来源页 `https://medicine.nbu.edu.cn/info/1523/64741.htm`（下载需 Referer 与浏览器 UA）。
+**这是公开转载件，不是申请人手上的原件**；详见 `../FINAL_DELIVERY/OFFICIAL_APPLICATION_VALIDATION.md` §0—§1。
 
-因此：
+**已产出**（`official_out/`，已 gitignore —— 填写后会含真实姓名，不入公开仓库）：
 
-- 本包中的所有文件**都不是官方模板**，不得标注为「符合官方格式」；
-- 六个正文栏目的名称与字数上限只来自任务书，转入官方 Word 后须以模板自带的栏目、字数和填报说明再核对；
-- 官方模板里可能存在本包未覆盖的字段（如经费预算表格式、承诺书、主持人情况表的具体栏目），
-  见 `官方模板字段及缺失信息清单.md` 与 `../FINAL_DELIVERY/APPLICATION_SUBMISSION_CHECKLIST.md`；
-- **需要申请人动作**：把该 ZIP **原样**放到下面任一路径并告知 Agent——
-  `docs/teaching_grant_2026/APPLICATION_PACKAGE/official/ClinPath_2026_Official_Source_Templates.zip`、
-  `~/.config/clinpath/official/ClinPath_2026_Official_Source_Templates.zip`，或申请人自选路径
-  （用 `--zip` 指定绝对路径）。**ZIP 单独就够**：填写脚本会自己识别并解压其中的附件 2/附件 3，
-  只解压这两个到仓库外的临时目录；通知与附件 1 不解压。放入 `official/` 的原件**不入库**
-  （已在 `.gitignore` 排除）。
-- **尚未生成、也不得伪造**（任务书 §7.6）：`浙江省2026年教改项目申报书_官方模板填写版.docx`、
-  `浙江省2026年教改项目申报汇总表_官方模板填写版.docx`、`主持人教学简历_待核对.docx`。
-- **生成能力已就绪**：ZIP 放到 `official/`（或 `~/.config/clinpath/official/`）后，运行
-  `uv run --python 3.11 --with python-docx python scripts/grant/fill_official_forms.py`
-  即把六栏正文与已知字段写进官方模板副本，输出到 `official_out/`（gitignore，不入库）；
-  再用 `scripts/grant/validate_official_docx.py` 做 §7.6 核验。
-  详见 `../FINAL_DELIVERY/OFFICIAL_APPLICATION_VALIDATION.md` §3.1。
+- `浙江省2026年教改项目申报书_官方模板填写版.docx` —— 六栏正文与已知字段已写入官方模板副本；
+- `浙江省2026年教改项目申报汇总表_官方模板填写版.xlsx` —— 保留官方 Excel 格式（通知要求汇总表报送 Excel 版与盖章 PDF 版）。
+
+生成命令（需同时装 python-docx 与 openpyxl）：
+
+```bash
+uv run --python 3.11 --with python-docx --with openpyxl python scripts/grant/fill_official_forms.py --overwrite
+uv run --python 3.11 --with python-docx python scripts/grant/validate_official_docx.py \
+  "docs/teaching_grant_2026/APPLICATION_PACKAGE/official_out/浙江省2026年教改项目申报书_官方模板填写版.docx" \
+  --template docs/teaching_grant_2026/APPLICATION_PACKAGE/official/att2_申报书.docx
+```
+
+**仍需真人完成**：主持人/成员/单位/职称/出生年月/联系电话/签字/盖章一律为醒目 `【待填】`，
+**脚本从不写入任何姓名、日期或职称**；「提交就绪」检查因此**按设计 FAIL**，真人填毕后才会通过。
+
+**需申请人确认（H01）**：本文件所填的是公开转载的版本，**请确认这就是贵校教务处要求提交的版本**；
+若栏目名、字数上限或附加页不同，请提供本单位版本并由 Agent 重填。
+
+**需申请人确认（截止时间）**：通知的工作流程为「（二）申报重点项目 → 2026-10-30」、
+「（四）申报一般项目 → 2026-11-25」，且**先重点、后一般**两轮。本项目为**一般项目**，
+故省厅收件截止是 **11-25**；任务书所载 **2026-10-25 20:00 与两个省厅日期都不符，应为校内截止**。
+请向教务处确认实际要赶的轮次与日期。
 
 ## 1. 文件清单
 
@@ -49,7 +57,7 @@ Agent 无法访问 ChatGPT 文件沙盒，因此按任务书 §7.1 在本机查�
 | `40_outcomes_and_KPIs.md` | 预期成果与考核指标 | 草稿 |
 | `50_budget_suggestion.md` | 经费预算建议表 | 金额【待填】 |
 | `60_unit_support_checklist.md` | 单位支持与证明材料清单 | 全部待办 |
-| `70_summary_table_attachment3_draft.md` | 申报汇总表（附件 3）待填写版 | **非官方格式** |
+| `70_summary_table_attachment3_draft.md` | 申报汇总表草稿（供阅读，非提交件） | **非官方格式**；正式提交件为 `official_out/` 内的官方模板填写版 |
 | `官方模板字段及缺失信息清单.md` | 官方字段 ↔ 现有内容 ↔ 缺失信息 ↔ 提供方（含 P01—P13） | 清单 |
 | `项目申报前最终核对清单.md` | 提交前逐条核对（字数、版式、签字、上传步骤） | 清单 |
 | `80_one_page_summary.md` | 一页项目摘要 | 草稿 |
