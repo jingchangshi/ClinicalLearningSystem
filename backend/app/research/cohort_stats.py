@@ -46,6 +46,53 @@ def assert_single_origin(rows: Iterable, *, require: str | None = None) -> str:
     return origin
 
 
+_MISSINGNESS_OBSERVED = "observed"
+
+
+def student_scores_from_export(records: Iterable[Mapping], *, require: str | None = None) -> list[StudentScores]:
+    """Analysis rows from the Research export: one export row per student and timepoint.
+
+    The export carries linkage and provenance keys the statistics must not depend on,
+    and this adapter is the one place that shape is translated, so the analysis runs on
+    the real export rather than only on a hand-built synthetic CSV. A row that cannot
+    be placed in a batch or has no form order is refused, never dropped.
+    """
+    by_code: dict[str, dict] = {}
+    for rec in records:
+        code = rec.get("study_student_code")
+        cohort = rec.get("cohort_id")
+        timepoint = rec.get("timepoint")
+        order = rec.get("form_order")
+        origin = rec.get("data_origin")
+        if not code or not cohort:
+            raise ResearchError("export row without study_student_code/cohort_id")
+        if order not in FORM_ORDERS:
+            raise ResearchError(f"{code}: form_order must be X or Y, got {order!r}")
+        if timepoint not in ("T0", "T1"):
+            raise ResearchError(f"{code}: timepoint must be T0 or T1, got {timepoint!r}")
+        if origin not in DATA_ORIGINS:
+            raise MixedDataOriginError(f"unknown data_origin {origin!r}")
+        slot = by_code.setdefault(code, {"cohort_id": cohort, "form_order": order, "data_origin": origin,
+                                         "t0": None, "t1": None, "seen": set(), "missing_reason": None})
+        for key, value in (("cohort_id", cohort), ("form_order", order), ("data_origin", origin)):
+            if slot[key] != value:
+                raise ResearchError(f"{code}: inconsistent {key} across timepoints")
+        if timepoint in slot["seen"]:
+            raise ResearchError(f"{code}: duplicate {timepoint} row")
+        slot["seen"].add(timepoint)
+        slot[timepoint.lower()] = rec.get("final_score")
+        reason = rec.get("missingness")
+        if rec.get("final_score") is None and reason and reason != _MISSINGNESS_OBSERVED:
+            slot["missing_reason"] = reason
+    rows = [
+        StudentScores(code, slot["cohort_id"], slot["form_order"], slot["t0"], slot["t1"],
+                      slot["data_origin"], slot["missing_reason"])
+        for code, slot in sorted(by_code.items())
+    ]
+    assert_single_origin(rows, require=require)
+    return rows
+
+
 def real_study_expected_effect(rows: Sequence[StudentScores]) -> dict:
     """Pooled mean change used to inform expectations. Real-study data only: synthetic
     demo or pilot rows are refused so a preset demo effect can never leak in."""

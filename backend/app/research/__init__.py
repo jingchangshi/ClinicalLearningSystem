@@ -1,8 +1,13 @@
-"""Pure, DB-free research statistics for the 7-cohort exploratory study.
+"""Pure research statistics for the 7-cohort exploratory study, plus read-only access/linkage.
 
-Nothing here touches the database, the clock or the network: every function is a
-deterministic transform of its arguments, so a frozen dataset reproduces the same
-numbers later. Persistence is wired elsewhere.
+The statistics modules never touch the database, the clock or the network: every
+function is a deterministic transform of its arguments, so a frozen dataset
+reproduces the same numbers later. Persistence is wired elsewhere.
+
+Three modules in this package do read the database or a controlled file, and only
+read: ``study_access`` (the frozen arm decides training access), ``linkage`` (the
+Research layer's join to the training records) and ``teaching_log`` (the CBL
+teaching register). None of them writes, calls a service or computes a score.
 
 The study is exploratory (feasibility and effect-signal generation). 7 clusters
 cannot support confirmatory superiority claims, and no function in this package

@@ -22,7 +22,9 @@ from app.assessment_models import (
 from app.database import get_db
 from app.models import User
 from app.research import DATA_ORIGINS
+from app.research import teaching_log as teaching_log_module
 from app.research.agreement import icc_two_way_random
+from app.research.linkage import LINKAGE_VERSION, SOURCES, batch_indices, export_fields, training_linkage
 
 router = APIRouter(prefix="/admin")
 
@@ -55,6 +57,10 @@ def records(db: Session, origin: str, dataset_version: str | None) -> list[dict]
     codes = {c.student_id: c.study_student_code for c in db.query(ResearchCode)}
     allocs = {a.id: a for a in db.query(StudyAllocation)}
     forms = {f.id: f for f in db.query(AssessmentForm)}
+    # The CBL teaching register is one file: read it once per export, not per row.
+    log, log_status = teaching_log_module.load()
+    batches = batch_indices(db, origin)
+    links: dict[tuple[int, str], dict] = {}
     q = db.query(AssessmentSitting).filter(AssessmentSitting.data_origin == origin, AssessmentSitting.status != "voided")
     for s in q.order_by(AssessmentSitting.id):
         reviews = {r.rater_slot: r for r in live_reviews(db, s.id)}
@@ -63,8 +69,17 @@ def records(db: Session, origin: str, dataset_version: str | None) -> list[dict]
         a, b = reviews.get("A"), reviews.get("B")
         alloc = allocs.get(s.allocation_id)
         form = forms[s.form_id]
+        # Read-only join: the Training domain (and the CBL teaching register) are
+        # read here, never invoked. Both timepoints of one student share a linkage.
+        key = (s.student_id, s.cohort_code)
+        if key not in links:
+            links[key] = training_linkage(db, student_id=s.student_id, cohort_code=s.cohort_code,
+                                          data_origin=origin, log=log, log_status=log_status)
+        link = links[key]
+        training_exposure, intervention_count, cbl_topics = export_fields(link)
         out.append({
             "study_student_code": codes.get(s.student_id), "cohort_id": s.cohort_code,
+            "batch_index": batches.get(s.cohort_code),
             "study_group": s.study_group.lower(),
             "randomization_version": alloc.allocation_version if alloc else None,
             "randomization_mode": alloc.mode if alloc else None,
@@ -81,11 +96,25 @@ def records(db: Session, origin: str, dataset_version: str | None) -> list[dict]
             "rubric_version": fin.rubric_version if fin else (a.rubric_version if a else None),
             "assessment_completed_at": iso_z(s.submitted_at), "sitting_status": s.status,
             "missingness": _missingness(s, len(reviews), fin), "blinding_risk": s.blinding_risk,
-            # Joined from the Training domain by the Research layer, not by this module.
-            "training_exposure": None, "intervention_count": None,
+            # Joined from the Training domain by the Research layer, never by this module.
+            "training_exposure": training_exposure, "intervention_count": intervention_count,
+            "cbl_case_topics": cbl_topics, "linkage": link,
             "dataset_version": dataset_version, "data_origin": s.data_origin,
         })
     return out
+
+
+def _provenance(recs: list[dict]) -> dict:
+    """Where each part of the export comes from. Derived from the rows themselves, so a
+    frozen snapshot can never claim a register it did not actually read."""
+    register = recs[0]["linkage"]["cbl_teaching"]["register"] if recs else {}
+    return {
+        "independent_assessment": SOURCES["independent_assessment"],
+        "training": SOURCES["training"],
+        "teaching_log": register,
+        "study_allocation": SOURCES["study_allocation"],
+        "research_metadata": {"linkage_version": LINKAGE_VERSION, "sources": SOURCES["research_metadata"]},
+    }
 
 
 @router.get("/export")
@@ -95,7 +124,8 @@ def research_export(data_origin: str, db: Session = Depends(get_db), admin: User
     recs = records(db, data_origin, None)
     audit(db, admin, "export.read", "dataset", data_origin, {"records": len(recs)})
     db.commit()
-    return {"data_origin": data_origin, "dataset_status": "WORKING_NOT_FROZEN", "records": recs}
+    return {"data_origin": data_origin, "dataset_status": "WORKING_NOT_FROZEN",
+            "provenance": _provenance(recs), "records": recs}
 
 
 @router.get("/agreement")
@@ -126,7 +156,7 @@ def lock_dataset(payload: LockIn, db: Session = Depends(get_db), admin: User = D
                                      "finalize them or set allow_incomplete")
     locked_at = utcnow()
     snapshot = {"dataset_version": payload.dataset_version, "data_origin": origin, "locked_at": iso_z(locked_at),
-                "locked_by_user_id": admin.id, "records": recs,
+                "locked_by_user_id": admin.id, "records": recs, "provenance": _provenance(recs),
                 "summary": {"records": len(recs), "incomplete": len(missing),
                             "blinding_risk_records": sum(r["blinding_risk"] == "TEACHES_COHORT" for r in recs)}}
     text = canon(snapshot)
