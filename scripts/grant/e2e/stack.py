@@ -69,6 +69,29 @@ def _git_sha() -> str:
         return "unknown"
 
 
+# Provider credentials that must never reach an acceptance process. §8.5 forbids
+# using a production key, and `build_demo_dataset.py` refuses to build a
+# rule-fallback dataset while one is visible -- so a key inherited from the
+# operator's shell would both violate the isolation rule and silently turn three
+# browser tests into failures that look like product bugs.
+PROVIDER_KEYS = ("LLM_API_KEY", "DEEPSEEK_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
+                 "ANTHROPIC_AUTH_TOKEN", "LLM_BASE_URL")
+
+
+def keyless(env: dict[str, str]) -> dict[str, str]:
+    """Drop provider credentials from an environment the stack is about to hand out.
+
+    The stack's own processes get ``build_env``, which is keyless by construction.
+    The *commands run inside* it (fixture, demo dataset, Playwright) inherited the
+    caller's shell instead, so whether the acceptance was keyless depended on the
+    operator's environment rather than on the harness. This makes it a property of
+    the harness.
+    """
+    for name in PROVIDER_KEYS:
+        env.pop(name, None)
+    return env
+
+
 def build_env(backend_port: int, database_url: str) -> dict[str, str]:
     """A process-local environment: no inherited production secrets, no model key."""
     return {
@@ -306,6 +329,7 @@ def main() -> int:
             stack.start_no_secret_frontend(args.no_secret_port)
         env = dict(os.environ, E2E_BASE_URL=stack.base_url, E2E_API_BASE_URL=stack.api_url,
                    E2E_DATABASE_URL=stack.database_url, E2E_RUN_DIR=str(run_dir))
+        env = keyless(env)
         if args.no_secret_port:
             env["E2E_NO_SECRET_BASE_URL"] = f"http://127.0.0.1:{args.no_secret_port}"
         return subprocess.run(args.command, cwd=str(REPO), env=env).returncode
