@@ -23,6 +23,17 @@ step() {  # step <name> <logfile> <command...>
   fi
 }
 
+# The demo teaching dataset comes FIRST, and deliberately so: the operator tool
+# behind the plan refuses to touch a database holding students it cannot classify
+# as demo data, and the 7x7 fixture is exactly 49 of those. It is offline and
+# keyless -- every score is the rule engine's, and demo_dataset.json records that
+# provenance rather than calling it AI.
+step "demo dataset: synthetic, rule-fallback, keyless" demo_dataset.log \
+  "${PY[@]}" "$HERE/build_demo_dataset.py" \
+  --database-url "sqlite:///$RUN_DIR/accept.db" \
+  --api "http://127.0.0.1:$BACKEND_PORT" \
+  --manifest "$RUN_DIR/demo_dataset.json"
+
 step "fixture: synthetic 7x7 study" fixture.log \
   "${PY[@]}" "$HERE/build_fixture.py" \
   --api "http://127.0.0.1:$BACKEND_PORT" \
@@ -41,6 +52,12 @@ export E2E_STUDENT_USERNAME=student1 E2E_STUDENT_PASSWORD=test-student-pw
 export E2E_TEACHER_USERNAME=test_teacher_a E2E_TEACHER_PASSWORD=test-teacher-pw
 export E2E_ADMIN_USERNAME=test_admin E2E_ADMIN_PASSWORD=test-admin-pw
 export E2E_RATER_USERNAME=test_teacher_a E2E_RATER_PASSWORD=test-teacher-pw
+
+# This stack is keyless by construction (stack.build_env blanks every provider
+# key), so the honest expectation for a scored case IS the rule fallback. The
+# spec that asserts that badge is opt-in precisely because it describes this
+# deployment shape, not a general one.
+export E2E_EXPECT_FALLBACK=1
 
 # The R8.2 flow runs FIRST and alone: it produces the training evidence that the
 # AI-audit assertion in teacher.spec.ts reads. Playwright interleaves files when
