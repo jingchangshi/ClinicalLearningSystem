@@ -36,9 +36,17 @@ const ADJUDICATOR = { username: "test_adjudicator", password: process.env.E2E_TE
 
 /**
  * The study student is a real account from the fixture's 49 synthetic students,
- * picked from a ClinPath-arm cohort so the D2/D3 training steps are the arm the
- * design actually assigns. Resolved once below; never the demo `student1`
- * account, which is not part of the study.
+ * taken from the batch the fixture designated as this run's demo batch.
+ *
+ * That batch is a *ClinPath-arm* batch, and that is a requirement, not a
+ * preference: this flow exercises the ClinPath formative intervention (step 5),
+ * and a batch the frozen draw puts in the CBL arm must not receive it
+ * (`app.research.study_access`). Step 5 asserts the training is allowed, so a CBL
+ * student would make the flow fail for the right reason against the wrong
+ * expectation. The fixture records which batch it chose, and this reads it rather
+ * than guessing by position, which is how the two used to drift apart.
+ *
+ * Never the demo `student1` account, which is not part of the study.
  */
 function studyStudent(): { username: string; password: string; studentId: number } {
   const manifestPath = process.env.E2E_FIXTURE_MANIFEST!;
@@ -46,8 +54,25 @@ function studyStudent(): { username: string; password: string; studentId: number
     student_ids: number[];
     student_logins: Record<string, string>;
     student_password: string;
+    demo_cohort?: string;
+    study_groups?: { clinpath: string[]; cbl: string[] };
+    cohort_students?: Record<string, number[]>;
   };
-  const studentId = manifest.student_ids[0];
+  const cohort = manifest.demo_cohort;
+  const students = cohort ? manifest.cohort_students?.[cohort] : undefined;
+  if (!cohort || !students?.length) {
+    throw new Error(
+      `E2E_FIXTURE_MANIFEST (${manifestPath}) has no demo_cohort/cohort_students; ` +
+        "run the fixture through scripts/grant/e2e/run_full_acceptance.sh",
+    );
+  }
+  if (!manifest.study_groups?.clinpath?.includes(cohort)) {
+    throw new Error(
+      `the fixture's demo batch ${cohort} is not a ClinPath batch ` +
+        `(${JSON.stringify(manifest.study_groups)}); the D2/D3 training steps need one`,
+    );
+  }
+  const studentId = students[0];
   return { username: manifest.student_logins[String(studentId)], password: manifest.student_password, studentId };
 }
 

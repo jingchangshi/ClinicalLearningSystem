@@ -314,21 +314,37 @@ def ensure_allocations(admin_api: Api) -> dict:
     return {a["kind"]: a for a in admin_api.ok("GET", "/api/assessments/admin/allocations")}
 
 
-def ensure_schedule(admin_api: Api, form_ids: dict[str, int], staff: dict) -> dict:
+def study_arms(allocations: dict) -> dict[str, list[str]]:
+    """Which batch is which arm, read from the product's own frozen draw.
+
+    The draw is the only authority on the arms, so the fixture reads it rather than
+    assuming a split. ``GET /api/assessments/admin/allocations`` returns the full
+    stored record, which is what ``app.research.study_access`` resolves a cohort
+    through as well -- one source, so the two cannot disagree.
+    """
+    record = allocations["cluster_group"].get("record") or {}
+    return {
+        "clinpath": list(record.get("clinpath_cohorts") or []),
+        "cbl": list(record.get("cbl_cohorts") or []),
+    }
+
+
+def ensure_schedule(admin_api: Api, form_ids: dict[str, int], staff: dict, demo_cohort: str) -> dict:
     """98 sittings: T0 open now, T1 the next day.
 
-    TEST-C01 is the browser-demo batch. Its timeline is compressed (T0 closes
-    T1_GAP_SECONDS after scheduling, T1 opens immediately after) so one automated
-    run can sit T0, train, and sit T1 while still honouring the product rule that
-    a cohort's T0 window must close before its T1 window opens. The other six
-    batches keep the realistic D1 -> D6 spacing.
+    The end-to-end browser flow that runs against this stack (R8.2) sits T0, trains
+    through the *ClinPath formative intervention*, and sits T1 in one automated run.
+    So the demo batch must be a batch whose students may train at all: under the
+    study access policy a CBL batch may not, so the caller passes a ClinPath batch
+    here. Its timeline is compressed (T0 closes T1_GAP_SECONDS after scheduling, T1
+    opens immediately after) while the other six batches keep the realistic D1 -> D6
+    spacing.
 
     A re-run reuses the recorded windows: the planner refuses a changed schedule
     for an existing sitting, which is the behaviour we want to see, not bypass.
     """
     now = time.time()
     t1_gap = int(os.environ.get("E2E_T1_GAP_SECONDS", "90"))
-    demo_cohort = TEST_COHORT_CODES[0]
 
     def stamp(offset: float) -> str:
         return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now + offset))
@@ -379,7 +395,19 @@ def main() -> int:
     my_forms_check = verify_my_forms(admin_api, base, form_ids)
     ensure_cohorts(admin_api, student_ids, staff)
     allocations = ensure_allocations(admin_api)
-    schedule = ensure_schedule(admin_api, form_ids, staff)
+    arms = study_arms(allocations)
+    cohort_students = {
+        code: student_ids[index * 7:(index + 1) * 7] for index, code in enumerate(TEST_COHORT_CODES)
+    }
+    # The end-to-end flow trains through the ClinPath intervention, so its demo
+    # batch has to be a ClinPath batch. Refuse loudly rather than hand it a batch
+    # the access policy will (correctly) refuse mid-flow.
+    demo_cohort = arms["clinpath"][0] if arms["clinpath"] else None
+    if demo_cohort is None:
+        raise SystemExit(
+            f"the frozen draw names no ClinPath batch ({arms}); the R8.2 flow cannot be exercised on this fixture"
+        )
+    schedule = ensure_schedule(admin_api, form_ids, staff, demo_cohort)
 
     manifest = {
         "data_origin": ORIGIN,
@@ -391,13 +419,17 @@ def main() -> int:
         "student_password": STUDENT_PASSWORD,
         "staff": staff,
         "form_ids": form_ids,
+        "study_groups": arms,
+        "cohort_students": cohort_students,
+        "demo_cohort": demo_cohort,
         "allocations": {k: {"allocation_version": v["allocation_version"], "mode": v["mode"],
                             "content_hash": v["content_hash"]} for k, v in allocations.items()},
         "schedule": {k: schedule[k] for k in ("created", "existing", "students", "cohorts")},
     }
     if args.manifest:
         Path(args.manifest).write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
-    print(json.dumps({k: manifest[k] for k in ("label", "form_ids", "allocations", "schedule")},
+    print(json.dumps({k: manifest[k] for k in ("label", "form_ids", "study_groups", "demo_cohort",
+                                               "allocations", "schedule")},
                      indent=2, ensure_ascii=False))
     return 0
 
