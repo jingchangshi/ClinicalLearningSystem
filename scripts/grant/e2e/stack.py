@@ -41,6 +41,9 @@ UV_ARGS = ["run", "--python", "3.11", "--with-requirements", "requirements.txt"]
 
 DEFAULT_BACKEND_PORT = 8400
 DEFAULT_FRONTEND_PORT = 8401
+# A second frontend, serving the same build with no JWT_SECRET, exists only so the
+# fail-closed test can observe the real 503. It is never used by the main suites.
+DEFAULT_NO_SECRET_PORT = 8402
 DEFAULT_DIST = ".next-accept"
 DEFAULT_RUN_DIR = "/tmp/clinpath-e2e"
 # Throwaway values; they never leave this process and are not operator secrets.
@@ -216,6 +219,20 @@ class Stack:
                     log_name="frontend.log", env=dict(self.env, NEXT_DIST_DIR=self.dist_dir), cwd=FRONTEND)
         wait_http(f"{self.base_url}/login", timeout=120, label="frontend")
 
+    def start_no_secret_frontend(self, port: int) -> None:
+        """Serve the same build with JWT_SECRET removed from the environment.
+
+        Only the proxy's fail-closed branch needs this, and it cannot be observed
+        on a correctly configured deployment. The build is reused as-is because
+        the proxy reads the secret at request time, not at build time.
+        """
+        guard.check_free(port)
+        env = dict(self.env, NEXT_DIST_DIR=self.dist_dir)
+        env.pop("JWT_SECRET", None)
+        self._spawn(["npm", "run", "start", "--", "--hostname", "127.0.0.1", "--port", str(port)],
+                    log_name="frontend-no-secret.log", env=env, cwd=FRONTEND)
+        wait_http(f"http://127.0.0.1:{port}/login", timeout=120, label="frontend (no JWT_SECRET)")
+
     def stop(self) -> None:
         for proc in reversed(self.procs):
             if proc.poll() is None:
@@ -258,6 +275,8 @@ def main() -> int:
     parser.add_argument("--frontend-port", type=int, default=DEFAULT_FRONTEND_PORT)
     parser.add_argument("--run-dir", default=DEFAULT_RUN_DIR)
     parser.add_argument("--dist-dir", default=DEFAULT_DIST)
+    parser.add_argument("--no-secret-port", type=int, default=DEFAULT_NO_SECRET_PORT,
+                        help="serve a second frontend without JWT_SECRET on this port (0 disables)")
     parser.add_argument("--reset", action="store_true", help="delete the throwaway DB first (prepare only)")
     args, extra = parser.parse_known_args()
     args.command = [a for a in extra if a != "--"]
@@ -283,8 +302,12 @@ def main() -> int:
     try:
         stack.start_backend()
         stack.start_frontend()
+        if args.no_secret_port:
+            stack.start_no_secret_frontend(args.no_secret_port)
         env = dict(os.environ, E2E_BASE_URL=stack.base_url, E2E_API_BASE_URL=stack.api_url,
                    E2E_DATABASE_URL=stack.database_url, E2E_RUN_DIR=str(run_dir))
+        if args.no_secret_port:
+            env["E2E_NO_SECRET_BASE_URL"] = f"http://127.0.0.1:{args.no_secret_port}"
         return subprocess.run(args.command, cwd=str(REPO), env=env).returncode
     finally:
         stack.stop()

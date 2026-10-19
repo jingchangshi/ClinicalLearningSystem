@@ -125,18 +125,24 @@ function encode(value: unknown): string {
 
 // Run against a frontend started without JWT_SECRET (bypassing the service
 // script, which refuses to boot in that state):
-//   E2E_EXPECT_NO_JWT_SECRET=1 E2E_BASE_URL=http://127.0.0.1:18301 npx playwright test -g "no JWT_SECRET"
+//   E2E_EXPECT_NO_JWT_SECRET=1 E2E_NO_SECRET_BASE_URL=http://127.0.0.1:18301 \
+//     npx playwright test -g "no JWT_SECRET"
+// `scripts/grant/e2e/stack.py serve` starts exactly that second frontend (port
+// 8402 by default) and exports E2E_NO_SECRET_BASE_URL, so the acceptance run
+// exercises this branch instead of skipping it.
 test("route protection fails closed when no JWT_SECRET is configured", async ({ page, context, baseURL }) => {
-  test.skip(!process.env.E2E_EXPECT_NO_JWT_SECRET, "Set E2E_EXPECT_NO_JWT_SECRET=1 for a secret-less frontend.");
+  const noSecretBase = process.env.E2E_NO_SECRET_BASE_URL;
+  test.skip(!noSecretBase, "Set E2E_NO_SECRET_BASE_URL to a frontend started without JWT_SECRET.");
 
-  // An anonymous visitor is still sent to the login page.
-  await page.goto("/student/dashboard");
+  // A frontend that is missing the secret is not the one the other suites use;
+  // navigate to it explicitly rather than trusting the default baseURL.
+  await page.goto(`${noSecretBase}/student/dashboard`);
   await expect(page).toHaveURL(/\/login\?next=/);
 
   // A token-bearing visitor must not be trusted with an unverified role claim:
   // the proxy has nothing to verify with, so it fails closed instead of reading
   // the payload (and instead of looping between /login and the dashboard).
-  const host = new URL(baseURL ?? "http://127.0.0.1:18301").hostname;
+  const host = new URL(noSecretBase ?? baseURL ?? "http://127.0.0.1:18301").hostname;
   const forged = [
     encode({ alg: "HS256", typ: "JWT" }),
     encode({ sub: "1", role: "teacher", exp: Math.floor(Date.now() / 1000) + 3600 }),
@@ -144,7 +150,7 @@ test("route protection fails closed when no JWT_SECRET is configured", async ({ 
   ].join(".");
   await context.addCookies([{ name: "access_token", value: forged, domain: host, path: "/" }]);
 
-  const response = await page.goto("/teacher/dashboard");
+  const response = await page.goto(`${noSecretBase}/teacher/dashboard`);
   expect(response?.status()).toBe(503);
   await expect(page.locator("body")).toContainText("JWT_SECRET is required");
 });
