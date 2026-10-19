@@ -59,6 +59,18 @@ export E2E_RATER_USERNAME=test_teacher_a E2E_RATER_PASSWORD=test-teacher-pw
 # deployment shape, not a general one.
 export E2E_EXPECT_FALLBACK=1
 
+# This stack is disposable (throwaway /tmp database, torn down by stack.py), which
+# is exactly the condition the mutating suite asks for. Leaving it off used to
+# skip eleven tests that this environment can run, including the only browser
+# coverage of the five-stage independent exam and the keyless fallback badge.
+export E2E_RUN_MUTATING=1
+
+# The independent exam is sat by a *demo* student: an exam sitting is not a
+# ClinPath formative intervention, so a study student is the wrong account for it
+# -- and under the study access policy most batches cannot train anyway.
+export E2E_EXAM_STUDENT_USERNAME="${E2E_EXAM_STUDENT_USERNAME:-student2}"
+export E2E_EXAM_STUDENT_PASSWORD="${E2E_EXAM_STUDENT_PASSWORD:-test-student-pw}"
+
 # The R8.2 flow runs FIRST and alone: it produces the training evidence that the
 # AI-audit assertion in teacher.spec.ts reads. Playwright interleaves files when
 # it has several workers, and the audit writer is asynchronous, so running them

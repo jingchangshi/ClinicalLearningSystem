@@ -6,7 +6,10 @@ import type { Page } from "@playwright/test";
  *
  * Environment contract (all optional except the base URL):
  *   E2E_BASE_URL          the disposable deployment (default 127.0.0.1:8101)
- *   E2E_STUDENT_USERNAME  a student with at least one OPEN sitting (default student1)
+ *   E2E_EXAM_STUDENT_USERNAME / E2E_EXAM_STUDENT_PASSWORD
+ *                         a student with at least one OPEN sitting (the mutating
+ *                         exam flow only; falls back to E2E_STUDENT_*)
+ *   E2E_STUDENT_USERNAME  the account used by the read-only gate checks
  *   E2E_STUDENT_PASSWORD  that account's password
  *   E2E_RUN_MUTATING=1    enables the full login → start → five stages → submit run
  *   E2E_ADMIN_USERNAME / E2E_ADMIN_PASSWORD   optional role-gate check
@@ -14,6 +17,12 @@ import type { Page } from "@playwright/test";
  * The mutating test consumes one open sitting. Provision it with the assessment
  * API (published form + a sitting whose window is open for that student) before
  * running; it is never a real student account.
+ *
+ * It takes its own account on purpose. A sitting is an independent assessment,
+ * not a ClinPath formative intervention, so the student who sits it does not have
+ * to be a study student -- and under the study access policy a CBL batch may not
+ * train, which makes "some study student" the wrong default for a test that must
+ * only depend on the exam working.
  *
  * The read-only tests work without any seeded sitting and assert the server-side
  * gates the UI relies on: anonymous access is refused and future stages are not
@@ -23,6 +32,11 @@ import type { Page } from "@playwright/test";
 const student = {
   username: process.env.E2E_STUDENT_USERNAME ?? "student1",
   password: process.env.E2E_STUDENT_PASSWORD ?? "student123",
+};
+
+const examStudent = {
+  username: process.env.E2E_EXAM_STUDENT_USERNAME ?? student.username,
+  password: process.env.E2E_EXAM_STUDENT_PASSWORD ?? student.password,
 };
 
 async function login(page: Page, username: string, password: string) {
@@ -105,7 +119,7 @@ test.describe("student exam flow", () => {
 
   test("start → draft survives reload → five stages → submit, with no answer feedback", async ({ page }) => {
     test.slow();
-    await login(page, student.username, student.password);
+    await login(page, examStudent.username, examStudent.password);
     await page.goto("/student/assessments");
 
     const startLink = page.getByRole("link", { name: "开始考核" }).first();

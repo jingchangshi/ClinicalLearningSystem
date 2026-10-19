@@ -37,6 +37,8 @@ TEACHER_PASSWORD = "test-teacher-pw"
 ADMIN_PASSWORD = "test-admin-pw"
 TEST_COHORT_CODES = [f"TEST-C{i:02d}" for i in range(1, 8)]
 ORIGIN = "pilot_test"
+# The product's own third origin: real assessment state that belongs to no study.
+DEMO_ORIGIN = "synthetic_demo"
 PROTOCOL = "TEST-PROTOCOL-2026-10-18"
 
 STAFF_SPECS = [
@@ -367,6 +369,54 @@ def ensure_schedule(admin_api: Api, form_ids: dict[str, int], staff: dict, demo_
     })
 
 
+def ensure_demo_exam(admin_api: Api, staff: dict, form_ids: dict[str, int]) -> dict:
+    """Give one demo student an open independent exam, in its own data origin.
+
+    The mutating browser flow needs a student who can actually sit an exam. It must
+    NOT be a study student: the study's 98 sittings are the research dataset, its
+    invariants count exactly those, and a student may hold one live sitting per
+    timepoint -- so a study student can neither be given another one nor be the
+    account a generic exam test depends on.
+
+    This is the "synthetic demo" origin the product already defines, so the sitting
+    is real assessment state (the student sits it through the same five-stage flow)
+    while every research view, export and invariant stays scoped to the study's own
+    origin and never sees it.
+
+    The form order is free here (no frozen record covers a demo sitting), but the
+    two timepoints still use two different published forms.
+    """
+    demo_student_id = 2  # 王佳, seeded by app.seed_data; login student2
+    now = time.time()
+
+    def stamp(offset: float) -> str:
+        return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now + offset))
+
+    existing = [
+        row for row in admin_api.ok("GET", "/api/assessments/admin/sittings")
+        if row["student_id"] == demo_student_id and row["status"] != "voided"
+    ]
+    created = []
+    for timepoint, form_key, offset in (("T0", "A01", -3600), ("T1", "A02", 24 * 3600)):
+        if any(row["timepoint"] == timepoint for row in existing):
+            continue
+        created.append(admin_api.ok("POST", "/api/assessments/admin/sittings", {
+            "student_id": demo_student_id,
+            "form_id": form_ids[form_key],
+            "cohort_code": "DEMO-EXAM",
+            "study_group": "CLINPATH",
+            "timepoint": timepoint,
+            "window_start": stamp(offset),
+            "window_end": stamp(offset + 6 * 3600),
+            "rater_a_id": staff["test_teacher_a"]["user_id"],
+            "rater_b_id": staff["test_teacher_b"]["user_id"],
+            "adjudicator_user_id": staff["test_adjudicator"]["user_id"],
+            "data_origin": DEMO_ORIGIN,
+        }))
+    return {"data_origin": DEMO_ORIGIN, "student_id": demo_student_id, "login": "student2",
+            "created": len(created), "existing": len(existing)}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Provision the synthetic 7x7 study fixture over the live API")
     parser.add_argument("--api", default="http://127.0.0.1:8400", help="isolated backend base URL")
@@ -408,6 +458,7 @@ def main() -> int:
             f"the frozen draw names no ClinPath batch ({arms}); the R8.2 flow cannot be exercised on this fixture"
         )
     schedule = ensure_schedule(admin_api, form_ids, staff, demo_cohort)
+    demo_exam = ensure_demo_exam(admin_api, staff, form_ids)
 
     manifest = {
         "data_origin": ORIGIN,
@@ -422,6 +473,7 @@ def main() -> int:
         "study_groups": arms,
         "cohort_students": cohort_students,
         "demo_cohort": demo_cohort,
+        "demo_exam": demo_exam,
         "allocations": {k: {"allocation_version": v["allocation_version"], "mode": v["mode"],
                             "content_hash": v["content_hash"]} for k, v in allocations.items()},
         "schedule": {k: schedule[k] for k in ("created", "existing", "students", "cohorts")},
@@ -429,7 +481,7 @@ def main() -> int:
     if args.manifest:
         Path(args.manifest).write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
     print(json.dumps({k: manifest[k] for k in ("label", "form_ids", "study_groups", "demo_cohort",
-                                               "allocations", "schedule")},
+                                               "demo_exam", "allocations", "schedule")},
                      indent=2, ensure_ascii=False))
     return 0
 
