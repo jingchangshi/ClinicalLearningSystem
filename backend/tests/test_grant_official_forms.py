@@ -534,11 +534,38 @@ def test_pdf_render_check_is_skipped_honestly_when_no_renderer(tmp_path, monkeyp
     report = validate.validate(produced, None, fill.section_texts(SIX), docx)
     item = next(item for item in report["checks"] if item["name"] == "跨页：PDF 渲染目视检查")
     assert item["status"] == "SKIPPED"
-    assert "无 libreoffice/soffice/pandoc" in item["detail"]
+    # Fixed wording: the report must never drift into implying the check ran.
+    assert item["detail"] == (
+        "no libreoffice/pandoc on this machine; requires a human render check")
+    assert "libreoffice --headless --convert-to pdf" in item["human_command"]
     # A SKIPPED check is never counted as a pass -- the report must say so.
-    assert "跨页：PDF 渲染目视检查" in validate.render(report)
+    text = validate.render(report)
+    assert "未能执行的检查" in text
+    assert "no libreoffice/pandoc on this machine" in text
     assert not any(item["status"] == "PASS" for item in report["checks"]
                    if item["name"] == "跨页：PDF 渲染目视检查")
+
+
+def test_no_renderer_reason_is_the_agreed_wording():
+    assert validate.NO_RENDERER_REASON == (
+        "no libreoffice/pandoc on this machine; requires a human render check")
+    command = validate.render_command(Path("out.docx"))
+    assert command.startswith("libreoffice --headless --convert-to pdf")
+    assert "out.docx" in command
+
+
+def test_render_check_does_not_run_when_no_renderer_is_on_path(tmp_path, monkeypatch):
+    """Even if a renderer name were found, absence of the binary must not 'pass'."""
+    monkeypatch.setattr(validate.shutil, "which", lambda _name: None)
+
+    def explode(*_args, **_kwargs):  # pragma: no cover - must never be called
+        raise AssertionError("the renderer must not be invoked when it is absent")
+
+    monkeypatch.setattr(validate.subprocess, "run", explode, raising=False)
+    produced = _filled(tmp_path)
+    report = validate.validate(produced, None, fill.section_texts(SIX), docx)
+    item = next(item for item in report["checks"] if item["name"] == "跨页：PDF 渲染目视检查")
+    assert item["status"] == "SKIPPED"
 
 
 def test_render_states_skipped_checks_are_not_passes(tmp_path, monkeypatch):

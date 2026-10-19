@@ -2,25 +2,38 @@
 """Run §7.6's checks on a produced official-form DOCX.
 
 Every check reports ``PASS`` / ``FAIL`` / ``SKIPPED`` with a reason, and a check
-that cannot run on this machine says so -- it is never reported as passing. The
-checks are:
+that cannot run on this machine says so -- it is never reported as passing.
 
-1. **文件与重新打开** -- the DOCX is a valid zip with the required parts, and
-   python-docx can open it and read content back.
-2. **字数核验** -- per-section non-whitespace character count from the filled
+**Implemented for real with python-docx** (1.2.0 via ``uv --with python-docx``):
+
+1. **文件与重新打开** -- valid zip with the required parts, and python-docx can
+   open it and read content back.
+2. **字数核验** -- per-section non-whitespace character count read from the filled
    section target, against the official limit and against E5_04's own count.
-3. **页边距** -- every section has explicit, positive margins. Comparing them with
-   the official template needs ``--template``; without it that part is SKIPPED.
-4. **表格完整性** -- each row's effective cell count (``gridSpan`` aware) equals the
-   table grid's column count; no ragged table.
-5. **跨页检查** -- explicit page breaks inside tables, and whether multi-row tables
-   allow row splitting (``w:cantSplit``). Visual pagination needs a renderer; when
-   none is installed that part is SKIPPED.
-6. **中文字体与字号** -- every run carrying CJK text has an explicit East-Asian font
-   and size (run, then style, then document default); the distinct font/size pairs
-   are reported.
+3. **页边距** -- every section's top/bottom/left/right margin is read and must be
+   explicitly set and positive; with ``--template`` they are compared section by
+   section against the official original.
+4. **表格完整性** -- every table is enumerated; each row's effective cell count
+   (``gridSpan`` aware) must equal the table grid's column count.
+5. **跨页（结构层面）** -- explicitly inserted page breaks inside tables, and
+   whether multi-row tables set ``w:cantSplit``.
+6. **中文字体与字号** -- every run carrying CJK text must resolve an explicit
+   East-Asian font and size (run -> paragraph style -> character style); the
+   distinct font/size pairs are reported.
 7. **提交就绪** -- no ``【待填`` placeholder remains. Expected to FAIL until real
    people supply the missing facts; it gates submission, not this pipeline.
+
+**Cannot run on this machine, reported as SKIPPED with the reason and the exact
+command a human should run:**
+
+* **PDF/图片渲染目视检查** -- ``libreoffice``, ``soffice``, ``pandoc``,
+  ``pdftoppm`` and ``pdftotext`` are all absent here. Actual pagination, where a
+  table breaks across pages, and how the Chinese fonts really render can only be
+  judged on a rendered page, so this stays SKIPPED and a human must run::
+
+      libreoffice --headless --convert-to pdf --outdir . OUT.docx
+
+  and inspect the resulting PDF page by page.
 
 Usage::
 
@@ -28,7 +41,8 @@ Usage::
     python3.11 scripts/grant/validate_official_docx.py OUT.docx --template official.docx --json
 
 Exit codes: 0 no FAIL, 1 at least one FAIL, 2 the file is missing, 5 python-docx
-unavailable.
+unavailable. A SKIPPED check never by itself makes the exit code non-zero, but it
+is listed separately in the report and never counted as a pass.
 """
 
 from __future__ import annotations
@@ -37,6 +51,7 @@ import argparse
 import json
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import zipfile
@@ -50,6 +65,14 @@ CJK_RE = re.compile(r"[　-〿一-鿿＀-￯]")
 PLACEHOLDER = "【待填"
 
 RENDERERS = ("soffice", "libreoffice", "pandoc")
+
+# Wording is fixed so the report cannot drift into implying the check ran.
+NO_RENDERER_REASON = ("no libreoffice/pandoc on this machine; requires a human render check")
+
+
+def render_command(path: Path) -> str:
+    """The exact command a human runs on a machine that has a renderer."""
+    return f'libreoffice --headless --convert-to pdf --outdir . "{path}"'
 
 
 def _require_docx():
@@ -253,14 +276,12 @@ def check_cross_page(document, path: Path) -> list[dict]:
 
     renderer = next((name for name in RENDERERS if shutil.which(name)), None)
     if renderer is None:
-        results.append(check("跨页：PDF 渲染目视检查", "SKIPPED",
-                             "本机无 libreoffice/soffice/pandoc，无法渲染 PDF；"
-                             "版式需在有渲染器的机器上人工检查"))
+        results.append(check("跨页：PDF 渲染目视检查", "SKIPPED", NO_RENDERER_REASON,
+                             human_command=render_command(path)))
         return results
 
     with tempfile.TemporaryDirectory() as directory:
         try:
-            import subprocess
             command = {
                 "soffice": ["soffice", "--headless", "--convert-to", "pdf", "--outdir", directory, str(path)],
                 "libreoffice": ["libreoffice", "--headless", "--convert-to", "pdf", "--outdir", directory, str(path)],
@@ -408,6 +429,8 @@ def render(report: dict) -> str:
             out.append(f"          {item['measured']}")
         if item.get("pairs"):
             out.append(f"          字体/字号分布：{item['pairs']}")
+        if item.get("human_command"):
+            out.append(f"          人工复核命令：{item['human_command']}")
     out.append("")
     if "sections" in report:
         out.append("六栏字数：")
@@ -416,11 +439,15 @@ def render(report: dict) -> str:
             out.append(f"  {row['status']:<7} {row['section']:<12} 填后 {filled} / 上限 {row['limit']}"
                        f" / E5_04 {row['source']}")
     failed = [item["name"] for item in report["checks"] if item["status"] == "FAIL"]
-    skipped = [item["name"] for item in report["checks"] if item["status"] == "SKIPPED"]
+    skipped = [item for item in report["checks"] if item["status"] == "SKIPPED"]
     out.append("")
     out.append(f"结论：{'PASS' if report['ok'] else 'FAIL'}")
     if skipped:
-        out.append("未能执行的检查（本机条件限制，不计为通过）：" + "、".join(skipped))
+        out.append("未能执行的检查（本机条件限制，**不计为通过**）：")
+        for item in skipped:
+            out.append(f"  - {item['name']}：{item['detail']}")
+            if item.get("human_command"):
+                out.append(f"    人工复核命令：{item['human_command']}")
     if failed:
         out.append("未通过：" + "、".join(failed))
     return "\n".join(out)

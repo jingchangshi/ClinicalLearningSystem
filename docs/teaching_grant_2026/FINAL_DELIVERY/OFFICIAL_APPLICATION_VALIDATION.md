@@ -103,21 +103,31 @@ uv run --python 3.11 --with python-docx python scripts/grant/validate_official_d
 5. 某栏超过官方上限 → **退出 4**，不写出；
 6. 标签由 `--field-map` 的 JSON 提供：官方模板若写「课题名称」而非「项目名称」，改 JSON 即可，不改代码。
 
-**§7.6 核验项与本机可执行性（如实）**：
+**§7.6 核验项与本机可执行性（2026-10-19 实测）**
 
-| §7.6 核验项 | 脚本检查 | 本机可执行？ |
+本机实测：`libreoffice`、`soffice`、`pandoc`、`pdftoppm`、`pdftotext` **全部不存在**；
+`python-docx 1.2.0` 可用（经 `uv run --with python-docx`）。
+
+| §7.6 核验项 | 脚本检查 | 本机实测结果 |
 | --- | --- | --- |
-| 字数核验 | 逐栏非空白字符计数，比对官方上限**与** E5_04 自身计数（转录丢失/重复都会被抓到） | **可执行** |
-| DOCX 重新打开 | zip 部件完整性 + python-docx 重新打开并读回段落 | **可执行**（需 `--with python-docx`） |
-| 页边距 | 各节上下左右是否显式设置且为正；给 `--template` 时**逐节比对官方原件** | **可执行**；「与模板一致」需官方原件 |
-| 表格完整性 | 每行有效单元格数（含 `gridSpan`）与表格网格列数一致，无残缺行 | **可执行** |
-| 跨页检查 | 表格内显式分页符；多行表格是否设置 `w:cantSplit` | **可执行**（结构层面） |
-| 跨页：PDF 渲染目视 | 调用 libreoffice/soffice/pandoc 渲染 | **本机不可执行**：三者均未安装 → 如实标 **SKIPPED**，不计为通过 |
-| 中文字体与字号 | 每个含中文的 run 是否有显式东亚字体与字号（run → 段落样式 → 字符样式逐级回溯），并输出字体/字号分布 | **可执行** |
-| 提交就绪 | 全文是否仍含 `【待填` | **可执行**；在真人填毕前**预期为 FAIL**，它拦的是提交，不是本流水线 |
+| 字数核验 | 逐栏非空白字符计数，比对官方上限**与** E5_04 自身计数（转录丢失/重复都会被抓到） | **真实 PASS/FAIL** |
+| DOCX 重新打开 | zip 必需部件（`[Content_Types].xml`、`word/document.xml`）+ python-docx 重新打开并读回段落 | **真实 PASS/FAIL** |
+| 页边距 | 逐节读取上/下/左/右边距，必须显式设置且为正 | **真实 PASS/FAIL** |
+| 页边距与官方模板一致 | 给 `--template` 时逐节比对官方原件 | 给模板则**真实 PASS/FAIL**；未给则 SKIPPED（附原因） |
+| 表格完整性 | 枚举所有表格（含嵌套），按 `gridSpan` 计算每行有效单元格数，须等于表格网格列数 | **真实 PASS/FAIL** |
+| 跨页（结构层面） | 表格内显式插入的分页符；多行表格是否设置 `w:cantSplit` | **真实 PASS/FAIL** |
+| 中文字体与字号 | 每个含中文的 run 回溯 run → 段落样式 → 字符样式链，要求有显式东亚字体与字号，并输出字体/字号分布 | **真实 PASS/FAIL** |
+| 提交就绪 | 全文是否仍含 `【待填` | **真实 PASS/FAIL**；真人填毕前**预期为 FAIL**，它拦的是提交，不是本流水线 |
+| **跨页：PDF 渲染目视检查** | 探测渲染器后调用 | **本机无法执行** → 固定文案 **SKIPPED**：`no libreoffice/pandoc on this machine; requires a human render check`，并打印人工复核命令 |
 
-> 版式（跨页断点、字体实际渲染效果）**最终仍需在装有 LibreOffice/Word 的机器上人工目视确认**。
-> 本文件不声称这些目视项已经检查过。
+**渲染类核验（实际分页位置、表格跨页断点、中文字体真实渲染效果）本机一律不做**，
+报告中标为 SKIPPED 且**不计为通过**；需由真人在装有 LibreOffice/Word 的机器上执行：
+
+```bash
+libreoffice --headless --convert-to pdf --outdir . "OUT.docx"
+```
+
+然后逐页目视 PDF。本文件**不声称**这些目视项已经检查过。
 
 ---
 
@@ -192,7 +202,9 @@ Word 的「字数统计」对中英混排的计数可能不同。**以官方模�
 4. 十项真人事项（见 `R9_HUMAN_ACTION_CHECKLIST.md`）全部未完成：其中「两位真实教师审核病例与量表」
    与「伦理审查/豁免」既阻塞申报中的承诺表述落地，也阻塞研究启动。
 5. 本文件只记录**实际执行过**的核验与**实际复算过**的字数；任何未执行的核验一律写「未执行」。
-6. **PDF 渲染与版式目视检查在本机无法执行**（无 libreoffice/soffice/pandoc）；
-   `validate_official_docx.py` 会如实标 SKIPPED。提交前必须在有 Word/LibreOffice 的机器上人工过一遍。
+6. **PDF 渲染与版式目视检查在本机无法执行**：实测 `libreoffice`、`soffice`、`pandoc`、
+   `pdftoppm`、`pdftotext` 全部不存在；`validate_official_docx.py` 对此固定标 SKIPPED
+   （`no libreoffice/pandoc on this machine; requires a human render check`）并打印人工复核命令。
+   提交前必须在有 Word/LibreOffice 的机器上渲染并逐页人工过一遍。
 7. 填写流水线已用**合成夹具**验证（`backend/tests/test_grant_official_forms.py`，25 项），
    但**从未**在真实官方原件上运行过——真原件不在本机。夹具不是官方模板，也不得被当作官方模板使用。
