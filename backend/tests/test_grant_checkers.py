@@ -263,3 +263,134 @@ def test_a02_payload_sicca_ok(fake_tree):
     )
     whys = [v["why"] for v in proto._check_required()]
     assert not any("A02 载荷" in w for w in whys)
+
+
+# --------------------------------------------------------------------------
+# check_protocol_consistency -- R9 §9 consistency and §12 deliverables
+# --------------------------------------------------------------------------
+
+
+def test_real_tree_satisfies_every_r9_consistency_statement():
+    # Runs against the real documents: every §9 claim must actually be present.
+    violations = proto._check_r9_consistency()
+    assert violations == [], violations
+
+
+def test_r9_consistency_lists_the_section_9_facts():
+    descriptions = " ".join(d for _, _, d in proto.R9_CONSISTENCY)
+    for needle in ("未分化多关节炎", "干燥", "10/20/25/15/20/10", "20/20/20/15/15/10",
+                   "D2/D3", "D4/D5", "7 个批次", "21 名学生", "批件", "签字"):
+        assert needle in descriptions, needle
+
+
+def test_r9_deliverables_cover_the_brief_section_12_list():
+    assert set(proto.R9_DELIVERABLES) == {
+        "FINAL_DELIVERY/R9_FINAL_REVIEW.md",
+        "FINAL_DELIVERY/CBL_INTERVENTION_ISOLATION.md",
+        "FINAL_DELIVERY/RESEARCH_TRAINING_LINKAGE.md",
+        "FINAL_DELIVERY/EXAM_SECURITY_FINAL.md",
+        "FINAL_DELIVERY/FORM_ORDER_DECISION_OPTIONS.md",
+        "FINAL_DELIVERY/OFFICIAL_APPLICATION_VALIDATION.md",
+        "FINAL_DELIVERY/R9_TEST_REPORT.md",
+        "FINAL_DELIVERY/R9_HUMAN_ACTION_CHECKLIST.md",
+        "FINAL_DELIVERY/R9_FINAL_REPORT_ZH.md",
+    }
+
+
+def _minimal_tree(monkeypatch) -> None:
+    """Strip the scan to only what the test exercises."""
+    monkeypatch.setattr(proto, "CURRENT_DOCUMENTS", [])
+    monkeypatch.setattr(proto, "CURRENT_GLOBS", [])
+    monkeypatch.setattr(proto, "REQUIRED_EXTRA", [])
+    monkeypatch.setattr(proto, "R74_REQUIRED", [])
+    monkeypatch.setattr(proto, "R9_CONSISTENCY", [])
+    monkeypatch.setattr(proto, "HISTORICAL_DOCUMENTS", [])
+
+
+def test_missing_r9_deliverable_fails_non_zero(fake_tree, monkeypatch, capsys):
+    _minimal_tree(monkeypatch)
+    monkeypatch.setattr(proto, "R9_DELIVERABLES", ["FINAL_DELIVERY/R9_TEST_REPORT.md"])
+    assert proto.main([]) == 2
+    assert "R9_TEST_REPORT.md" in capsys.readouterr().out
+
+
+def test_present_r9_deliverable_passes(fake_tree, monkeypatch):
+    _minimal_tree(monkeypatch)
+    path = fake_tree / "FINAL_DELIVERY" / "R9_TEST_REPORT.md"
+    path.parent.mkdir(parents=True)
+    path.write_text("本轮实测报告\n", encoding="utf-8")
+    monkeypatch.setattr(proto, "R9_DELIVERABLES", ["FINAL_DELIVERY/R9_TEST_REPORT.md"])
+    assert proto.main([]) == 0
+
+
+def test_missing_document_for_an_r9_statement_is_flagged(fake_tree, monkeypatch):
+    monkeypatch.setattr(proto, "R9_CONSISTENCY", [
+        ("evidence/E5_protocol/E5_04_application_text.md", r"无任何真实教师签字", "申报正文：无真实教师签字"),
+    ])
+    whys = [v["why"] for v in proto._check_r9_consistency()]
+    assert any("缺失关键文档" in w for w in whys), whys
+
+
+def test_r9_statement_absent_from_an_existing_document_is_flagged(fake_tree, monkeypatch):
+    doc = fake_tree / "evidence" / "E5_protocol" / "E5_04_application_text.md"
+    doc.parent.mkdir(parents=True)
+    doc.write_text("正文里没有那句话。\n", encoding="utf-8")
+    monkeypatch.setattr(proto, "R9_CONSISTENCY", [
+        ("evidence/E5_protocol/E5_04_application_text.md", r"无任何真实教师签字", "申报正文：无真实教师签字"),
+    ])
+    whys = [v["why"] for v in proto._check_r9_consistency()]
+    assert any("缺少 §9 一致表述" in w for w in whys), whys
+
+
+def test_r9_statement_present_passes(fake_tree, monkeypatch):
+    doc = fake_tree / "evidence" / "E5_protocol" / "E5_04_application_text.md"
+    doc.parent.mkdir(parents=True)
+    doc.write_text("尚无任何教师审核记录，也无任何真实教师签字。\n", encoding="utf-8")
+    monkeypatch.setattr(proto, "R9_CONSISTENCY", [
+        ("evidence/E5_protocol/E5_04_application_text.md", r"无任何真实教师签字", "申报正文：无真实教师签字"),
+    ])
+    assert proto._check_r9_consistency() == []
+
+
+def _r9_violations(fake_tree, text: str) -> list[str]:
+    path = fake_tree / "x.md"
+    path.write_text(text, encoding="utf-8")
+    return [v["why"] for v in proto._scan_r9(path, text)]
+
+
+@pytest.mark.parametrize(
+    "line,expected",
+    [
+        ("CASE-A01 为干燥症状待查，CASE-A02 为未分化多关节炎。", "A01/A02"),
+        ("平台形成性训练权重已改为 10/20/25/15/20/10。", "权重"),
+        ("两位真实教师签字已完成，材料齐备。", "签字"),
+    ],
+)
+def test_r9_rules_catch_planted_mistakes(fake_tree, line, expected):
+    whys = _r9_violations(fake_tree, line)
+    assert any(expected in w for w in whys), (line, whys)
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "CASE-A01 为未分化多关节炎，CASE-A02 为原因待查的干燥症状。",
+        "平台形成性训练权重 20/20/20/15/15/10 不被研究量表覆盖，本轮未改。",
+        "目前尚无任何真实教师签字，也无教师审核记录。",
+        "| 材料 | **待两位真实教师填写与签字** | 已准备可供两位教师审核的材料包 |",
+    ],
+)
+def test_r9_rules_accept_honest_statements(fake_tree, line):
+    assert _r9_violations(fake_tree, line) == [], line
+
+
+@pytest.mark.parametrize(
+    "phrase",
+    ["功能分支", "尚未正式部署", "无任何真实教师签字", "A01未分化多关节炎", "A02干燥症状待查"],
+)
+def test_application_text_requires_the_six_state_wording(tmp_path, phrase):
+    path = _doc(tmp_path, lambda t: t.replace(phrase, "某某说法"))
+    _refresh(path)
+    report = app.check(path)
+    assert not report["ok"], phrase
+    assert app.main(["--doc", str(path)]) == 1
