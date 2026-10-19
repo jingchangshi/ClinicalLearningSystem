@@ -3,22 +3,32 @@
 > 项目名称：《基于人工智能辅助临床推理训练的医学生个性化学习与形成性评价教学改革研究》
 > 状态：**可编辑草稿，非官方模板**。生成日期 2026-10-18；提交截止 2026-10-25 20:00（北京时间）。
 
-## 0. 官方模板状态：BLOCKED（未获得原件）
+## 0. 官方模板状态：BLOCKED（原件不在本机）
 
 任务书要求以 2026 年浙江省本科教育教学改革项目的**官方原件**为准：申报通知、附件 1（选题指南）、
 附件 2（教学改革项目申报书）、附件 3（项目申报汇总表）。
 
-已搜索：本仓库、`docs/ClinPath_WPD_完整工作包D.zip`、`~`、`/tmp`、整个文件系统中的 .docx/.doc/.pdf/.wps/.xlsx/.zip。
-**结果：没有找到任何一份官方原件**（仓库内唯一提到「附件2/附件3」的是任务书本身）。
+申请人此前已把官方原件交给 ChatGPT 并恢复为 **`ClinPath_2026_Official_Source_Templates.zip`**。
+Agent 无法访问 ChatGPT 文件沙盒，因此按任务书 §7.1 在本机查找该 ZIP：
+
+已搜索：整个文件系统按文件名、`~`、`~/Downloads`、`~/Documents`、`~/Desktop`、`/tmp`、
+仓库根与 `docs/`、以及所有 `*.docx *.doc/.pdf/.wps/.xlsx/.zip`。
+**结果：该 ZIP 与本机任何一份官方原件均未找到**（仓库内唯一提到「附件1/2/3」的是任务书本身，
+另有 `docs/ClinPath_WPD_完整工作包D.zip` 是工作包 D 的合成演示，不是官方模板）。
+过程与命令见 `../FINAL_DELIVERY/OFFICIAL_APPLICATION_VALIDATION.md` §1。
 
 因此：
 
 - 本包中的所有文件**都不是官方模板**，不得标注为「符合官方格式」；
 - 六个正文栏目的名称与字数上限只来自任务书，转入官方 Word 后须以模板自带的栏目、字数和填报说明再核对；
 - 官方模板里可能存在本包未覆盖的字段（如经费预算表格式、承诺书、主持人情况表的具体栏目），
-  见 `APPLICATION_SUBMISSION_CHECKLIST.md`（`../FINAL_DELIVERY/`）的「官方原件到手后」一节；
-- **需要申请人动作**：把官方通知与附件 1—3 的原件放到 `docs/teaching_grant_2026/APPLICATION_PACKAGE/official/`
-  （不入库亦可，告知路径），再据此逐栏转入。
+  见 `官方模板字段及缺失信息清单.md` 与 `../FINAL_DELIVERY/APPLICATION_SUBMISSION_CHECKLIST.md`；
+- **需要申请人动作**：把该 ZIP 放到下面任一路径并告知 Agent——
+  `docs/teaching_grant_2026/APPLICATION_PACKAGE/official/ClinPath_2026_Official_Source_Templates.zip`、
+  `~/.config/clinpath/official/ClinPath_2026_Official_Source_Templates.zip`，或申请人自选路径（直接给绝对路径）。
+  放入 `official/` 的原件**不入库**（已在 `.gitignore` 排除）。
+- **尚未生成、也不得伪造**（任务书 §7.6）：`浙江省2026年教改项目申报书_官方模板填写版.docx`、
+  `浙江省2026年教改项目申报汇总表_官方模板填写版.docx`、`主持人教学简历_待核对.docx`。
 
 ## 1. 文件清单
 
@@ -33,6 +43,8 @@
 | `50_budget_suggestion.md` | 经费预算建议表 | 金额【待填】 |
 | `60_unit_support_checklist.md` | 单位支持与证明材料清单 | 全部待办 |
 | `70_summary_table_attachment3_draft.md` | 申报汇总表（附件 3）待填写版 | **非官方格式** |
+| `官方模板字段及缺失信息清单.md` | 官方字段 ↔ 现有内容 ↔ 缺失信息 ↔ 提供方（含 P01—P13） | 清单 |
+| `项目申报前最终核对清单.md` | 提交前逐条核对（字数、版式、签字、上传步骤） | 清单 |
 | `80_one_page_summary.md` | 一页项目摘要 | 草稿 |
 | `90_expert_demo_note.md` | 供专家与教学管理部门的简明技术演示说明 | 草稿 |
 | `docx/*.docx` | 以上各文件的 Word 版（`scripts/grant/build_application_package.py` 生成） | 非官方模板 |

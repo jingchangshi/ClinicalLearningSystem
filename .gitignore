@@ -21,3 +21,7 @@ backups/
 *.db-shm
 *.sqlite
 *.sqlite3
+
+# Official grant originals supplied by the applicant: never committed.
+docs/teaching_grant_2026/APPLICATION_PACKAGE/official/*
+!docs/teaching_grant_2026/APPLICATION_PACKAGE/official/README.md
