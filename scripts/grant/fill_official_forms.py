@@ -12,7 +12,8 @@ correct a label without touching code once the real template is in hand.
 Hard rules this script enforces, because a silently half-filled official form is
 worse than no form at all:
 
-* **Refuses to run without the official input files** (exit 2).
+* **Refuses to run without the official input files** (exit 2), listing every
+  location it searched and every way to point it at the files.
 * **Never fabricates a template.** It only ever writes into a copy of a real
   official file, and it refuses (exit 6) to treat one of our own generated drafts
   as official -- detected by this repository's own "非官方模板" banner.
@@ -21,6 +22,19 @@ worse than no form at all:
 * **Refuses to overwrite** a target that already carries content unless
   ``--overwrite`` is passed; a conflict is reported, not silently replaced.
 * **Enforces the official character limits** per section (exit 4).
+
+Accepted inputs, tried in this order (the brief tells the applicant any of them is
+fine, so all of them work):
+
+1. ``--attachment2`` / ``--attachment3`` -- an explicit path each.
+2. **The ZIP as dropped** -- ``official/ClinPath_2026_Official_Source_Templates.zip``
+   or ``~/.config/clinpath/official/`` -- the two forms are located inside by
+   filename pattern and **only those two members** are extracted, into a temporary
+   directory outside the repository. The ZIP's other contents are never written
+   anywhere, and members are read individually under flattened names so a crafted
+   member path cannot escape that directory.
+3. Already-extracted ``*.docx`` in ``--official-dir`` (default ``official/``) or
+   ``~/.config/clinpath/official/``, recognised by the same name patterns.
 
 Outputs (private, gitignored)::
 
@@ -31,6 +45,7 @@ Outputs (private, gitignored)::
 Usage::
 
     python3.11 scripts/grant/fill_official_forms.py --dry-run
+    python3.11 scripts/grant/fill_official_forms.py --zip /path/to/official.zip
     python3.11 scripts/grant/fill_official_forms.py --json
     python3.11 scripts/grant/fill_official_forms.py --field-map my_map.json
 
@@ -42,9 +57,12 @@ not an official template, 7 a target already has content (conflict).
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import re
 import sys
+import tempfile
+import zipfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -60,10 +78,26 @@ OFFICIAL_DIR = PACKAGE / "official"
 OUT_DIR = PACKAGE / "official_out"
 SIX = GRANT / "evidence" / "E5_protocol" / "E5_04_application_text.md"
 
-DEFAULT_ATTACHMENT2 = OFFICIAL_DIR / "附件2_教学改革项目申报书.docx"
-DEFAULT_ATTACHMENT3 = OFFICIAL_DIR / "附件3_申报汇总表.docx"
+# The applicant's ZIP, and the directory the two forms are extracted into. Both are
+# searched, in this order, because the brief tells the applicant either is fine.
+ZIP_NAME = "ClinPath_2026_Official_Source_Templates.zip"
+OFFICIAL_DIRS = (OFFICIAL_DIR, Path.home() / ".config" / "clinpath" / "official")
+ZIP_CANDIDATES = tuple(directory / ZIP_NAME for directory in OFFICIAL_DIRS)
+
 OUT_ATTACHMENT2 = OUT_DIR / "浙江省2026年教改项目申报书_官方模板填写版.docx"
 OUT_ATTACHMENT3 = OUT_DIR / "浙江省2026年教改项目申报汇总表_官方模板填写版.docx"
+
+# How a member/file is recognised as 附件2 / 附件3. Scored, not exact-matched: the
+# official names carry prefixes, punctuation and full-width colons that vary.
+MEMBER_HINTS: dict[str, tuple[tuple[str, int], ...]] = {
+    "attachment2": (("附件2", 5), ("附件二", 5), ("申报书", 3), ("申请书", 2)),
+    "attachment3": (("附件3", 5), ("附件三", 5), ("汇总表", 3)),
+}
+# Only these suffixes can be opened by python-docx; anything else is reported.
+DOCX_SUFFIXES = (".docx",)
+UNREADABLE_SUFFIXES = (".doc", ".wps", ".pdf")
+# A zip bomb guard: the two forms are text documents, so this is generous.
+MAX_MEMBER_BYTES = 50 * 1024 * 1024
 
 # Our own generated drafts carry this banner; seeing it means the file is not the
 # official template and must never be filled as if it were.
@@ -331,6 +365,133 @@ def current_content(hit: dict) -> str:
     return hit["target"].text.strip()
 
 
+# ------------------------------------------------------------------------ input files
+
+
+def score_name(name: str, hints: tuple[tuple[str, int], ...]) -> int:
+    """How strongly a file/member name looks like the wanted attachment."""
+    base = Path(name).name
+    if base.startswith("~$") or "__MACOSX" in name:
+        return 0
+    return sum(weight for token, weight in hints if token in base)
+
+
+def best_match(names, hints, suffixes=DOCX_SUFFIXES):
+    """Highest-scoring name with an acceptable suffix; ties go to the shorter name."""
+    scored = []
+    for name in names:
+        if not Path(name).name.lower().endswith(suffixes):
+            continue
+        points = score_name(name, hints)
+        if points:
+            scored.append((-points, len(Path(name).name), name))
+    if not scored:
+        return None
+    scored.sort()
+    return scored[0][2]
+
+
+def zip_candidates(explicit: Path | None) -> list[Path]:
+    """The explicit ZIP first, then the default locations (never only one of them)."""
+    ordered: list[Path] = []
+    for candidate in ([explicit] if explicit is not None else []) + list(ZIP_CANDIDATES):
+        if candidate not in ordered:
+            ordered.append(candidate)
+    return ordered
+
+
+def extract_from_zip(archive_path: Path, stack) -> tuple[dict[str, Path], list[str]]:
+    """Pull ONLY 附件2 and 附件3 out of the ZIP, into a temp dir outside the repo.
+
+    Members are read individually and written under a flattened, sanitised name, so
+    a crafted member path cannot escape the temp directory. The ZIP's other
+    contents (the notice, 附件1) are never written anywhere.
+    """
+    notes: list[str] = []
+    with zipfile.ZipFile(archive_path) as archive:
+        members = [info for info in archive.infolist() if not info.is_dir()]
+        names = [info.filename for info in members]
+        notes.append(f"ZIP 内含 {len(names)} 个文件")
+        for label, token in (("通知", "通知"), ("附件1", "附件1"), ("附件一", "附件一")):
+            if any(token in Path(n).name for n in names):
+                notes.append(f"检测到{label}（本脚本不使用，未解压）")
+        found: dict[str, Path] = {}
+        for kind, hints in MEMBER_HINTS.items():
+            chosen = best_match(names, hints)
+            if chosen is None:
+                unreadable = best_match(names, hints, UNREADABLE_SUFFIXES)
+                if unreadable is not None:
+                    notes.append(f"{kind}：{Path(unreadable).name} 不是 .docx，"
+                                 "python-docx 无法填写，请先另存为 .docx")
+                else:
+                    notes.append(f"{kind}：ZIP 内没有匹配的文件")
+                continue
+            info = next(item for item in members if item.filename == chosen)
+            if info.file_size > MAX_MEMBER_BYTES:
+                notes.append(f"{kind}：{Path(chosen).name} 超过 {MAX_MEMBER_BYTES} 字节，拒绝解压")
+                continue
+            if found.get("_temp") is None:
+                directory = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix="clinpath-official-")))
+                found["_temp"] = directory
+            target = found["_temp"] / Path(chosen).name
+            target.write_bytes(archive.read(info))
+            found[kind] = target
+            notes.append(f"{kind}：解压 {Path(chosen).name}（仅此两个文件写入临时目录）")
+    return found, notes
+
+
+def resolve_inputs(args, stack) -> tuple[dict[str, Path], list[str], list[str]]:
+    """Return (resolved input paths, notes, every location that was searched)."""
+    searched: list[str] = []
+    notes: list[str] = []
+    resolved: dict[str, Path] = {}
+
+    # 1. Explicit per-file paths win outright.
+    for kind, explicit in (("attachment2", args.attachment2), ("attachment3", args.attachment3)):
+        if explicit is not None:
+            searched.append(f"--{kind} {explicit}")
+            if explicit.is_file():
+                resolved[kind] = explicit
+                notes.append(f"{kind}：使用命令行指定 {explicit}")
+
+    # 2. The ZIP, which the brief tells the applicant to drop as-is.
+    if len(resolved) < 2:
+        for archive_path in zip_candidates(args.zip):
+            searched.append(str(archive_path))
+            if not archive_path.is_file():
+                continue
+            try:
+                extracted, zip_notes = extract_from_zip(archive_path, stack)
+            except (zipfile.BadZipFile, OSError) as exc:
+                notes.append(f"ZIP 无法读取：{archive_path}：{exc}")
+                continue
+            notes.append(f"来源：ZIP {archive_path}")
+            notes.extend(zip_notes)
+            for kind in ("attachment2", "attachment3"):
+                if kind not in resolved and kind in extracted:
+                    resolved[kind] = extracted[kind]
+            break
+
+    # 3. Already-extracted DOCX in the official directories (either name).
+    if len(resolved) < 2:
+        for directory in (args.official_dir, *OFFICIAL_DIRS[1:]):
+            if directory is None:
+                continue
+            searched.append(f"{directory}/*.docx")
+            if not directory.is_dir():
+                continue
+            names = [str(path) for path in sorted(directory.glob("*.docx"))]
+            for kind, hints in MEMBER_HINTS.items():
+                if kind in resolved:
+                    continue
+                chosen = best_match(names, hints)
+                if chosen is not None:
+                    resolved[kind] = Path(chosen)
+                    notes.append(f"{kind}：使用已解压的 {chosen}")
+
+    return resolved, notes, searched
+
+
 # ------------------------------------------------------------------------------ plan
 
 
@@ -448,8 +609,12 @@ def process(attachment: str, input_path: Path, output_path: Path, spec: dict,
     return result
 
 
-def render(results: list[dict], write_partial: bool) -> str:
+def render(results: list[dict], write_partial: bool, notes: list[str] | None = None) -> str:
     out = ["官方模板填写（§7.3 / §7.5）", "=" * 78]
+    if notes:
+        out.append("输入解析：")
+        out.extend(f"  - {note}" for note in notes)
+        out.append("")
     for result in results:
         out.append(f"\n附件：{result['attachment']}")
         out.append(f"  输入：{result['input']}")
@@ -483,13 +648,39 @@ def render(results: list[dict], write_partial: bool) -> str:
     return "\n".join(out)
 
 
+def _print_missing(searched: list[str], absent: list[str], notes: list[str] | None = None) -> None:
+    print("错误：找不到官方原件，拒绝运行，也不会生成任何替代模板。", file=sys.stderr)
+    print(f"  缺少：{'、'.join(absent)}", file=sys.stderr)
+    if notes:
+        # Whatever we did find (a ZIP whose members are .doc, say) is the most
+        # useful thing to say: it tells the applicant exactly what to fix.
+        print("  已找到的内容：", file=sys.stderr)
+        for note in notes:
+            print(f"    - {note}", file=sys.stderr)
+    print("已查找的位置（任一处即可）：", file=sys.stderr)
+    for location in searched:
+        print(f"  - {location}", file=sys.stderr)
+    print("也可以直接用参数指定：", file=sys.stderr)
+    print("  --zip 官方原件ZIP            # 脚本自行解压其中的附件2/附件3", file=sys.stderr)
+    print("  --official-dir 目录          # 已解压好的两个 .docx 所在目录", file=sys.stderr)
+    print("  --attachment2 文件 --attachment3 文件", file=sys.stderr)
+    print("说明见 docs/teaching_grant_2026/FINAL_DELIVERY/OFFICIAL_APPLICATION_VALIDATION.md",
+          file=sys.stderr)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="把 E5_04 六栏正文与已知字段填进官方附件 2/附件 3 的副本。",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--attachment2", type=Path, default=DEFAULT_ATTACHMENT2)
-    parser.add_argument("--attachment3", type=Path, default=DEFAULT_ATTACHMENT3)
+    parser.add_argument("--attachment2", type=Path, default=None,
+                        help="附件 2 原件（默认在官方目录中按名称识别）")
+    parser.add_argument("--attachment3", type=Path, default=None,
+                        help="附件 3 原件（默认在官方目录中按名称识别）")
+    parser.add_argument("--zip", type=Path, default=None,
+                        help=f"官方原件 ZIP（默认查找 {' 与 '.join(str(p) for p in ZIP_CANDIDATES)}）")
+    parser.add_argument("--official-dir", type=Path, default=OFFICIAL_DIR,
+                        help=f"已解压的官方 .docx 所在目录（默认 {OFFICIAL_DIR}）")
     parser.add_argument("--out-dir", type=Path, default=OUT_DIR)
     parser.add_argument("--six", type=Path, default=SIX, help="六栏正文来源（默认 E5_04）")
     parser.add_argument("--field-map", type=Path, default=None, help="覆盖默认字段映射的 JSON")
@@ -508,44 +699,38 @@ def main(argv: list[str] | None = None) -> int:
         print(f"错误：字段映射无法读取：{exc}", file=sys.stderr)
         return 1
 
-    inputs = {"attachment2": args.attachment2, "attachment3": args.attachment3}
-    absent = [(name, path) for name, path in inputs.items() if not path.is_file()]
-    if absent:
-        # Refuse before anything else: no official file means no output, and no
-        # substitute template is ever generated (task brief §7.6).
-        print("错误：找不到官方原件，拒绝运行，也不会生成任何替代模板。", file=sys.stderr)
-        for name, path in absent:
-            print(f"  缺少 {name}：{path}", file=sys.stderr)
-        print("请把申请人提供的官方原件放到（不入库）：", file=sys.stderr)
-        print(f"  {OFFICIAL_DIR}/附件2_教学改革项目申报书.docx", file=sys.stderr)
-        print(f"  {OFFICIAL_DIR}/附件3_申报汇总表.docx", file=sys.stderr)
-        print("说明见 docs/teaching_grant_2026/FINAL_DELIVERY/OFFICIAL_APPLICATION_VALIDATION.md",
-              file=sys.stderr)
-        return 2
+    with contextlib.ExitStack() as stack:
+        inputs, notes, searched = resolve_inputs(args, stack)
+        absent = [kind for kind in ("attachment2", "attachment3") if kind not in inputs]
+        if absent:
+            # Refuse before anything else: no official file means no output, and no
+            # substitute template is ever generated (task brief §7.6).
+            _print_missing(searched, absent, notes)
+            return 2
 
-    _require_docx()
-    import docx as docx_module
+        _require_docx()
+        import docx as docx_module
 
-    texts = section_texts(args.six)
-    if not texts:
-        print(f"错误：{args.six} 中解析不到任何栏目", file=sys.stderr)
-        return 1
+        texts = section_texts(args.six)
+        if not texts:
+            print(f"错误：{args.six} 中解析不到任何栏目", file=sys.stderr)
+            return 1
 
-    outputs = {
-        "attachment2": args.out_dir / OUT_ATTACHMENT2.name,
-        "attachment3": args.out_dir / OUT_ATTACHMENT3.name,
-    }
+        outputs = {
+            "attachment2": args.out_dir / OUT_ATTACHMENT2.name,
+            "attachment3": args.out_dir / OUT_ATTACHMENT3.name,
+        }
 
-    results = []
-    for attachment in ("attachment2", "attachment3"):
-        results.append(process(attachment, inputs[attachment], outputs[attachment],
-                               field_map.get(attachment, {}), texts, args.overwrite,
-                               args.dry_run, args.write_partial, docx_module))
+        results = []
+        for attachment in ("attachment2", "attachment3"):
+            results.append(process(attachment, inputs[attachment], outputs[attachment],
+                                   field_map.get(attachment, {}), texts, args.overwrite,
+                                   args.dry_run, args.write_partial, docx_module))
 
     if args.json:
-        print(json.dumps({"results": results}, ensure_ascii=False, indent=2))
+        print(json.dumps({"results": results, "notes": notes}, ensure_ascii=False, indent=2))
     else:
-        print(render(results, args.write_partial))
+        print(render(results, args.write_partial, notes))
 
     statuses = {r["status"] for r in results}
     if "INPUT_MISSING" in statuses:

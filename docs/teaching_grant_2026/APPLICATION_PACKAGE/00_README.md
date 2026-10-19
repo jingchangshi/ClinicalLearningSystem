@@ -23,13 +23,15 @@ Agent 无法访问 ChatGPT 文件沙盒，因此按任务书 §7.1 在本机查�
 - 六个正文栏目的名称与字数上限只来自任务书，转入官方 Word 后须以模板自带的栏目、字数和填报说明再核对；
 - 官方模板里可能存在本包未覆盖的字段（如经费预算表格式、承诺书、主持人情况表的具体栏目），
   见 `官方模板字段及缺失信息清单.md` 与 `../FINAL_DELIVERY/APPLICATION_SUBMISSION_CHECKLIST.md`；
-- **需要申请人动作**：把该 ZIP 放到下面任一路径并告知 Agent——
+- **需要申请人动作**：把该 ZIP **原样**放到下面任一路径并告知 Agent——
   `docs/teaching_grant_2026/APPLICATION_PACKAGE/official/ClinPath_2026_Official_Source_Templates.zip`、
-  `~/.config/clinpath/official/ClinPath_2026_Official_Source_Templates.zip`，或申请人自选路径（直接给绝对路径）。
-  放入 `official/` 的原件**不入库**（已在 `.gitignore` 排除）。
+  `~/.config/clinpath/official/ClinPath_2026_Official_Source_Templates.zip`，或申请人自选路径
+  （用 `--zip` 指定绝对路径）。**ZIP 单独就够**：填写脚本会自己识别并解压其中的附件 2/附件 3，
+  只解压这两个到仓库外的临时目录；通知与附件 1 不解压。放入 `official/` 的原件**不入库**
+  （已在 `.gitignore` 排除）。
 - **尚未生成、也不得伪造**（任务书 §7.6）：`浙江省2026年教改项目申报书_官方模板填写版.docx`、
   `浙江省2026年教改项目申报汇总表_官方模板填写版.docx`、`主持人教学简历_待核对.docx`。
-- **生成能力已就绪**：原件解压到 `official/` 后，运行
+- **生成能力已就绪**：ZIP 放到 `official/`（或 `~/.config/clinpath/official/`）后，运行
   `uv run --python 3.11 --with python-docx python scripts/grant/fill_official_forms.py`
   即把六栏正文与已知字段写进官方模板副本，输出到 `official_out/`（gitignore，不入库）；
   再用 `scripts/grant/validate_official_docx.py` 做 §7.6 核验。

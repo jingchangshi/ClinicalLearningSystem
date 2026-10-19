@@ -15,6 +15,8 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+import tempfile
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -182,6 +184,198 @@ def test_refuses_when_official_files_are_absent(tmp_path, capsys):
     assert code == 2
     assert not out.exists(), "nothing may be generated when the official files are absent"
     assert "拒绝运行" in capsys.readouterr().err
+
+
+def test_absence_message_lists_every_accepted_location(tmp_path, capsys):
+    # The message must tell the applicant every way to supply the files, including
+    # the ZIP, so following the document cannot dead-end at exit 2.
+    code = fill.main([
+        "--zip", str(tmp_path / "nope.zip"),
+        "--official-dir", str(tmp_path / "empty"),
+        "--out-dir", str(tmp_path / "out"),
+    ])
+    assert code == 2
+    err = capsys.readouterr().err
+    assert "--zip" in err and "--official-dir" in err
+    assert "--attachment2" in err and "--attachment3" in err
+    assert str(tmp_path / "nope.zip") in err
+    assert str(tmp_path / "empty") in err
+
+
+# ------------------------------------------------------------------------------- ZIP
+
+
+def _official_zip(tmp_path: Path, *, member2: str, member3: str,
+                  decoys: bool = True) -> Path:
+    """A ZIP shaped like the applicant's: a subdirectory, plus decoys to ignore."""
+    two = fixture_docx(tmp_path / "src2.docx")
+    three = fixture_summary_docx(tmp_path / "src3.docx")
+    archive = tmp_path / "official.zip"
+    with zipfile.ZipFile(archive, "w") as bundle:
+        bundle.write(two, member2)
+        bundle.write(three, member3)
+        if decoys:
+            bundle.writestr("__MACOSX/._附件2.docx", b"junk")
+            bundle.writestr("~$附件2.docx", b"lock file")
+            bundle.writestr("材料/附件1：项目选题指南.pdf", b"%PDF-1.4 decoy")
+            bundle.writestr("材料/申报通知.pdf", b"%PDF-1.4 decoy")
+    return archive
+
+
+@pytest.fixture()
+def minimal_map(tmp_path: Path) -> Path:
+    path = tmp_path / "map.json"
+    path.write_text(json.dumps({
+        "attachment2": {"sections": [{"key": name, "limit": limit, "labels": [name]}
+                                     for name, limit in fill.apptext.SECTIONS], "fields": []},
+        "attachment3": {"sections": [], "fields": []},
+    }, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
+def test_fills_directly_from_the_zip_the_document_tells_the_applicant_to_drop(tmp_path, minimal_map):
+    archive = _official_zip(
+        tmp_path,
+        member2="2026年浙江省教改项目申报材料/附件2：教学改革项目申报书.docx",
+        member3="2026年浙江省教改项目申报材料/附件3：申报汇总表.docx",
+    )
+    out = tmp_path / "out"
+    code = fill.main(["--zip", str(archive), "--out-dir", str(out),
+                      "--field-map", str(minimal_map)])
+    assert code == 0
+    produced = docx.Document(str(out / fill.OUT_ATTACHMENT2.name))
+    for name, _limit in fill.apptext.SECTIONS:
+        assert fill.locate(produced, [name]) is not None, name
+    assert (out / fill.OUT_ATTACHMENT3.name).is_file()
+
+
+def test_zip_members_are_reported_and_decoys_ignored(tmp_path, capsys, minimal_map):
+    archive = _official_zip(
+        tmp_path,
+        member2="材料/附件2：教学改革项目申报书.docx",
+        member3="材料/附件3：申报汇总表.docx",
+    )
+    fill.main(["--zip", str(archive), "--out-dir", str(tmp_path / "out"),
+               "--field-map", str(minimal_map)])
+    printed = capsys.readouterr().out
+    assert "附件2：教学改革项目申报书.docx" in printed
+    assert "附件3：申报汇总表.docx" in printed
+    assert "未解压" in printed, "the notice and 附件1 must be reported as not extracted"
+
+
+def test_zip_contents_never_land_in_the_repository(tmp_path, minimal_map):
+    archive = _official_zip(
+        tmp_path,
+        member2="材料/附件2：教学改革项目申报书.docx",
+        member3="材料/附件3：申报汇总表.docx",
+    )
+    out = tmp_path / "out"
+    before = {p.name for p in fill.OFFICIAL_DIR.iterdir()}
+    assert fill.main(["--zip", str(archive), "--out-dir", str(out),
+                      "--field-map", str(minimal_map)]) == 0
+    after = {p.name for p in fill.OFFICIAL_DIR.iterdir()}
+    assert before == after, "extraction must not write into the repo's official/ directory"
+    # And the temporary extraction directory is gone once the run finishes.
+    leftovers = list(Path(tempfile.gettempdir()).glob("clinpath-official-*"))
+    assert leftovers == [], leftovers
+
+
+def test_zip_with_only_one_form_still_reports_the_other_as_missing(tmp_path, capsys, minimal_map):
+    two = fixture_docx(tmp_path / "src2.docx")
+    archive = tmp_path / "partial.zip"
+    with zipfile.ZipFile(archive, "w") as bundle:
+        bundle.write(two, "材料/附件2：教学改革项目申报书.docx")
+    code = fill.main(["--zip", str(archive), "--out-dir", str(tmp_path / "out"),
+                      "--field-map", str(minimal_map)])
+    assert code == 2
+    assert "attachment3" in capsys.readouterr().err
+
+
+def test_unreadable_suffix_inside_the_zip_is_explained(tmp_path, capsys, minimal_map):
+    archive = tmp_path / "doc-only.zip"
+    with zipfile.ZipFile(archive, "w") as bundle:
+        bundle.writestr("材料/附件2：教学改革项目申报书.doc", b"\xd0\xcf\x11\xe0 old format")
+        bundle.writestr("材料/附件3：申报汇总表.doc", b"\xd0\xcf\x11\xe0 old format")
+    code = fill.main(["--zip", str(archive), "--out-dir", str(tmp_path / "out"),
+                      "--field-map", str(minimal_map)])
+    assert code == 2
+    err = capsys.readouterr().err
+    # The applicant put the ZIP where the document said to; the failure must say
+    # what is actually wrong with it, not just that nothing was found.
+    assert "不是 .docx" in err
+    assert "已找到的内容" in err
+
+
+def test_zip_member_matching_prefers_the_right_attachment():
+    hints2 = fill.MEMBER_HINTS["attachment2"]
+    hints3 = fill.MEMBER_HINTS["attachment3"]
+    names = ["材料/附件2：教学改革项目申报书.docx", "材料/附件3：申报汇总表.docx"]
+    assert Path(fill.best_match(names, hints2)).name.startswith("附件2")
+    assert Path(fill.best_match(names, hints3)).name.startswith("附件3")
+    # A lock file or a resource-fork entry must never win.
+    noisy = ["~$附件2.docx", "__MACOSX/._附件2.docx", "材料/附件2：教学改革项目申报书.docx"]
+    assert Path(fill.best_match(noisy, hints2)).name == "附件2：教学改革项目申报书.docx"
+
+
+def test_extracted_docx_in_the_official_dir_is_also_accepted(tmp_path, minimal_map):
+    official = tmp_path / "official"
+    official.mkdir()
+    fixture_docx(official / "附件2：教学改革项目申报书.docx")
+    fixture_summary_docx(official / "附件3：申报汇总表.docx")
+    out = tmp_path / "out"
+    code = fill.main(["--official-dir", str(official), "--out-dir", str(out),
+                      "--field-map", str(minimal_map)])
+    assert code == 0
+    assert (out / fill.OUT_ATTACHMENT2.name).is_file()
+
+
+def test_explicit_paths_win_over_zip_and_directory(tmp_path, capsys, minimal_map):
+    archive = _official_zip(tmp_path, member2="材料/附件2：教学改革项目申报书.docx",
+                            member3="材料/附件3：申报汇总表.docx")
+    explicit2 = fixture_docx(tmp_path / "explicit2.docx")
+    explicit3 = fixture_summary_docx(tmp_path / "explicit3.docx")
+    out = tmp_path / "out"
+    assert fill.main(["--zip", str(archive), "--attachment2", str(explicit2),
+                      "--attachment3", str(explicit3), "--out-dir", str(out),
+                      "--field-map", str(minimal_map)]) == 0
+    printed = capsys.readouterr().out
+    assert "命令行指定" in printed
+
+
+def test_the_home_config_directory_is_really_searched(tmp_path, monkeypatch, minimal_map):
+    """Path B in the document must be a location the script actually looks in."""
+    home_official = tmp_path / "config" / "clinpath" / "official"
+    home_official.mkdir(parents=True)
+    archive = _official_zip(tmp_path, member2="材料/附件2：教学改革项目申报书.docx",
+                            member3="材料/附件3：申报汇总表.docx")
+    # Move the ZIP to the "home" location and point the search list at it.
+    target = home_official / fill.ZIP_NAME
+    target.write_bytes(archive.read_bytes())
+    monkeypatch.setattr(fill, "OFFICIAL_DIRS", (tmp_path / "absent", home_official))
+    monkeypatch.setattr(fill, "ZIP_CANDIDATES", (tmp_path / "absent" / fill.ZIP_NAME, target))
+
+    out = tmp_path / "out"
+    assert fill.main(["--official-dir", str(tmp_path / "absent"), "--out-dir", str(out),
+                      "--field-map", str(minimal_map)]) == 0
+    assert (out / fill.OUT_ATTACHMENT2.name).is_file()
+
+
+def test_a_bad_explicit_zip_still_falls_back_to_the_default_locations(
+        tmp_path, monkeypatch, minimal_map):
+    home_official = tmp_path / "config" / "clinpath" / "official"
+    home_official.mkdir(parents=True)
+    archive = _official_zip(tmp_path, member2="材料/附件2：教学改革项目申报书.docx",
+                            member3="材料/附件3：申报汇总表.docx")
+    target = home_official / fill.ZIP_NAME
+    target.write_bytes(archive.read_bytes())
+    monkeypatch.setattr(fill, "OFFICIAL_DIRS", (tmp_path / "absent", home_official))
+    monkeypatch.setattr(fill, "ZIP_CANDIDATES", (target,))
+
+    out = tmp_path / "out"
+    assert fill.main(["--zip", str(tmp_path / "typo.zip"), "--official-dir",
+                      str(tmp_path / "absent"), "--out-dir", str(out),
+                      "--field-map", str(minimal_map)]) == 0
+    assert (out / fill.OUT_ATTACHMENT2.name).is_file()
 
 
 def test_refuses_to_fill_our_own_generated_draft(tmp_path, capsys):

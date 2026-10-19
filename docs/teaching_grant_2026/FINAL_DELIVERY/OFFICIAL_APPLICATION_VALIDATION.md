@@ -50,16 +50,23 @@ Agent 无法访问该沙盒，且该 ZIP 目前也未出现在本机。这是**�
 
 ## 3. 需要申请人执行的确切动作（精确路径）
 
-**首选（推荐，不入库）**——把 ZIP 放到下面任一路径，并回复该路径：
+**三种方式任选其一**（脚本按此顺序查找，任一处即可；都不必入库）：
 
 ```
-A)  docs/teaching_grant_2026/APPLICATION_PACKAGE/official/ClinPath_2026_Official_Source_Templates.zip
-B)  ~/.config/clinpath/official/ClinPath_2026_Official_Source_Templates.zip
-C)  申请人自选路径（请直接把绝对路径发给 Agent；无需复制到仓库）
+A)  ZIP 原样放入（推荐，脚本会自己解压其中的附件2/附件3）：
+      docs/teaching_grant_2026/APPLICATION_PACKAGE/official/ClinPath_2026_Official_Source_Templates.zip
+      ~/.config/clinpath/official/ClinPath_2026_Official_Source_Templates.zip
+B)  已解压的两个 .docx 放入（文件名含「附件2/申报书」「附件3/汇总表」即可识别）：
+      docs/teaching_grant_2026/APPLICATION_PACKAGE/official/
+      ~/.config/clinpath/official/
+C)  任意路径，直接用参数指定：
+      --zip 官方原件ZIP    /    --official-dir 目录    /    --attachment2 文件 --attachment3 文件
 ```
 
-- `APPLICATION_PACKAGE/official/` 已在 `.gitignore` 中排除，放入的官方原件**不会被提交**。
-- 也可以只提供**解压后的四个文件**（通知、附件 1、附件 2、附件 3）所在目录。
+- 上述 `official/` 目录已在 `.gitignore` 中排除，放入的官方原件**不会被提交**。
+- **ZIP 单独就够**：脚本按文件名识别其中的附件 2/附件 3，**只解压这两个**到仓库外的临时目录
+  （临时目录在运行结束时删除）；通知与附件 1 只报告、不解压、不落盘。
+  ZIP 内若是 `.doc`/`.wps`/`.pdf` 而非 `.docx`，脚本会明确说明「不是 .docx，请先另存为 .docx」。
 - ZIP 内含（任务书 §7.1）：① 2026 年浙江省本科省级教育教学改革项目申报通知；
   ② 附件 1 项目选题指南；③ 附件 2 教学改革项目申报书；④ 附件 3 申报汇总表。
 
@@ -75,17 +82,19 @@ C)  申请人自选路径（请直接把绝对路径发给 Agent；无需复制�
 **ZIP 到位后的确切命令（两条）**：
 
 ```bash
-# 1) 把官方原件解压到（文件名按官方原件的实际名称，或用 --attachment2/--attachment3 指定）
-#    docs/teaching_grant_2026/APPLICATION_PACKAGE/official/
-#      附件2_教学改革项目申报书.docx
-#      附件3_申报汇总表.docx
+# 1) 把申请人给的 ZIP 原样放到（文件名保持官方原名；也可用 --zip 指定任意路径）
+#    docs/teaching_grant_2026/APPLICATION_PACKAGE/official/ClinPath_2026_Official_Source_Templates.zip
+#    （已解压好两个 .docx 也可以，脚本按文件名自动识别；三种方式见 §3）
 
-# 2) 填写 + 核验
+# 2) 填写 + 核验（脚本自行从 ZIP 取出附件2/附件3）
 uv run --python 3.11 --with python-docx python scripts/grant/fill_official_forms.py
 uv run --python 3.11 --with python-docx python scripts/grant/validate_official_docx.py \
     "docs/teaching_grant_2026/APPLICATION_PACKAGE/official_out/浙江省2026年教改项目申报书_官方模板填写版.docx" \
     --template "docs/teaching_grant_2026/APPLICATION_PACKAGE/official/附件2_教学改革项目申报书.docx"
 ```
+
+> 第二条命令的 `--template` 用于比对页边距；若官方原件只在 ZIP 里，可先解压附件 2 到该路径，
+> 或省略 `--template`（该单项将如实标 SKIPPED）。
 
 **这一条命令会产出**（私有目录 `APPLICATION_PACKAGE/official_out/`，已在 `.gitignore` 排除）：
 
@@ -96,12 +105,15 @@ uv run --python 3.11 --with python-docx python scripts/grant/validate_official_d
 
 填写脚本的硬规则（均已由测试覆盖）：
 
-1. 官方原件缺失 → **退出 2**，不生成任何文件；
-2. 输入文件带本仓库「非官方模板」横幅 → **退出 6**，绝不把自己的草稿当官方模板填；
-3. 找不到某个预期字段 → **逐个列出为缺失（退出 3）**，不静默跳过；加 `--write-partial` 才写出已匹配部分；
-4. 目标格已有内容 → **报冲突（退出 7）**，不加 `--overwrite` 不覆盖；
-5. 某栏超过官方上限 → **退出 4**，不写出；
-6. 标签由 `--field-map` 的 JSON 提供：官方模板若写「课题名称」而非「项目名称」，改 JSON 即可，不改代码。
+1. 官方原件缺失 → **退出 2**，不生成任何文件；错误信息**列出所有已查找的位置**与三种指定方式，
+   并说明「已找到的内容」（例如 ZIP 里只有 `.doc` 时直接说明「不是 .docx」）；
+2. **ZIP 单独就够**：只解压附件 2/附件 3 到仓库外的临时目录，运行结束即删除；
+   通知与附件 1 只报告、不落盘；成员按扁平化文件名读取，构造的成员路径无法逃出临时目录；
+3. 输入文件带本仓库「非官方模板」横幅 → **退出 6**，绝不把自己的草稿当官方模板填；
+4. 找不到某个预期字段 → **逐个列出为缺失（退出 3）**，不静默跳过；加 `--write-partial` 才写出已匹配部分；
+5. 目标格已有内容 → **报冲突（退出 7）**，不加 `--overwrite` 不覆盖；
+6. 某栏超过官方上限 → **退出 4**，不写出；
+7. 标签由 `--field-map` 的 JSON 提供：官方模板若写「课题名称」而非「项目名称」，改 JSON 即可，不改代码。
 
 **§7.6 核验项与本机可执行性（2026-10-19 实测）**
 
