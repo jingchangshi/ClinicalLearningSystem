@@ -146,8 +146,11 @@
 
 ## 使用说明
 
-1. 六个栏目名称与字数上限取自任务书；官方模板原件未获得，转入官方 Word 后以模板自带计数为准再核对一次。
+1. 六个栏目名称与字数上限取自任务书；官方原件 `ClinPath_2026_Official_Source_Templates.zip` 不在本机，
+   转入官方 Word 后以模板自带栏目与计数为准再核对一次（见 `FINAL_DELIVERY/OFFICIAL_APPLICATION_VALIDATION.md`）。
 2. 全文只用计划语气描述研究；不得出现已完成时态的效果表述或具体 P 值；
    合成演示只以「技术可行性演示」出现，不出现其统计量。
-3. 所有【待填：…】必须在提交前替换为真实信息，清单见 `E5_04_placeholders.md`；不得由 Agent 代填。
-4. 平台工程事实（测试数、并发实测）不在正文中展开，引用 `FINAL_DELIVERY/TEST_REPORT.md` 并注明 SHA。
+3. 所有【待填：…】必须在提交前替换为真实信息，清单见 `E5_04_placeholders.md` 与
+   `APPLICATION_PACKAGE/官方模板字段及缺失信息清单.md`；不得由 Agent 代填。
+4. 平台工程事实（测试数、并发实测）不在正文中展开，引用本轮实测报告 `FINAL_DELIVERY/R9_TEST_REPORT.md`
+   与 `FINAL_DELIVERY/TEST_REPORT.md` 并注明 SHA；技术状态一律按文首六项区分，不合并为「技术就绪」。
