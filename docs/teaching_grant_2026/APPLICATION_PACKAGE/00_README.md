@@ -29,6 +29,11 @@ Agent 无法访问 ChatGPT 文件沙盒，因此按任务书 §7.1 在本机查�
   放入 `official/` 的原件**不入库**（已在 `.gitignore` 排除）。
 - **尚未生成、也不得伪造**（任务书 §7.6）：`浙江省2026年教改项目申报书_官方模板填写版.docx`、
   `浙江省2026年教改项目申报汇总表_官方模板填写版.docx`、`主持人教学简历_待核对.docx`。
+- **生成能力已就绪**：原件解压到 `official/` 后，运行
+  `uv run --python 3.11 --with python-docx python scripts/grant/fill_official_forms.py`
+  即把六栏正文与已知字段写进官方模板副本，输出到 `official_out/`（gitignore，不入库）；
+  再用 `scripts/grant/validate_official_docx.py` 做 §7.6 核验。
+  详见 `../FINAL_DELIVERY/OFFICIAL_APPLICATION_VALIDATION.md` §3.1。
 
 ## 1. 文件清单
 
