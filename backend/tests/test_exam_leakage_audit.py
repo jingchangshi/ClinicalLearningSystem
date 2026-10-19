@@ -113,3 +113,86 @@ def test_exposure_model_numbers():
     assert rows[-1]["informants_for_Y_at_D6_total"] == 46
     # no crossover (everyone same order) removes the within-batch exposure for the model
     assert audit.exposure_model(x_size=7)["students_with_any_within_batch_informant_at_D6"] == 0
+
+
+# ------------------------------------------------------------------------------------------
+# the five channels: a clean static scan covers one of them, and must never be written up as
+# "no leakage risk"
+# ------------------------------------------------------------------------------------------
+def _channels(history=None, production=None):
+    items = [audit.Item("case", "seed", "t", "系统性红斑狼疮")]
+    return audit.channel_matrix(items, history, production, audit.exposure_model())
+
+
+def test_channels_are_five_and_kept_apart():
+    rows = _channels()
+    assert [r["channel"] for r in rows] == ["T", "G", "P", "W", "C"]
+    by_code = {r["channel"]: r for r in rows}
+    assert by_code["T"]["status"] == "PARTIAL"                     # static scan, known blind spots
+    assert by_code["G"]["status"] == "NOT_INSPECTED"               # no --history in this call
+    assert by_code["P"]["status"] == "NOT_INSPECTED"               # production catalogue un-inspected
+    assert by_code["W"]["status"] == "MODELED_ONLY"                # verbal spread cannot be observed
+    assert by_code["C"]["status"] == "MODELED_ONLY"
+    assert by_code["W"]["evidence"]["students_with_any_within_batch_informant_at_D6"] == 49
+    assert by_code["C"]["evidence"]["students_with_prior_cohort_informants_at_D1"] == 42
+
+
+def test_production_catalogue_is_marked_inspected_only_with_an_export():
+    production = {"extra_json_files": ["catalogue.json"], "items_from_production_export": 3}
+    by_code = {r["channel"]: r for r in _channels(production=production)}
+    assert by_code["P"]["status"] == "PARTIAL"
+    assert by_code["P"]["evidence"]["items_from_production_export"] == 3
+
+
+def test_public_history_channel_reports_the_refs_it_read():
+    history = {"refs_inspected": [{"ref": "refs/remotes/origin/main", "sha": "0" * 40}],
+               "exposed_paths": [{"path": "docs/A01_assessment_UA.md", "refs": ["refs/remotes/origin/main"]}],
+               "limits": ["本地远端跟踪引用，可能落后于远端（未执行 git fetch）"]}
+    row = next(r for r in _channels(history=history) if r["channel"] == "G")
+    assert row["status"] == "PARTIAL"
+    assert row["evidence"]["refs"] == 1
+    assert row["evidence"]["exposed_paths"][0]["path"].endswith("A01_assessment_UA.md")
+    assert any("git fetch" in limit for limit in row["limits"])
+
+
+def test_forbidden_claims_block_the_no_leakage_writeup():
+    claims = " ".join(audit.forbidden_claims(_channels()))
+    assert "不得写成“正式考试无泄漏风险”" in claims
+    assert "P/W/C" in claims                      # every un-closed channel must be named
+    assert "生产实际病例目录仍未核查" in claims
+
+
+def test_channels_cli_prints_the_matrix_and_the_wording_restriction():
+    result = subprocess.run([sys.executable, "-I", str(SCRIPT), "--channels"],
+                            capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "Leakage channels" in result.stdout
+    assert "[P] 未核查" in result.stdout
+    assert "Wording restriction" in result.stdout
+
+
+def test_channels_and_verdict_are_in_the_json_output():
+    result = subprocess.run([sys.executable, "-I", str(SCRIPT), "--json"], capture_output=True, text=True)
+    data = json.loads(result.stdout)
+    assert [c["channel"] for c in data["channels"]] == ["T", "G", "P", "W", "C"]
+    assert data["static_scan"]["counts"]["HIGH"] == 0
+    assert data["static_scan"]["not_supported_claim"] == "正式考试无泄漏风险"
+
+
+def test_history_scan_is_read_only_and_fails_closed_outside_a_repository(tmp_path):
+    result = subprocess.run([sys.executable, "-I", str(SCRIPT), "--repo-root", str(tmp_path), "--history"],
+                            capture_output=True, text=True)
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "fail closed" in result.stderr
+
+
+def test_history_scan_lists_already_public_exam_material():
+    """Read-only over the local refs: the exposure of this repository's history is a fact."""
+    result = subprocess.run([sys.executable, "-I", str(SCRIPT), "--history", "--json"],
+                            capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    channel = next(c for c in json.loads(result.stdout)["channels"] if c["channel"] == "G")
+    assert channel["status"] == "PARTIAL" and channel["evidence"]["refs"] >= 1
+    paths = {p["path"] for p in channel["evidence"]["exposed_paths"]}
+    assert "docs/teaching_grant_2026/workpackages/A_cases/A01_assessment_UA.md" in paths
+    assert not any(p.endswith(".py") for p in paths)      # a script naming the patterns is not exam material
