@@ -96,10 +96,19 @@ def test_clean_staged_commit_passes(tmp_path):
     assert "content-inspected" in result.stdout          # a pass reports its coverage
 
 
-def test_real_repo_tree_has_no_block():
-    result = subprocess.run([sys.executable, "-I", str(SCRIPT), "--scope", "tree"],
-                            capture_output=True, text=True)
-    assert result.returncode == 0, result.stdout + result.stderr
+def test_real_repo_tree_has_no_block_once_binaries_are_accepted():
+    """Text content in this repository is clean; the tracked binaries need the operator decision.
+
+    The repository legitimately tracks screenshots, DOCX and a ZIP, which no text rule can read.
+    The scan refuses to call that a pass on its own, so the assertion is made with the explicit
+    ``--accept-uninspected-binary`` decision - and the same run without it must still BLOCK.
+    """
+    accepted = subprocess.run([sys.executable, "-I", str(SCRIPT), "--scope", "tree",
+                               "--accept-uninspected-binary"], capture_output=True, text=True)
+    assert accepted.returncode == 0, accepted.stdout + accepted.stderr
+    raw = subprocess.run([sys.executable, "-I", str(SCRIPT), "--scope", "tree"],
+                         capture_output=True, text=True)
+    assert raw.returncode == 1 and "B01" in _rules(raw)
 
 
 # ---------------------------------------------------------------------------------------

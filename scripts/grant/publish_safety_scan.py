@@ -309,8 +309,11 @@ def collect_targets(root: Path, scope: str, rev_range: str | None) -> tuple[list
 # rules
 # ------------------------------------------------------------------------------------------
 SECRET_RULES: list[tuple[str, str]] = [
+    # a *value* after the assignment, not the bare name: documentation that names the variable
+    # (``JWT_SECRET=`` in a table cell) is not a credential.
     ("C01", r"(JWT_SECRET|JWT_KEY|SECRET_KEY|API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|LLM_API_KEY"
-            r"|ACCESS_TOKEN|DB_PASSWORD|DATABASE_PASSWORD|SEED_DEMO_STUDENT_PASSWORD)\s*[:=]\s*[\"']?([^\s\"'#,;)}]{12,})"),
+            r"|ACCESS_TOKEN|DB_PASSWORD|DATABASE_PASSWORD|SEED_DEMO_STUDENT_PASSWORD)\s*[:=]\s*"
+            r"[\"']?([A-Za-z0-9+/_\-.]{12,})"),
     ("C02", r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
     ("C03", r"\b(sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z\-_]{35})\b"),
 ]
@@ -327,9 +330,12 @@ IDENTITY_KEY = re.compile(r"(学号|student_no|student_number|姓名|真实姓�
 STUDY_KEY = re.compile(r"(study_id|study_code|research_id|subject_id|研究编号)")
 DIGITS = re.compile(r"\d{4,}")
 
+# A signature is filled in when it names someone: Han characters or Latin letters, not a
+# placeholder and not an English word standing in a documentation table (``signed: yes``).
+SIGNED_NAME = re.compile(r"(?:[一-鿿]{2,}|[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)")
 ETHICS_PERSONAL = re.compile(
-    r"(学生签名|受试者签名|研究者签名|见证人签名|申请人签名)\s*[：:]\s*(?!$|【|＿|_|的|\||</)[^\s|]{2,}")
-SIGNATURE_BLOCK = re.compile(r"(签名|签字)\s*[：:]\s*[^\s|【＿_]{2,4}\s*(日期|年|20\d\d)")
+    r"(学生签名|受试者签名|研究者签名|见证人签名|申请人签名)\s*[：:]\s*([^\s|]{2,})")
+SIGNATURE_BLOCK = re.compile(r"(签名|签字)\s*[：:]\s*([^\s|【＿_]{2,4})\s*(日期|年|20\d\d)")
 
 PRIVATE_APP_PATH_HINTS = ("application_text", "e5_04", "申报书", "汇总表", "简历")
 APPLICANT_ROLE = re.compile(r"(申请人|主持人|项目负责人|负责人)\s*[：:]\s*(?!【待填|【|＿|_)[一-鿿]{2,4}\b")
@@ -472,7 +478,11 @@ def evaluate(target: Target) -> list[Finding]:
                                                "uses the 【待填：…】 placeholder instead"))
 
     for lineno, line in enumerate(lines, start=1):
-        if ETHICS_PERSONAL.search(line) or SIGNATURE_BLOCK.search(line):
+        ethics = ETHICS_PERSONAL.search(line)
+        signature = SIGNATURE_BLOCK.search(line)
+        name = (ethics.group(2) if ethics else None) or (signature.group(2) if signature else None)
+        if name and not any(token in name for token in ("【", "＿", "_", "<", "…", "待填")) \
+                and SIGNED_NAME.search(name):
             findings.append(Finding("BLOCK", "C10", "ethics_personal_info", target.path, lineno,
                                     detail="a filled-in signature block: consent forms carrying real identities "
                                            "stay on paper outside the repository"))
