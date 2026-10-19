@@ -420,9 +420,56 @@ R9_CONSISTENCY: list[tuple[str, str, str]] = [
      "申报正文：无任何真实教师签字"),
     ("FINAL_DELIVERY/R9_HUMAN_ACTION_CHECKLIST.md", r"阻塞研究启动",
      "真人待办清单：区分是否阻塞研究启动"),
+    # The R9 checklist must stay standalone: the exposure decisions that
+    # EXAM_SECURITY_FINAL.md points at have to actually be in it.
+    ("FINAL_DELIVERY/R9_HUMAN_ACTION_CHECKLIST.md", r"仓库.{0,6}私有|改私有",
+     "R9 待办清单：公开仓库暴露面处置（H18）"),
+    ("FINAL_DELIVERY/R9_HUMAN_ACTION_CHECKLIST.md", r"E1\s*[—\-–~]\s*E5",
+     "R9 待办清单：旧稿处置选项 E1—E5（H19）"),
+    ("FINAL_DELIVERY/R9_HUMAN_ACTION_CHECKLIST.md", r"渠道\s*\*{0,2}P",
+     "R9 待办清单：泄漏渠道 P 的核查（H22）"),
+    ("FINAL_DELIVERY/R9_HUMAN_ACTION_CHECKLIST.md", r"UNVERIFIED|待核实引用",
+     "R9 待办清单：待核实引用逐条核对（H21）"),
+    ("FINAL_DELIVERY/R9_HUMAN_ACTION_CHECKLIST.md", r"A01'\s*/\s*A02'|A01'/A02'",
+     "R9 待办清单：新命制保密题本 A01'/A02'"),
+    ("FINAL_DELIVERY/R9_HUMAN_ACTION_CHECKLIST.md", r"改写\s*Git\s*历史|不得.{0,6}改写.{0,4}历史",
+     "R9 待办清单：不得改写 Git 历史"),
     ("workpackages/DATA_DICTIONARY.md", r"训练暴露",
      "数据字典：含训练暴露字段（研究↔训练关联）"),
 ]
+
+# (referencing document, checklist document). Every ``H<number>`` the referencing
+# document attributes to the checklist must exist as a row in it, so renaming or
+# deleting an item cannot silently pass. Ranges such as ``H18—H21`` are expanded.
+CHECKLIST_CROSS_REFERENCES: list[tuple[str, str]] = [
+    ("FINAL_DELIVERY/EXAM_SECURITY_FINAL.md", "FINAL_DELIVERY/R9_HUMAN_ACTION_CHECKLIST.md"),
+    ("FINAL_DELIVERY/EXAM_FORM_REAUTHORING_REQUIREMENTS.md",
+     "FINAL_DELIVERY/R9_HUMAN_ACTION_CHECKLIST.md"),
+    ("FINAL_DELIVERY/EXAM_SECURE_IMPORT_SPEC.md", "FINAL_DELIVERY/R9_HUMAN_ACTION_CHECKLIST.md"),
+    ("FINAL_DELIVERY/FORM_ORDER_DECISION_OPTIONS.md",
+     "FINAL_DELIVERY/R9_HUMAN_ACTION_CHECKLIST.md"),
+]
+
+H_RANGE_RE = re.compile(r"H\s*(\d+)\s*[—–\-~]\s*H?\s*(\d+)")
+H_ID_RE = re.compile(r"H\s*(\d+)")
+H_ROW_RE = re.compile(r"^\|\s*H\s*(\d+)\s*\|", re.MULTILINE)
+
+
+def referenced_h_ids(line: str) -> set[int]:
+    """H ids on a line, expanding ranges like ``H18—H21``."""
+    ids: set[int] = set()
+    for match in H_RANGE_RE.finditer(line):
+        low, high = int(match.group(1)), int(match.group(2))
+        if low <= high:
+            ids.update(range(low, high + 1))
+    for match in H_ID_RE.finditer(line):
+        ids.add(int(match.group(1)))
+    return ids
+
+
+def defined_h_ids(text: str) -> set[int]:
+    """H ids that have their own row in the checklist table."""
+    return {int(match.group(1)) for match in H_ROW_RE.finditer(text)}
 
 # Task brief §12 deliverables. Every path must exist; a missing one means the
 # round's evidence set is incomplete and the check fails (exit 2).
@@ -471,6 +518,35 @@ def _check_r9_consistency() -> list[dict]:
     return out
 
 
+def _check_checklist_cross_references() -> list[dict]:
+    """Every H id a document attributes to the checklist must exist in it.
+
+    This is the guard for the failure mode that actually happened: a document
+    cross-references "R9_HUMAN_ACTION_CHECKLIST.md H18—H21" while the checklist
+    stops at H15, so the single most consequential decision (the public-repo
+    exposure choice) is invisible to a reader of the checklist.
+    """
+    out: list[dict] = []
+    for referencing, checklist in CHECKLIST_CROSS_REFERENCES:
+        referencing_path = GRANT / referencing
+        checklist_path = GRANT / checklist
+        if not referencing_path.is_file() or not checklist_path.is_file():
+            continue
+        defined = defined_h_ids(checklist_path.read_text(encoding="utf-8"))
+        basename = Path(checklist).name
+        for number, line in enumerate(referencing_path.read_text(encoding="utf-8").splitlines(), start=1):
+            if basename not in line:
+                continue
+            for h_id in sorted(referenced_h_ids(line)):
+                if h_id not in defined:
+                    out.append({
+                        "file": referencing, "line": number,
+                        "why": f"引用了 {basename} 的 H{h_id:02d}，但该编号在清单中没有对应条目",
+                        "text": line.strip()[:160],
+                    })
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true")
@@ -505,6 +581,7 @@ def main(argv: list[str] | None = None) -> int:
 
     violations.extend(_check_required())
     violations.extend(_check_r9_consistency())
+    violations.extend(_check_checklist_cross_references())
 
     # The historical notes must mark 方案 B as rejected.
     history_problems: list[str] = []

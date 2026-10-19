@@ -394,3 +394,98 @@ def test_application_text_requires_the_six_state_wording(tmp_path, phrase):
     report = app.check(path)
     assert not report["ok"], phrase
     assert app.main(["--doc", str(path)]) == 1
+
+
+# --------------------------------------------------------------------------
+# R9 checklist: standalone, and its cross-references verified
+# --------------------------------------------------------------------------
+
+
+def test_r9_checklist_is_standalone_with_the_exposure_decisions():
+    """The checklist a reader lands on must itself carry the exposure decisions."""
+    text = (proto.GRANT / "FINAL_DELIVERY/R9_HUMAN_ACTION_CHECKLIST.md").read_text(encoding="utf-8")
+    defined = proto.defined_h_ids(text)
+    # H01-H15 keep their numbers; the exposure items follow.
+    assert set(range(1, 16)) <= defined
+    assert {16, 17, 18, 19, 20, 21, 22} <= defined
+    for needle in ("仓库", "E1—E5", "渠道 P", "UNVERIFIED", "A01'", "改写"):
+        assert needle in text, needle
+
+
+def test_r9_checklist_states_the_blocking_counts_it_actually_has():
+    text = (proto.GRANT / "FINAL_DELIVERY/R9_HUMAN_ACTION_CHECKLIST.md").read_text(encoding="utf-8")
+    rows = re.findall(r"^\|\s*(H\d+)\s*\|(.+?)\|\s*$", text, re.MULTILINE)
+    blocking_app, blocking_study = [], []
+    for hid, rest in rows:
+        cells = [cell.strip() for cell in rest.split("|")]
+        if len(cells) >= 3:
+            if cells[1].startswith("**是**"):
+                blocking_app.append(hid)
+            if cells[2].startswith("**是**"):
+                blocking_study.append(hid)
+    assert f"阻塞申报提交的 {len(blocking_app)} 项" in text, (len(blocking_app), blocking_app)
+    assert f"阻塞研究启动的 {len(blocking_study)} 项" in text, (len(blocking_study), blocking_study)
+
+
+@pytest.mark.parametrize(
+    "line,expected",
+    [
+        ("> 真人事项：`R9_HUMAN_ACTION_CHECKLIST.md` H09/H14/H18—H21。", {9, 14, 18, 19, 20, 21}),
+        ("`R9_HUMAN_ACTION_CHECKLIST.md` 的 **H14**", {14}),
+        ("`R9_HUMAN_ACTION_CHECKLIST.md` H18（公开仓库暴露处置）、H19/H20", {18, 19, 20}),
+        ("H5-H7 and H12", {5, 6, 7, 12}),
+    ],
+)
+def test_h_id_reference_parsing_expands_ranges(line, expected):
+    assert proto.referenced_h_ids(line) == expected
+
+
+def test_h_rows_are_parsed_from_the_table():
+    text = "| H01 | a |\n| H18 | b |\n| 其他 | c |\n"
+    assert proto.defined_h_ids(text) == {1, 18}
+
+
+def test_cross_reference_to_a_missing_h_item_is_flagged(fake_tree, monkeypatch):
+    """The bug that actually happened: a document points at an item the list lacks."""
+    checklist = fake_tree / "FINAL_DELIVERY" / "R9_HUMAN_ACTION_CHECKLIST.md"
+    checklist.parent.mkdir(parents=True)
+    checklist.write_text("| H01 | 只有这一条 |\n", encoding="utf-8")
+    referencing = fake_tree / "FINAL_DELIVERY" / "EXAM_SECURITY_FINAL.md"
+    referencing.write_text(
+        "> 真人事项：`R9_HUMAN_ACTION_CHECKLIST.md` H09/H14/H18—H21。\n", encoding="utf-8")
+    monkeypatch.setattr(proto, "CHECKLIST_CROSS_REFERENCES", [
+        ("FINAL_DELIVERY/EXAM_SECURITY_FINAL.md", "FINAL_DELIVERY/R9_HUMAN_ACTION_CHECKLIST.md"),
+    ])
+    whys = [v["why"] for v in proto._check_checklist_cross_references()]
+    assert sum("没有对应条目" in w for w in whys) == 6, whys  # 9, 14, 18, 19, 20, 21
+
+
+def test_cross_reference_passes_when_every_item_exists(fake_tree, monkeypatch):
+    checklist = fake_tree / "FINAL_DELIVERY" / "R9_HUMAN_ACTION_CHECKLIST.md"
+    checklist.parent.mkdir(parents=True)
+    checklist.write_text("".join(f"| H{i:02d} | x |\n" for i in range(1, 23)), encoding="utf-8")
+    referencing = fake_tree / "FINAL_DELIVERY" / "EXAM_SECURITY_FINAL.md"
+    referencing.write_text(
+        "> 真人事项：`R9_HUMAN_ACTION_CHECKLIST.md` H09/H14/H18—H21。\n", encoding="utf-8")
+    monkeypatch.setattr(proto, "CHECKLIST_CROSS_REFERENCES", [
+        ("FINAL_DELIVERY/EXAM_SECURITY_FINAL.md", "FINAL_DELIVERY/R9_HUMAN_ACTION_CHECKLIST.md"),
+    ])
+    assert proto._check_checklist_cross_references() == []
+
+
+def test_real_documents_resolve_every_h_reference():
+    """Runs against the real tree: every cross-referenced H item must exist."""
+    assert proto._check_checklist_cross_references() == []
+
+
+def test_missing_checklist_is_not_silently_skipped(fake_tree, monkeypatch):
+    referencing = fake_tree / "FINAL_DELIVERY" / "EXAM_SECURITY_FINAL.md"
+    referencing.parent.mkdir(parents=True)
+    referencing.write_text("`R9_HUMAN_ACTION_CHECKLIST.md` H18\n", encoding="utf-8")
+    monkeypatch.setattr(proto, "CHECKLIST_CROSS_REFERENCES", [
+        ("FINAL_DELIVERY/EXAM_SECURITY_FINAL.md", "FINAL_DELIVERY/R9_HUMAN_ACTION_CHECKLIST.md"),
+    ])
+    # No checklist file: the cross-reference check cannot verify, and the file's
+    # absence is separately a hard failure via R9_DELIVERABLES.
+    assert proto._check_checklist_cross_references() == []
+    assert "FINAL_DELIVERY/R9_HUMAN_ACTION_CHECKLIST.md" in proto.R9_DELIVERABLES
