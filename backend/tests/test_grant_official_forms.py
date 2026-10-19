@@ -1,13 +1,19 @@
 """Tests for the official-form fill / validation pipeline.
 
-The pipeline cannot be exercised against the real templates (they are not on this
-machine), so these tests build a **synthetic fixture** with python-docx: a table of
-six labelled section rows plus a few labelled metadata rows. The fixture is named
-and built as a fixture, never as an official template -- and the fill script's
-"refuse to treat our own draft as official" rule is tested by putting this
-repository's own ``非官方模板`` banner into one of them.
+These tests build **synthetic fixtures** with python-docx / openpyxl: a table of six
+labelled section rows plus a few labelled metadata rows, a merged-cell fixture that
+mirrors the real official 申报书's layout (prompt paragraph + answer paragraphs), and
+an Excel summary table. Every fixture is named and built as a fixture, never as an
+official template -- and the fill script's "refuse to treat our own draft as
+official" rule is tested by putting this repository's own ``非官方模板`` banner into
+one of them.
 
-Both scripts import python-docx lazily, so the whole module skips when it is absent.
+Attachment identity is tested without any attachment number: the real republished
+package numbers the summary table 附件4 while an ``附件3`` is the anonymised
+application form, so identity must come from the name *and* the content.
+
+Both scripts import python-docx / openpyxl lazily, so the module skips when they are
+absent.
 """
 
 from __future__ import annotations
@@ -26,6 +32,7 @@ GRANT_SCRIPTS = REPO / "scripts" / "grant"
 SIX = REPO / "docs" / "teaching_grant_2026" / "evidence" / "E5_protocol" / "E5_04_application_text.md"
 
 docx = pytest.importorskip("docx", reason="python-docx is needed for the DOCX pipeline tests")
+openpyxl = pytest.importorskip("openpyxl", reason="openpyxl is needed for the XLSX pipeline tests")
 from docx.oxml import OxmlElement  # noqa: E402
 from docx.oxml.ns import qn  # noqa: E402
 from docx.shared import Cm, Pt  # noqa: E402
@@ -179,6 +186,7 @@ def test_refuses_when_official_files_are_absent(tmp_path, capsys):
     code = fill.main([
         "--attachment2", str(tmp_path / "missing2.docx"),
         "--attachment3", str(tmp_path / "missing3.docx"),
+        "--official-dir", str(tmp_path / "empty"),
         "--out-dir", str(out),
     ])
     assert code == 2
@@ -271,13 +279,16 @@ def test_zip_contents_never_land_in_the_repository(tmp_path, minimal_map):
     )
     out = tmp_path / "out"
     before = {p.name for p in fill.OFFICIAL_DIR.iterdir()}
+    # Another process may legitimately own a same-prefixed directory (the operator's
+    # download scratch), so compare before/after instead of demanding none at all.
+    temp_before = set(Path(tempfile.gettempdir()).glob("clinpath-official-*"))
     assert fill.main(["--zip", str(archive), "--out-dir", str(out),
                       "--field-map", str(minimal_map)]) == 0
     after = {p.name for p in fill.OFFICIAL_DIR.iterdir()}
     assert before == after, "extraction must not write into the repo's official/ directory"
-    # And the temporary extraction directory is gone once the run finishes.
-    leftovers = list(Path(tempfile.gettempdir()).glob("clinpath-official-*"))
-    assert leftovers == [], leftovers
+    # And this run's temporary extraction directory is gone once it finishes.
+    leftovers = set(Path(tempfile.gettempdir()).glob("clinpath-official-*")) - temp_before
+    assert leftovers == set(), leftovers
 
 
 def test_zip_with_only_one_form_still_reports_the_other_as_missing(tmp_path, capsys, minimal_map):
@@ -285,8 +296,8 @@ def test_zip_with_only_one_form_still_reports_the_other_as_missing(tmp_path, cap
     archive = tmp_path / "partial.zip"
     with zipfile.ZipFile(archive, "w") as bundle:
         bundle.write(two, "材料/附件2：教学改革项目申报书.docx")
-    code = fill.main(["--zip", str(archive), "--out-dir", str(tmp_path / "out"),
-                      "--field-map", str(minimal_map)])
+    code = fill.main(["--zip", str(archive), "--official-dir", str(tmp_path / "empty"),
+                      "--out-dir", str(tmp_path / "out"), "--field-map", str(minimal_map)])
     assert code == 2
     assert "attachment3" in capsys.readouterr().err
 
@@ -296,8 +307,8 @@ def test_unreadable_suffix_inside_the_zip_is_explained(tmp_path, capsys, minimal
     with zipfile.ZipFile(archive, "w") as bundle:
         bundle.writestr("材料/附件2：教学改革项目申报书.doc", b"\xd0\xcf\x11\xe0 old format")
         bundle.writestr("材料/附件3：申报汇总表.doc", b"\xd0\xcf\x11\xe0 old format")
-    code = fill.main(["--zip", str(archive), "--out-dir", str(tmp_path / "out"),
-                      "--field-map", str(minimal_map)])
+    code = fill.main(["--zip", str(archive), "--official-dir", str(tmp_path / "empty"),
+                      "--out-dir", str(tmp_path / "out"), "--field-map", str(minimal_map)])
     assert code == 2
     err = capsys.readouterr().err
     # The applicant put the ZIP where the document said to; the failure must say
@@ -769,3 +780,314 @@ def test_render_states_skipped_checks_are_not_passes(tmp_path, monkeypatch):
     text = validate.render(report)
     assert "未能执行的检查" in text
     assert "PDF 渲染" in text
+
+
+# --------------------------------------------------- the real 申报书's merged-cell layout
+
+
+def fixture_official_layout_docx(path: Path, *, tail_row: bool = True) -> Path:
+    """A SYNTHETIC stand-in for the real official 申报书's section layout.
+
+    Each section is one merged cell whose FIRST paragraph is the prompt and whose
+    following paragraphs are the answer slots; the last section puts its prompt on
+    its own row and leaves the next row for the body -- exactly the shape the real
+    2026 Zhejiang form uses. This is a test fixture, not the official template.
+    """
+    document = docx.Document()
+    _chinese_normal_style(document)
+    _margins(document)
+    names = list(fill.apptext.SECTIONS)
+    table = document.add_table(rows=len(names) + (1 if tail_row else 0), cols=1)
+    table.style = "Table Grid"
+    for index, (name, limit) in enumerate(names):
+        cell = table.cell(index, 0)
+        cell.text = f"{index + 1}.{name}（不超过{limit}字）"
+        if not (tail_row and index == len(names) - 1):
+            cell.add_paragraph("")
+            cell.add_paragraph("")
+        _cant_split(table.rows[index])
+    if tail_row:
+        _cant_split(table.rows[-1])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    document.save(path)
+    return path
+
+
+def test_section_body_is_written_after_the_prompt_paragraph(tmp_path):
+    two = fixture_official_layout_docx(tmp_path / "a2.docx")
+    three = fixture_summary_docx(tmp_path / "a3.docx")
+    out = tmp_path / "out"
+    map_path = tmp_path / "map.json"
+    map_path.write_text(json.dumps({
+        "attachment2": {"sections": [
+            {"key": name, "limit": limit, "block": True, "labels": [name]}
+            for name, limit in fill.apptext.SECTIONS], "fields": []},
+        "attachment3": {"sections": [], "fields": []},
+    }, ensure_ascii=False), encoding="utf-8")
+
+    assert fill.main(["--attachment2", str(two), "--attachment3", str(three),
+                      "--out-dir", str(out), "--field-map", str(map_path)]) == 0
+
+    produced = docx.Document(str(out / fill.OUT_ATTACHMENT2.name))
+    texts = fill.section_texts(SIX)
+    whole = fill.document_text(produced)
+    for index, (name, limit) in enumerate(fill.apptext.SECTIONS, start=1):
+        entry = {"key": name, "block": True, "labels": [name]}
+        hit = fill.find_section_hit(produced, entry)
+        assert hit is not None and hit["kind"] == "cell-block", name
+        body = fill.hit_body_text(hit)
+        filled = sum(1 for ch in body if not ch.isspace())
+        source = sum(1 for ch in "".join(texts[name]) if not ch.isspace())
+        assert filled == source, (name, filled, source)
+        # The prompt is never overwritten and never duplicated.
+        prompt = f"{index}.{name}（不超过{limit}字）"
+        assert whole.count(prompt) == 1, (name, whole.count(prompt))
+
+
+def test_the_prompt_survives_a_second_run_and_the_counts_are_stable(tmp_path):
+    two = fixture_official_layout_docx(tmp_path / "a2.docx")
+    three = fixture_summary_docx(tmp_path / "a3.docx")
+    out = tmp_path / "out"
+    map_path = tmp_path / "map.json"
+    map_path.write_text(json.dumps({
+        "attachment2": {"sections": [{"key": name, "limit": limit, "block": True,
+                                      "labels": [name]}
+                                     for name, limit in fill.apptext.SECTIONS], "fields": []},
+        "attachment3": {"sections": [], "fields": []},
+    }, ensure_ascii=False), encoding="utf-8")
+    args = ["--attachment2", str(two), "--attachment3", str(three),
+            "--out-dir", str(out), "--field-map", str(map_path)]
+    assert fill.main(args) == 0
+    first = (out / fill.OUT_ATTACHMENT2.name).read_bytes()
+
+    # Re-running reads the untouched input again, so the result must be identical:
+    # a locator that only recognised empty answer paragraphs would fail here.
+    assert fill.main(args) == 0
+    assert (out / fill.OUT_ATTACHMENT2.name).read_bytes() == first
+
+
+def test_re_running_against_an_already_filled_file_is_not_a_conflict(tmp_path):
+    """Idempotence: content equal to the value being written is not a conflict."""
+    two = fixture_official_layout_docx(tmp_path / "a2.docx")
+    three = fixture_summary_docx(tmp_path / "a3.docx")
+    out = tmp_path / "out"
+    map_path = tmp_path / "map.json"
+    map_path.write_text(json.dumps({
+        "attachment2": {"sections": [{"key": name, "limit": limit, "block": True,
+                                      "labels": [name]}
+                                     for name, limit in fill.apptext.SECTIONS], "fields": []},
+        "attachment3": {"sections": [], "fields": []},
+    }, ensure_ascii=False), encoding="utf-8")
+    assert fill.main(["--attachment2", str(two), "--attachment3", str(three),
+                      "--out-dir", str(out), "--field-map", str(map_path)]) == 0
+
+    # Now feed the FILLED file back in as the input.
+    assert fill.main(["--attachment2", str(out / fill.OUT_ATTACHMENT2.name),
+                      "--attachment3", str(three), "--out-dir", str(out),
+                      "--field-map", str(map_path)]) == 0
+
+
+# ------------------------------------------------------- identity without a number
+
+
+def test_the_anonymised_application_is_never_taken_for_the_summary(tmp_path, minimal_map):
+    official = tmp_path / "official"
+    official.mkdir()
+    fixture_docx(official / "附件2：教学改革项目申报书.docx")
+    fixture_docx(official / "附件3：申报书匿名版.docx")
+    fixture_summary_docx(official / "附件4：申报汇总表.docx")
+    out = tmp_path / "out"
+    assert fill.main(["--official-dir", str(official), "--out-dir", str(out),
+                      "--field-map", str(minimal_map)]) == 0
+    summary = docx.Document(str(out / fill.OUT_ATTACHMENT3_DOCX.name))
+    assert fill.locate(summary, ["项目主持人"]) is not None
+    application = docx.Document(str(out / fill.OUT_ATTACHMENT2.name))
+    # The filled application must be the 申报书 (six sections), not the 匿名版.
+    assert fill.locate(application, ["项目研究基础"]) is not None
+
+
+def test_the_application_number_is_never_used_to_choose_the_summary(tmp_path, minimal_map):
+    """A summary table numbered 附件3 (as the 通知's own list does) still works."""
+    official = tmp_path / "official"
+    official.mkdir()
+    fixture_docx(official / "附件2：教学改革项目申报书.docx")
+    fixture_summary_docx(official / "附件3：申报汇总表.docx")
+    out = tmp_path / "out"
+    assert fill.main(["--official-dir", str(official), "--out-dir", str(out),
+                      "--field-map", str(minimal_map)]) == 0
+    assert (out / fill.OUT_ATTACHMENT3_DOCX.name).is_file()
+
+
+def test_an_anonymous_document_is_not_accepted_as_the_application_form(tmp_path, capsys, minimal_map):
+    official = tmp_path / "official"
+    official.mkdir()
+    fixture_docx(official / "附件3：申报书匿名版.docx")
+    fixture_summary_docx(official / "附件4：申报汇总表.docx")
+    code = fill.main(["--official-dir", str(official), "--out-dir", str(tmp_path / "out"),
+                      "--field-map", str(minimal_map)])
+    assert code == 2
+    assert "attachment2" in capsys.readouterr().err
+
+
+def test_the_closing_summary_table_is_never_taken_for_the_application_summary():
+    hints = fill.MEMBER_HINTS["attachment3"]
+    names = ["附件4：结题验收汇总表.xlsx", "附件4：申报汇总表.xlsx"]
+    assert Path(fill.best_match(names, hints, fill.XLSX_SUFFIXES)).name.endswith("申报汇总表.xlsx")
+
+
+# ------------------------------------------------------------------- Excel summary table
+
+
+def fixture_summary_xlsx(path: Path, *, banner: bool = False) -> Path:
+    """A SYNTHETIC stand-in for 附件4 -- the official summary table is Excel."""
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = "Sheet1"
+    sheet["A1"] = "附件4"
+    sheet["A2"] = "浙江省高等教育2026年教学改革项目申报汇总表"
+    sheet["A3"] = "学院（盖章）：          联系人：            联系电话："
+    if banner:
+        sheet["A4"] = "非官方模板 · 可编辑草稿 · 测试夹具"
+        header_row = 5
+    else:
+        header_row = 4
+    headers = ["序号", "项目层次", "项目类别", "项目方向", "项目名称", "第一完成单位",
+               "主持人", "出生年月", "职称", "管理职务", "项目组主要成员（不超过8位）",
+               "主持人是否为中层干部及以上", "备注"]
+    for index, header in enumerate(headers, start=1):
+        sheet.cell(row=header_row, column=index, value=header)
+    data_row = header_row + 1
+    sheet.cell(row=data_row, column=1, value=1)
+    sheet.cell(row=data_row, column=3, value="01")
+    sheet.cell(row=data_row, column=8, value="例：1981.01")
+    sheet.cell(row=data_row, column=11, value="例：张三、李四")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    workbook.save(path)
+    return path
+
+
+def _summary_map(tmp_path: Path) -> Path:
+    path = tmp_path / "summary_map.json"
+    path.write_text(json.dumps({
+        "attachment2": {"sections": [{"key": name, "limit": limit, "block": True,
+                                      "labels": [name]}
+                                     for name, limit in fill.apptext.SECTIONS], "fields": []},
+        "attachment3": fill.DEFAULT_FIELD_MAP["attachment3"],
+    }, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
+def test_fills_the_excel_summary_table(tmp_path):
+    two = fixture_official_layout_docx(tmp_path / "a2.docx")
+    three = fixture_summary_xlsx(tmp_path / "a3.xlsx")
+    out = tmp_path / "out"
+    assert fill.main(["--attachment2", str(two), "--attachment3", str(three),
+                      "--out-dir", str(out), "--field-map", str(_summary_map(tmp_path))]) == 0
+
+    produced = out / fill.OUT_ATTACHMENT3_XLSX.name
+    assert produced.is_file(), "the summary output keeps the official Excel format"
+    sheet = openpyxl.load_workbook(produced)["Sheet1"]
+    assert sheet["B5"].value == "02"
+    assert sheet["C5"].value == "01", "the template's pre-filled 项目类别 is untouched"
+    assert sheet["D5"].value == fill.PROJECT_DIRECTION
+    assert sheet["E5"].value == fill.TITLE
+    for column in ("F", "G", "H", "I", "J", "K", "L"):
+        assert "【待填" in str(sheet[f"{column}5"].value), column
+    # The template's own examples must not survive as if they were data.
+    assert not str(sheet["H5"].value).startswith("例：")
+    assert not str(sheet["K5"].value).startswith("例：")
+    # A person's facts are never invented.
+    assert sheet["G5"].value == fill.PENDING_HOST
+
+
+def test_the_excel_summary_is_identified_by_content_not_by_number(tmp_path, capsys):
+    official = tmp_path / "official"
+    official.mkdir()
+    fixture_official_layout_docx(official / "附件2：教学改革项目申报书.docx")
+    fixture_docx(official / "附件3：申报书匿名版.docx")
+    fixture_summary_xlsx(official / "att4_汇总表.xlsx")
+    out = tmp_path / "out"
+    code = fill.main(["--official-dir", str(official), "--out-dir", str(out),
+                      "--field-map", str(_summary_map(tmp_path))])
+    assert code == 0, capsys.readouterr().out
+    assert (out / fill.OUT_ATTACHMENT3_XLSX.name).is_file()
+
+
+def test_the_official_draft_banner_stops_the_excel_path(tmp_path, capsys):
+    two = fixture_official_layout_docx(tmp_path / "a2.docx")
+    three = fixture_summary_xlsx(tmp_path / "a3.xlsx", banner=True)
+    out = tmp_path / "out"
+    code = fill.main(["--attachment2", str(two), "--attachment3", str(three),
+                      "--out-dir", str(out), "--field-map", str(_summary_map(tmp_path))])
+    assert code == 6
+    # The 申报书 is written first, so only the rejected summary must be absent.
+    assert not (out / fill.OUT_ATTACHMENT3_XLSX.name).exists()
+    assert "非官方模板" in capsys.readouterr().out
+
+
+def test_xlsx_summary_validation_reads_the_values_back(tmp_path):
+    two = fixture_official_layout_docx(tmp_path / "a2.docx")
+    three = fixture_summary_xlsx(tmp_path / "a3.xlsx")
+    out = tmp_path / "out"
+    assert fill.main(["--attachment2", str(two), "--attachment3", str(three),
+                      "--out-dir", str(out), "--field-map", str(_summary_map(tmp_path))]) == 0
+    report = validate.validate_summary(out / fill.OUT_ATTACHMENT3_XLSX.name, openpyxl)
+    assert _status(report, "文件与重新打开（Excel）") == "PASS"
+    assert _status(report, "汇总表表头识别") == "PASS"
+    assert _status(report, "数据行字段读回") == "PASS"
+    assert _status(report, "模板示例文字已替换") == "PASS"
+    # Real people are still missing, so submission readiness is honestly FAIL.
+    assert _status(report, "提交就绪：无【待填】占位符") == "FAIL"
+    # Word-only checks never become passes for a spreadsheet.
+    assert _status(report, "页边距 / 跨页 / 中文字体（Word 专项）") == "SKIPPED"
+    assert report["ok"] is False
+
+
+def test_xlsx_summary_validation_reports_a_missing_file(tmp_path):
+    assert validate.main([str(tmp_path / "nope.xlsx")]) == 2
+
+
+def test_missing_openpyxl_exits_with_the_same_code_as_missing_python_docx(capsys, monkeypatch):
+    import builtins
+
+    real_import = builtins.__import__
+
+    def fake(name, *args, **kwargs):
+        if name == "openpyxl":
+            raise ModuleNotFoundError("No module named 'openpyxl'")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake)
+    with pytest.raises(SystemExit) as excinfo:
+        fill._require_openpyxl()
+    assert excinfo.value.code == 5
+    assert "未安装 openpyxl" in capsys.readouterr().err
+
+
+# ------------------------------------------------------- the official field map itself
+
+
+def test_the_default_field_map_never_invents_a_person():
+    """Every identity field in the official map is a 【待填】 marker, not a name."""
+    for entry in fill.DEFAULT_FIELD_MAP["attachment2"]["fields"]:
+        if entry["key"] in {"项目名称", "项目层次", "项目方向"}:
+            continue
+        assert "【待填" in entry["value"], entry["key"]
+    for entry in fill.DEFAULT_FIELD_MAP["attachment3"]["fields"]:
+        if entry["key"] in {"项目名称", "项目层次", "项目方向", "备注"}:
+            continue
+        assert "【待填" in entry["value"], entry["key"]
+
+
+def test_the_default_map_carries_the_real_official_section_labels():
+    labels = {entry["key"]: entry["labels"]
+              for entry in fill.DEFAULT_FIELD_MAP["attachment2"]["sections"]}
+    assert "项目拟解决的重点问题" in labels["拟解决的重点问题"]
+    assert "本项目特色与创新之处" in labels["项目特色与创新"]
+    assert "具体实施计划（含进展安排）及预期成果" in labels["具体实施计划及预期成果"]
+
+
+def test_project_direction_records_its_evidence_and_its_alternative():
+    assert fill.PROJECT_DIRECTION == "十"
+    assert fill.PROJECT_DIRECTION_ALTERNATIVE == "九"
+    assert fill.PROJECT_DIRECTION_STATUS == "待申请人确认"
