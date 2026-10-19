@@ -32,6 +32,7 @@ from app.services.serializers import (
     serialize_profile,
     serialize_student,
 )
+from app.research.study_access import require_student_self_training_access, require_training_access
 
 router = APIRouter(prefix="/api/students", tags=["students"])
 student_router = APIRouter(prefix="/api/student", tags=["student"])
@@ -56,7 +57,11 @@ def get_current_competency(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> dict:
-    student = _get_student(db, _current_student_id(user))
+    student_id = _current_student_id(user)
+    # The competency profile is built from the formative intervention; a study
+    # student restricted to the CBL arm must not read it during the study.
+    require_training_access(db, student_id)
+    student = _get_student(db, student_id)
     return serialize_profile(student.competency_profile)
 
 
@@ -65,7 +70,9 @@ def get_current_dashboard(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> dict:
-    return _dashboard_payload(db, _current_student_id(user))
+    student_id = _current_student_id(user)
+    require_training_access(db, student_id)
+    return _dashboard_payload(db, student_id)
 
 
 @student_router.get("/pathway")
@@ -73,7 +80,11 @@ def get_current_pathway(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> dict:
-    return _pathway_payload(db, _current_student_id(user))
+    student_id = _current_student_id(user)
+    # Personalised recommendations are one of the three intervention elements the
+    # study withholds from the CBL arm.
+    require_training_access(db, student_id)
+    return _pathway_payload(db, student_id)
 
 
 @student_router.get("/history")
@@ -85,9 +96,13 @@ def get_current_history(
 
     A read of what already happened: it must not generate anything, and it is
     scoped by the authenticated account rather than by a client-supplied id.
+    ``/result`` is gated for a restricted study student, and this list carries the
+    same training scores, so it is gated with it rather than left as a side door.
     """
 
-    return _history_payload(db, _current_student_id(user))
+    student_id = _current_student_id(user)
+    require_training_access(db, student_id)
+    return _history_payload(db, student_id)
 
 
 @student_router.get("/knowledge-progress")
@@ -129,6 +144,8 @@ def get_competency(
     user: User = Depends(get_current_user),
 ) -> dict:
     require_student_access(student_id, user)
+    # Only the student themself is inside the study rule; staff views stay open.
+    require_student_self_training_access(db, user, student_id)
     student = _get_student(db, student_id)
     return serialize_profile(student.competency_profile)
 
@@ -140,6 +157,7 @@ def get_dashboard(
     user: User = Depends(get_current_user),
 ) -> dict:
     require_student_access(student_id, user)
+    require_student_self_training_access(db, user, student_id)
     return _dashboard_payload(db, student_id)
 
 
@@ -205,6 +223,7 @@ def get_pathway(
     user: User = Depends(get_current_user),
 ) -> dict:
     require_student_access(student_id, user)
+    require_student_self_training_access(db, user, student_id)
     return _pathway_payload(db, student_id)
 
 

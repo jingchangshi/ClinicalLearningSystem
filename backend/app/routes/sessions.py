@@ -20,6 +20,7 @@ from app.models import (
     TutorTurn,
     User,
 )
+from app.research.study_access import require_training_access
 from app.services.competency_update_service import update_competency_from_case
 from app.schemas import AnswerCreate, CoachRequest, SessionStartRequest, TutorRequest
 from app.services import ai_enrichment
@@ -49,6 +50,9 @@ def start_session(
     student_id = student_id_from_user(user, payload.student_id)
     if not db.get(Student, student_id):
         raise HTTPException(status_code=404, detail="Student not found")
+    # A study student whose frozen batch is in the CBL arm must not receive the
+    # ClinPath formative intervention; this is checked before any session row exists.
+    require_training_access(db, student_id)
     if not db.get(Case, payload.case_id):
         raise HTTPException(status_code=404, detail="Case not found")
     session = CaseSession(student_id=student_id, case_id=payload.case_id)
@@ -66,6 +70,9 @@ def get_session(
 ) -> dict:
     session = _get_session(db, session_id)
     require_student_access(session.student_id, user)
+    # Deliberately not gated by the study access policy: this is the session shell
+    # (case material the student may also read through /api/cases, plus their own
+    # ungraded answers), never tutor output, a score or a recommendation.
     return _serialize_session(session)
 
 
@@ -78,6 +85,9 @@ def save_answer(
 ) -> dict:
     session = _get_session(db, session_id)
     require_student_access(session.student_id, user)
+    # A session that predates the restriction is still a way into the intervention:
+    # the gate follows the *student's* standing, not the age of the session row.
+    require_training_access(db, session.student_id)
     if session.status == "completed":
         raise HTTPException(status_code=409, detail="Session already submitted")
     if payload.step not in REQUIRED_STEP_KEYS:
@@ -125,6 +135,7 @@ def coach(
 
     session = _get_session(db, session_id)
     require_student_access(session.student_id, user)
+    require_training_access(db, session.student_id)
     answer_text = payload.answer_text
     if payload.answer_text.strip() and _answer_text(session, payload.step) != payload.answer_text.strip():
         # Keep the tutor reasoning about the same text the student just saw.
@@ -150,6 +161,7 @@ def tutor_turn(
 ) -> dict:
     session = _get_session(db, session_id)
     require_student_access(session.student_id, user)
+    require_training_access(db, session.student_id)
     enforce("coach", f"user:{user.id}")
     if session.status == "completed":
         raise HTTPException(status_code=409, detail="Session already submitted")
@@ -170,6 +182,7 @@ def get_tutor_conversation(
 ) -> dict:
     session = _get_session(db, session_id)
     require_student_access(session.student_id, user)
+    require_training_access(db, session.student_id)
     if step not in REQUIRED_STEP_KEYS:
         raise HTTPException(
             status_code=400,
@@ -190,6 +203,7 @@ def submit_session(
 ) -> dict:
     session = _get_session(db, session_id)
     require_student_access(session.student_id, user)
+    require_training_access(db, session.student_id)
     enforce("submit", f"user:{user.id}")
     if session.status == "completed" and session.score:
         return _submission_response(session, session.score)
@@ -285,6 +299,9 @@ def get_result(
 
     session = _get_session(db, session_id)
     require_student_access(session.student_id, user)
+    # The graded result and the recommendation are the intervention's output; a
+    # restricted study student may not retrieve them through an older session.
+    require_training_access(db, session.student_id)
     if not session.score:
         raise HTTPException(status_code=404, detail="Score not found")
     latest_recommendation = (
