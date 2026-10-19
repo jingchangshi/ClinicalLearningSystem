@@ -1,8 +1,12 @@
 #!/usr/bin/env python3.11
-"""Run §7.6's checks on a produced official-form DOCX.
+"""Run §7.6's checks on a produced official-form DOCX, or on the Excel summary table.
 
 Every check reports ``PASS`` / ``FAIL`` / ``SKIPPED`` with a reason, and a check
 that cannot run on this machine says so -- it is never reported as passing.
+
+A ``.xlsx`` argument switches to the summary-table checks (reopen, header row,
+per-field read-back, template examples replaced, placeholders); the Word-only
+checks are then reported as SKIPPED with that reason.
 
 **Implemented for real with python-docx** (1.2.0 via ``uv --with python-docx``):
 
@@ -117,21 +121,26 @@ def check_reopen(path: Path, docx_module) -> tuple[dict, object | None]:
 # ------------------------------------------------------------------ 2. character counts
 
 
+def section_entry(name: str) -> dict:
+    """The field-map entry for a section, so the validator reads the same target
+    the filler wrote to (one locating implementation, not two)."""
+    for entry in fill.DEFAULT_FIELD_MAP["attachment2"]["sections"]:
+        if entry["key"] == name:
+            return entry
+    return {"key": name, "block": True,
+            "labels": [name, name[2:] if name.startswith("项目") else name]}
+
+
 def section_counts(document, texts: dict[str, list[str]]) -> dict:
     rows = []
     for name, limit in fill.apptext.SECTIONS:
-        hit = fill.locate(document, [name, name[2:] if name.startswith("项目") else name])
+        hit = fill.find_section_hit(document, section_entry(name))
         source_count = sum(1 for ch in "".join(texts.get(name, [])) if not ch.isspace())
         if hit is None:
             rows.append({"section": name, "filled": None, "source": source_count,
                          "limit": limit, "status": "FAIL", "detail": "官方模板中找不到该栏目标签"})
             continue
-        body = hit["target"].text
-        if hit["kind"] == "paragraph-append":
-            label = hit["label"]
-            position = body.find(label)
-            if position >= 0:
-                body = body[position + len(label):]
+        body = fill.hit_body_text(hit)
         count = sum(1 for ch in body if not ch.isspace())
         problems = []
         if count > limit:
@@ -242,7 +251,21 @@ def check_tables(document) -> dict:
 # ------------------------------------------------------------------------ 5. page breaks
 
 
-def check_cross_page(document, path: Path) -> list[dict]:
+def _unprotected_rows(document) -> set[tuple[int, int]]:
+    from docx.oxml.ns import qn
+
+    unprotected: set[tuple[int, int]] = set()
+    for table_index, table in enumerate(fill.iter_tables(document), start=1):
+        if len(table.rows) < 2:
+            continue
+        for row_index, row in enumerate(table.rows, start=1):
+            properties = row._tr.find(qn("w:trPr"))
+            if properties is None or properties.find(qn("w:cantSplit")) is None:
+                unprotected.add((table_index, row_index))
+    return unprotected
+
+
+def check_cross_page(document, path: Path, template=None) -> list[dict]:
     from docx.oxml.ns import qn
     results: list[dict] = []
 
@@ -269,8 +292,12 @@ def check_cross_page(document, path: Path) -> list[dict]:
         if unprotected_rows:
             unprotected.append(f"表{index} 第{unprotected_rows[:5]}行")
     if unprotected:
-        results.append(check("跨页：多行表格设置行内不拆分", "FAIL",
-                             "以下行未设置 w:cantSplit，可能跨页拆分：" + "；".join(unprotected)))
+        detail = "以下行未设置 w:cantSplit，可能跨页拆分：" + "；".join(unprotected)
+        # A FAIL that already exists in the official original is a property of the
+        # form, not damage introduced by filling; say so without softening the FAIL.
+        if template is not None and _unprotected_rows(document) == _unprotected_rows(template):
+            detail += "（官方原件同样未设置，本填写未改变——版式以原件为准，不改动）"
+        results.append(check("跨页：多行表格设置行内不拆分", "FAIL", detail))
     else:
         results.append(check("跨页：多行表格设置行内不拆分", "PASS", "多行表格均设置 w:cantSplit"))
 
@@ -316,21 +343,76 @@ def _style_chain(run, paragraph):
     return chain
 
 
-def _east_asian_font(run, paragraph) -> str | None:
+def _explicit_east_asian(rpr) -> str | None:
+    """The explicit w:eastAsia font on an rPr element.
+
+    A theme reference (``w:eastAsiaTheme``) is not an explicit font: it resolves
+    differently on every machine, so it does not count. Neither does its absence.
+    """
     from docx.oxml.ns import qn
+
+    if rpr is None:
+        return None
+    fonts = rpr.find(qn("w:rFonts"))
+    if fonts is None:
+        return None
+    return fonts.get(qn("w:eastAsia")) or None
+
+
+def _doc_default_rpr(document):
+    from docx.oxml.ns import qn
+
+    defaults = document.styles.element.find(qn("w:docDefaults"))
+    if defaults is None:
+        return None
+    rpr_default = defaults.find(qn("w:rPrDefault"))
+    return rpr_default.find(qn("w:rPr")) if rpr_default is not None else None
+
+
+def _east_asian_font(run, paragraph, defaults=None) -> str | None:
+    """Resolve the East-Asian font the way Word does.
+
+    Order: the run's direct formatting -> the paragraph mark -> the run/paragraph
+    style chain -> the document defaults. Ignoring direct formatting (as this
+    check originally did) reports every run of a real official form as unfonted,
+    because these templates format through ``w:rPr`` on the run, not through styles.
+    """
+    from docx.oxml.ns import qn
+
+    value = _explicit_east_asian(run._element.rPr)
+    if value:
+        return value
+    p_pr = paragraph._p.pPr
+    if p_pr is not None:
+        value = _explicit_east_asian(p_pr.find(qn("w:rPr")))
+        if value:
+            return value
     for style in _style_chain(run, paragraph):
-        rpr = style.element.rPr
-        if rpr is not None and rpr.rFonts is not None:
-            value = rpr.rFonts.get(qn("w:eastAsia"))
-            if value:
-                return value
-    return None
+        value = _explicit_east_asian(style.element.rPr)
+        if value:
+            return value
+    return _explicit_east_asian(defaults)
 
 
-def _size(run, paragraph):
+def _size(run, paragraph, defaults=None):
+    from docx.oxml.ns import qn
+    from docx.shared import Pt
+
+    if run.font.size is not None:
+        return run.font.size
+    p_pr = paragraph._p.pPr
+    if p_pr is not None:
+        mark = p_pr.find(qn("w:rPr"))
+        size = mark.find(qn("w:sz")) if mark is not None else None
+        if size is not None and size.get(qn("w:val")):
+            return Pt(int(size.get(qn("w:val"))) / 2)
     for style in _style_chain(run, paragraph):
         if style.font.size is not None:
             return style.font.size
+    if defaults is not None:
+        size = defaults.find(qn("w:sz"))
+        if size is not None and size.get(qn("w:val")):
+            return Pt(int(size.get(qn("w:val"))) / 2)
     return None
 
 
@@ -339,13 +421,14 @@ def check_cjk_fonts(document) -> dict:
     missing_size = []
     pairs: dict[tuple[str, str], int] = {}
     cjk_runs = 0
+    defaults = _doc_default_rpr(document)
     for paragraph_index, paragraph in enumerate(fill.iter_paragraphs(document), start=1):
         for run in paragraph.runs:
             if not run.text or not CJK_RE.search(run.text):
                 continue
             cjk_runs += 1
-            font = _east_asian_font(run, paragraph)
-            size = _size(run, paragraph)
+            font = _east_asian_font(run, paragraph, defaults)
+            size = _size(run, paragraph, defaults)
             if not font:
                 missing_font.append((paragraph_index, run.text[:20]))
             if size is None:
@@ -385,6 +468,78 @@ def check_placeholders(document) -> dict:
     return check("提交就绪：无【待填】占位符", "PASS", "全文无【待填】")
 
 
+# ------------------------------------------------------------- 8. Excel summary table
+
+
+def _require_openpyxl():
+    try:
+        import openpyxl  # noqa: F401
+    except ModuleNotFoundError:  # pragma: no cover - depends on the environment
+        print("错误：未安装 openpyxl。请用 "
+              "`uv run --python 3.11 --with openpyxl python scripts/grant/validate_official_docx.py` 运行。",
+              file=sys.stderr)
+        raise SystemExit(5)
+
+
+def validate_summary(path: Path, openpyxl_module, spec: dict | None = None) -> dict:
+    """§7.6 checks for the Excel summary table.
+
+    The Word-only checks (margins, page breaks, CJK fonts) do not apply to a
+    spreadsheet and are reported as SKIPPED with that reason -- never as a pass.
+    """
+    spec = spec or fill.DEFAULT_FIELD_MAP["attachment3"]
+    try:
+        workbook = openpyxl_module.load_workbook(str(path))
+    except Exception as exc:  # noqa: BLE001 - any failure here is the finding
+        return {"document": str(path), "checks": [
+            check("文件与重新打开（Excel）", "FAIL", f"openpyxl 打开失败：{exc}")], "ok": False}
+
+    results = [check("文件与重新打开（Excel）", "PASS",
+                     f"{len(workbook.worksheets)} 个工作表：{'、'.join(workbook.sheetnames)}")]
+
+    sheet, header_row = fill._summary_sheet(workbook)
+    if sheet is None or header_row is None:
+        results.append(check("汇总表表头识别", "FAIL",
+                             "找不到含 序号/项目名称/主持人 的表头行"))
+        results.append(check("数据行字段读回", "SKIPPED", "未识别到表头，无法定位数据行"))
+    else:
+        results.append(check("汇总表表头识别", "PASS",
+                             f"工作表 {sheet.title} 第 {header_row} 行为表头"))
+        columns = fill._header_columns(sheet, header_row)
+        data_row = header_row + 1
+        problems, readback = [], []
+        for entry in spec.get("fields", []):
+            column = fill._column_for(columns, entry["labels"])
+            if column is None:
+                problems.append(f"缺少列「{entry['key']}」")
+                continue
+            value = sheet.cell(row=data_row, column=column).value
+            text = "" if value is None else str(value)
+            readback.append(f"{entry['key']}={text!r}")
+            if text.strip() != entry["value"].strip():
+                problems.append(f"{entry['key']} 读回 {text!r} ≠ 期望 {entry['value']!r}")
+        results.append(check("数据行字段读回", "FAIL" if problems else "PASS",
+                             "；".join(problems) or "；".join(readback)))
+        examples = [cell.coordinate for cell in sheet[data_row]
+                    if isinstance(cell.value, str) and cell.value.startswith("例：")]
+        results.append(check("模板示例文字已替换", "FAIL" if examples else "PASS",
+                             f"数据行仍含“例：”示例：{'、'.join(examples)}" if examples
+                             else "数据行无“例：”示例文字"))
+
+    placeholders = [cell.coordinate for sheet in workbook.worksheets
+                    for row in sheet.iter_rows() for cell in row
+                    if isinstance(cell.value, str) and PLACEHOLDER in cell.value]
+    results.append(check("提交就绪：无【待填】占位符", "FAIL" if placeholders else "PASS",
+                         f"仍有 {len(placeholders)} 处【待填：{'、'.join(placeholders[:10])}"
+                         if placeholders else "全表无【待填】"))
+    results.append(check("页边距 / 跨页 / 中文字体（Word 专项）", "SKIPPED",
+                         "Excel 汇总表不适用 Word 版式检查；官方要求提交 Excel 版与加盖公章 PDF 版，"
+                         "PDF 版式须由人工渲染确认"))
+
+    ok = not any(item["status"] == "FAIL" for item in results)
+    return {"document": str(path), "checks": results, "ok": ok}
+
+
 # -------------------------------------------------------------------------------- main
 
 
@@ -395,11 +550,18 @@ def validate(path: Path, template_path: Path | None, texts: dict[str, list[str]]
     if document is None:
         return {"document": str(path), "checks": results, "ok": False}
 
+    template = None
+    if template_path is not None and template_path.is_file():
+        try:
+            template = docx_module.Document(str(template_path))
+        except Exception:  # noqa: BLE001 - reported below as its own check
+            template = None
+
     counts = section_counts(document, texts)
     results.append(counts["check"])
     results.append(check_margin_values(document))
     results.append(check_tables(document))
-    results.extend(check_cross_page(document, path))
+    results.extend(check_cross_page(document, path, template))
     results.append(check_cjk_fonts(document))
     results.append(check_placeholders(document))
 
@@ -408,12 +570,10 @@ def validate(path: Path, template_path: Path | None, texts: dict[str, list[str]]
                              "未提供 --template，无法与官方页边距比对"))
     elif not template_path.is_file():
         results.append(check("页边距与官方模板一致", "SKIPPED", f"模板不存在：{template_path}"))
+    elif template is None:
+        results.append(check("页边距与官方模板一致", "FAIL", f"模板无法打开：{template_path}"))
     else:
-        try:
-            template = docx_module.Document(str(template_path))
-            results.append(check_margins_match(document, template))
-        except Exception as exc:  # noqa: BLE001
-            results.append(check("页边距与官方模板一致", "FAIL", f"模板无法打开：{exc}"))
+        results.append(check_margins_match(document, template))
 
     ok = not any(item["status"] == "FAIL" for item in results)
     return {"document": str(path), "checks": results, "sections": counts["rows"], "ok": ok}
@@ -472,11 +632,17 @@ def main(argv: list[str] | None = None) -> int:
         print(f"错误：找不到六栏正文 {args.six}", file=sys.stderr)
         return 2
 
-    _require_docx()
-    import docx as docx_module
+    if args.document.suffix.lower() in fill.XLSX_SUFFIXES:
+        _require_openpyxl()
+        import openpyxl as openpyxl_module
 
-    texts = fill.section_texts(args.six)
-    report = validate(args.document, args.template, texts, docx_module)
+        report = validate_summary(args.document, openpyxl_module)
+    else:
+        _require_docx()
+        import docx as docx_module
+
+        texts = fill.section_texts(args.six)
+        report = validate(args.document, args.template, texts, docx_module)
 
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
